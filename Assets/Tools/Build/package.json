@@ -1,0 +1,21 @@
+﻿{
+  "name": "com.hb.custombuild",
+  "version": "1.0.0",
+  "displayName": "HB Custom Build Manager",
+  "description": "Multiplatform custom build manager with Jenkins CI/CD automated pipeline and Groovy Jenkinsfile generator.",
+  "unity": "2021.3",
+  "unityRelease": "0b1",
+  "dependencies": {},
+  "keywords": [
+    "build",
+    "ci-cd",
+    "jenkins",
+    "groovy",
+    "pipeline",
+    "automation"
+  ],
+  "author": {
+    "name": "HeartBeat",
+    "email": "heartbeat@tools.dev"
+  }
+}
