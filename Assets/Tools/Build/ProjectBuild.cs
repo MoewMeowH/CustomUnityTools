@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Unity 커스텀 빌드 매니저 및 Jenkins CI/CD 연동 에디터 윈도우입니다.
-/// 조건부 파이프라인 스텝 필터링, 체크박스 On/Off 제어 및 Jenkinsfile 생성을 지원합니다.
+/// 조건부 파이프라인 스텝 필터링, 체크박스 On/Off 제어, 선택적 SceneDefine/ProjectDefine 에셋 관리 및 Jenkinsfile 생성을 지원합니다.
 /// </summary>
 public class ProjectBuild : EditorWindow
 {
@@ -33,16 +33,20 @@ public class ProjectBuild : EditorWindow
     [SerializeField] private string m_OutputPath = string.Empty;
     [SerializeField] private List<string> m_ScenePath = new List<string>();
 
+    // 선택적 설정 에셋 (미할당 시 자동 건너뜀)
+    [SerializeField] private SceneDefine m_SceneDefine;
+    [SerializeField] private ProjectDefine m_ProjectDefine;
+
     private Vector2 m_ScrollPosition;
     private bool m_ShowPipelineSteps = true;
-    private bool m_ShowOnlyActiveSteps = true; // 현재 조건에 맞는 스텝만 보기 필터
+    private bool m_ShowOnlyActiveSteps = true;
 
     [MenuItem("Tools/HeartBeat/Custom Build Manager")]
     [MenuItem("Window/Build/HB Custom Build")]
     public static void ShowWindow()
     {
         var window = GetWindow<ProjectBuild>("HB Build Manager");
-        window.minSize = new Vector2(460, 680);
+        window.minSize = new Vector2(460, 720);
         window.Show();
     }
 
@@ -60,6 +64,13 @@ public class ProjectBuild : EditorWindow
         if (m_ScenePath.Count == 0)
             LoadScenesFromBuildSettings();
 
+        // 기존 에셋이 존재하면 자동 바인딩 (없으면 null 유지)
+        if (m_SceneDefine == null)
+            m_SceneDefine = SceneDefine.LoadIfExists();
+
+        if (m_ProjectDefine == null)
+            m_ProjectDefine = ProjectDefine.LoadIfExists();
+
         BuildStepRegistry.ReloadSteps();
     }
 
@@ -71,6 +82,9 @@ public class ProjectBuild : EditorWindow
         EditorGUILayout.Space(8);
 
         DrawPlatformSection();
+        EditorGUILayout.Space(8);
+
+        DrawOptionalAssetsSection();
         EditorGUILayout.Space(8);
 
         DrawPipelineStepsSequence();
@@ -118,12 +132,49 @@ public class ProjectBuild : EditorWindow
     }
 
     /// <summary>
-    /// 현재 선택된 플랫폼 및 조건에 맞춰 가상 BuildContext 생성
+    /// 사용자가 요청한: 읽기 전용 패키지 문제를 해결하기 위해,
+    /// 사용자 프로젝트(Assets/Editor/HBBuild)에 개별 생성 가능한 선택적 설정 에셋 관리 섹션
     /// </summary>
+    private void DrawOptionalAssetsSection()
+    {
+        EditorGUILayout.BeginVertical("box");
+        GUILayout.Label("📦 선택적 프로젝트 설정 에셋 (Optional Build Configs)", EditorStyles.boldLabel);
+
+        // 1. SceneDefine 에셋 슬롯
+        EditorGUILayout.BeginHorizontal();
+        m_SceneDefine = (SceneDefine)EditorGUILayout.ObjectField("Scene Define", m_SceneDefine, typeof(SceneDefine), false);
+        if (m_SceneDefine == null)
+        {
+            if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
+            {
+                m_SceneDefine = SceneDefine.CreateAssetInUserFolder();
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.LabelField(m_SceneDefine == null ? "  ↳ 미생성/미할당 시: 등록된 모든 씬 빌드 (건너뛰기)" : "  ↳ 할당됨: 빌드 환경(DEV/QA/LIVE)별 IgnoreScene 자동 제외", EditorStyles.miniLabel);
+
+        EditorGUILayout.Space(4);
+
+        // 2. ProjectDefine 에셋 슬롯
+        EditorGUILayout.BeginHorizontal();
+        m_ProjectDefine = (ProjectDefine)EditorGUILayout.ObjectField("Define Container", m_ProjectDefine, typeof(ProjectDefine), false);
+        if (m_ProjectDefine == null)
+        {
+            if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
+            {
+                m_ProjectDefine = ProjectDefine.CreateAssetInUserFolder();
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.LabelField(m_ProjectDefine == null ? "  ↳ 미생성/미할당 시: 기존 PlayerSettings 심볼 유지 (건너뛰기)" : "  ↳ 할당됨: 플랫폼/모드별 전처리기 심볼 자동 주입", EditorStyles.miniLabel);
+
+        EditorGUILayout.EndVertical();
+    }
+
     private BuildContext CreatePreviewContext()
     {
         var target = GetBuildTarget(m_Platform);
-        return new BuildContext
+        var ctx = new BuildContext
         {
             Target = target,
             TargetGroup = BuildHelper.GetTargetGroup(target),
@@ -137,11 +188,13 @@ public class ProjectBuild : EditorWindow
             ZipPackage = m_ZipPackage,
             OutputPath = m_OutputPath
         };
+
+        if (m_SceneDefine != null) ctx.SetCustomData("SceneDefine", m_SceneDefine);
+        if (m_ProjectDefine != null) ctx.SetCustomData("ProjectDefine", m_ProjectDefine);
+
+        return ctx;
     }
 
-    /// <summary>
-    /// 현재 설정 조건에 따라 필터링되어 노출되는 파이프라인 스텝 시각화
-    /// </summary>
     private void DrawPipelineStepsSequence()
     {
         EditorGUILayout.BeginVertical("box");
@@ -186,7 +239,6 @@ public class ProjectBuild : EditorWindow
 
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
                 
-                // 활성화/비활성화 체크박스
                 bool newEnabled = EditorGUILayout.Toggle(isEnabled, GUILayout.Width(20));
                 if (newEnabled != isEnabled)
                 {
@@ -251,7 +303,6 @@ public class ProjectBuild : EditorWindow
 
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
-                // 활성화/비활성화 체크박스
                 bool newEnabled = EditorGUILayout.Toggle(isEnabled, GUILayout.Width(20));
                 if (newEnabled != isEnabled)
                 {
@@ -328,7 +379,6 @@ public class ProjectBuild : EditorWindow
 
         m_CleanBuild = EditorGUILayout.Toggle("Clean Build Cache", m_CleanBuild);
 
-        // 현재 플랫폼에 해당하는 옵션만 노출!
         if (m_Platform == ESelfBuildPlatform.Android)
         {
             m_IsAab = EditorGUILayout.Toggle("Build Android App Bundle (.aab)", m_IsAab);
@@ -489,6 +539,12 @@ public class ProjectBuild : EditorWindow
             Scenes = scenes.ToList()
         };
 
+        if (m_SceneDefine != null)
+            context.SetCustomData("SceneDefine", m_SceneDefine);
+
+        if (m_ProjectDefine != null)
+            context.SetCustomData("ProjectDefine", m_ProjectDefine);
+
         if (m_Platform == ESelfBuildPlatform.iOS)
         {
             context.SetCustomData("ProvisionUUID", m_ProvisionUUID);
@@ -513,7 +569,6 @@ public class ProjectBuild : EditorWindow
             context.PlayerOptions.options |= BuildOptions.CleanBuildCache;
         }
 
-        // 오케스트레이터 호출
         AbsBuild.Execute(context);
 
         EditorUtility.DisplayDialog("빌드 완료", "플레이어 빌드가 성공적으로 완료되었습니다!", "확인");

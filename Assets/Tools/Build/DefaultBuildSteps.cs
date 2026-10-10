@@ -4,7 +4,37 @@ using System.IO.Compression;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine;
+
 using CompressionLevel = System.IO.Compression.CompressionLevel;
+/// <summary>
+/// 0. SceneDefine 에셋이 존재할 경우 빌드 타입(DEV/QA/LIVE)별 무시할 씬(IgnoreScene) 자동 필터링
+/// (에셋 미생성 시 자동으로 건너뜀)
+/// </summary>
+public class PreBuildStep_FilterScenes : IPreBuildStep
+{
+    public virtual int ExecutionOrder => 5;
+    public virtual string StepName => "SceneDefine 기반 무시 씬(IgnoreScene) 필터링 (선택 사항)";
+
+    public virtual bool IsActive(BuildContext context) => true;
+
+    public virtual void OnPreBuild(BuildContext context)
+    {
+        var sceneDefine = context.GetCustomData<SceneDefine>("SceneDefine", null) 
+                       ?? SceneDefine.LoadIfExists();
+
+        if (sceneDefine == null) return;
+
+        int originalCount = context.Scenes.Count;
+        context.Scenes = sceneDefine.FilterScenes(context.BuildType, context.Scenes);
+        int filteredCount = context.Scenes.Count;
+
+        if (originalCount != filteredCount)
+        {
+            BuildHelper.Log($"[SceneDefine] Filtered {originalCount - filteredCount} ignored scene(s) for {context.BuildType}. Active scenes: {filteredCount}");
+            context.PlayerOptions.scenes = context.Scenes.ToArray();
+        }
+    }
+}
 
 /// <summary>
 /// 1. 기본 PlayerSettings 및 품질, 로그 설정 스텝 (전 플랫폼 공통)
@@ -36,29 +66,33 @@ public class PreBuildStep_PlayerSettings : IPreBuildStep
 }
 
 /// <summary>
-/// 2. Scripting Define Symbols 구성 스텝 (DefineContainer 연동, 전 플랫폼 공통)
+/// 2. Scripting Define Symbols 구성 스텝 (DefineContainer 연동)
+/// (에셋 미생성 시 기존 PlayerSettings 설정을 유지하고 자동으로 건너뜀)
 /// </summary>
 public class PreBuildStep_ConfigDefines : IPreBuildStep
 {
     public virtual int ExecutionOrder => 20;
-    public virtual string StepName => "Scripting Define Symbols (전처리기 심볼) 설정";
+    public virtual string StepName => "Scripting Define Symbols (전처리기 심볼) 설정 (선택 사항)";
 
     public virtual bool IsActive(BuildContext context) => true;
 
     public virtual void OnPreBuild(BuildContext context)
     {
-        if (!File.Exists(BuildHelper.SYMBOL_DEFINE_PATH))
-            return;
+        var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null) 
+                     ?? ProjectDefine.LoadIfExists();
 
-        var container = AssetDatabase.LoadAssetAtPath<ProjectDefine>(BuildHelper.SYMBOL_DEFINE_PATH);
-        if (container == null) return;
+        if (container == null)
+        {
+            // 사용자가 정의하지 않았으면 기존 심볼 유지하고 건너뜀
+            return;
+        }
 
         var defines = container.GetDefineArray(context.BuildType, context.Target);
         if (defines != null && defines.Length > 0)
         {
             var namedTarget = NamedBuildTarget.FromBuildTargetGroup(context.TargetGroup);
             PlayerSettings.SetScriptingDefineSymbols(namedTarget, defines);
-            BuildHelper.Log($"[Defines] Applied {defines.Length} define(s): {string.Join(";", defines)}");
+            BuildHelper.Log($"[Defines] Applied {defines.Length} define(s) from DefineContainer: {string.Join(";", defines)}");
         }
     }
 }
