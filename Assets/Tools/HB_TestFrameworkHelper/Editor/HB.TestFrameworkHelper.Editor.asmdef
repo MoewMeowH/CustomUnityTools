@@ -1,0 +1,19 @@
+﻿{
+    "name": "HB.TestFrameworkHelper.Editor",
+    "rootNamespace": "HB.TestFrameworkHelper.Editor",
+    "references": [
+        "HB.TestFrameworkHelper.Runtime",
+        "HB.CustomBuild.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

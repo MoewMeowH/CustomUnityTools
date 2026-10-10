@@ -1,0 +1,18 @@
+﻿{
+    "name": "HB.E2String.Editor",
+    "rootNamespace": "HB.E2String.Editor",
+    "references": [
+        "HB.E2String.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
