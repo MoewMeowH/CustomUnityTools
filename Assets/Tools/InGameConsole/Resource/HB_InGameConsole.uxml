@@ -1,0 +1,37 @@
+﻿<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:Style src="HB_InGameConsole.uss" />
+    <ui:VisualElement name="rootContainer" class="hb-root-container" picking-mode="Ignore">
+        <!-- 우상단 콘솔 열기 버튼 -->
+        <ui:Button name="openButton" class="hb-open-button" text="Logs [0]" />
+
+        <!-- 콘솔 메인 오버레이 윈도우 -->
+        <ui:VisualElement name="consoleWindow" class="hb-console-window hb-hidden">
+            <!-- 상단 헤더 툴바 -->
+            <ui:VisualElement name="headerBar" class="hb-header-bar">
+                <ui:Label text="In-Game Console Log" class="hb-header-title" />
+                <ui:VisualElement name="toolbarGroup" class="hb-toolbar-group">
+                    <ui:Button name="filterAllBtn" text="All" class="hb-filter-btn hb-filter-active" />
+                    <ui:Button name="filterInfoBtn" text="Info" class="hb-filter-btn" />
+                    <ui:Button name="filterWarnBtn" text="Warn" class="hb-filter-btn" />
+                    <ui:Button name="filterErrorBtn" text="Error" class="hb-filter-btn" />
+                    <ui:Button name="autoScrollBtn" text="AutoScroll: ON" class="hb-filter-btn hb-filter-active" />
+                    <ui:Button name="clearBtn" text="Clear" class="hb-action-btn" />
+                    <ui:Button name="closeButton" text="✕" class="hb-close-btn" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- 로그 목록 ScrollView -->
+            <ui:ScrollView name="logScrollView" class="hb-log-scroll" />
+
+            <!-- 하단 선택 로그 상세 / 스택트레이스 -->
+            <ui:VisualElement name="detailPanel" class="hb-detail-panel">
+                <ui:VisualElement class="hb-detail-header">
+                    <ui:Label text="Selected Log / StackTrace" class="hb-detail-title" />
+                </ui:VisualElement>
+                <ui:ScrollView name="detailScrollView" class="hb-detail-scroll">
+                    <ui:Label name="detailLabel" text="Select a log to view details." class="hb-detail-body" />
+                </ui:ScrollView>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
