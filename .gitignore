@@ -50,3 +50,6 @@ Desktop.ini
 
 # Agent cache
 .agents/
+
+# ETC
+ProjectSettings/TimelineSettings.asset

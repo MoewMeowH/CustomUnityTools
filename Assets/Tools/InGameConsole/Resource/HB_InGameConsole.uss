@@ -9,19 +9,95 @@
     bottom: 0;
 }
 
+/* 좌상단 실시간 성능 & 프레임 타임 위젯 */
+.hb-fps-widget {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(20, 22, 26, 0.88);
+    border-width: 1px;
+    border-color: rgba(70, 75, 88, 0.6);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+.hb-fps-widget:hover {
+    border-color: rgba(100, 115, 140, 0.9);
+    background-color: rgba(25, 28, 34, 0.95);
+}
+
+.hb-fps-info {
+    flex-direction: column;
+    justify-content: center;
+    margin-right: 8px;
+    min-width: 58px;
+}
+
+.hb-fps-text {
+    font-size: 13px;
+    -unity-font-style: bold;
+    margin: 0;
+    padding: 0;
+}
+
+.hb-ms-text {
+    font-size: 10px;
+    color: rgb(150, 155, 170);
+    margin: 0;
+    padding: 0;
+}
+
+/* 프레임 상태별 텍스트 색상 */
+.hb-fps-good {
+    color: rgb(74, 222, 128);
+}
+
+.hb-fps-warn {
+    color: rgb(251, 191, 36);
+}
+
+.hb-fps-bad {
+    color: rgb(248, 113, 113);
+}
+
+/* 프레임 타임 그래프 캔버스 */
+.hb-fps-graph-canvas {
+    width: 110px;
+    height: 32px;
+    background-color: rgba(10, 11, 14, 0.7);
+    border-width: 1px;
+    border-color: rgba(50, 54, 66, 0.7);
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
+}
+
+.hb-graph-collapsed {
+    display: none;
+}
+
 /* 우상단 열기 버튼 */
 .hb-open-button {
     position: absolute;
-    top: 16px;
-    right: 16px;
+    top: 14px;
+    right: 14px;
     padding-left: 14px;
     padding-right: 14px;
-    padding-top: 8px;
-    padding-bottom: 8px;
-    background-color: rgba(30, 30, 35, 0.85);
+    padding-top: 7px;
+    padding-bottom: 7px;
+    background-color: rgba(30, 32, 38, 0.88);
     color: rgb(240, 240, 240);
     border-width: 1px;
-    border-color: rgb(80, 80, 90);
+    border-color: rgb(80, 85, 98);
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
     border-bottom-left-radius: 6px;
@@ -31,12 +107,12 @@
 }
 
 .hb-open-button:hover {
-    background-color: rgba(50, 50, 60, 0.95);
-    border-color: rgb(110, 110, 130);
+    background-color: rgba(50, 54, 65, 0.95);
+    border-color: rgb(110, 118, 135);
 }
 
 .hb-open-button:active {
-    background-color: rgba(70, 70, 85, 1);
+    background-color: rgba(70, 75, 90, 1);
 }
 
 /* 콘솔 메인 윈도우 */
@@ -46,7 +122,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(24, 25, 30, 0.92);
+    background-color: rgba(22, 23, 28, 0.94);
     display: flex;
     flex-direction: column;
 }
@@ -62,16 +138,28 @@
     justify-content: space-between;
     padding-left: 14px;
     padding-right: 14px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-    background-color: rgba(18, 19, 22, 0.95);
+    padding-top: 8px;
+    padding-bottom: 8px;
+    background-color: rgba(16, 17, 21, 0.98);
     border-bottom-width: 1px;
-    border-bottom-color: rgb(45, 47, 55);
+    border-bottom-color: rgb(45, 47, 56);
+}
+
+.hb-header-left {
+    flex-direction: row;
+    align-items: center;
 }
 
 .hb-header-title {
-    color: rgb(230, 230, 230);
-    font-size: 15px;
+    color: rgb(235, 235, 240);
+    font-size: 14px;
+    -unity-font-style: bold;
+    margin-right: 10px;
+}
+
+.hb-header-stats {
+    color: rgb(74, 222, 128);
+    font-size: 11px;
     -unity-font-style: bold;
 }
 
@@ -84,14 +172,14 @@
 .hb-filter-btn {
     padding-left: 10px;
     padding-right: 10px;
-    padding-top: 5px;
-    padding-bottom: 5px;
-    margin-left: 4px;
-    margin-right: 4px;
-    background-color: rgb(40, 42, 48);
-    color: rgb(180, 180, 190);
+    padding-top: 4px;
+    padding-bottom: 4px;
+    margin-left: 3px;
+    margin-right: 3px;
+    background-color: rgb(38, 40, 48);
+    color: rgb(180, 185, 195);
     border-width: 1px;
-    border-color: rgb(60, 62, 70);
+    border-color: rgb(58, 62, 72);
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
     border-bottom-left-radius: 4px;
@@ -100,8 +188,8 @@
 }
 
 .hb-filter-btn:hover {
-    background-color: rgb(55, 58, 66);
-    color: rgb(240, 240, 240);
+    background-color: rgb(52, 56, 66);
+    color: rgb(240, 240, 245);
 }
 
 .hb-filter-active {
@@ -112,16 +200,16 @@
 }
 
 .hb-action-btn {
-    padding-left: 12px;
-    padding-right: 12px;
-    padding-top: 5px;
-    padding-bottom: 5px;
-    margin-left: 6px;
-    margin-right: 4px;
-    background-color: rgb(50, 52, 60);
-    color: rgb(220, 220, 220);
+    padding-left: 11px;
+    padding-right: 11px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    margin-left: 5px;
+    margin-right: 3px;
+    background-color: rgb(48, 50, 60);
+    color: rgb(220, 225, 235);
     border-width: 1px;
-    border-color: rgb(70, 72, 82);
+    border-color: rgb(68, 72, 84);
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
     border-bottom-left-radius: 4px;
@@ -130,30 +218,30 @@
 }
 
 .hb-action-btn:hover {
-    background-color: rgb(65, 68, 78);
+    background-color: rgb(62, 66, 78);
 }
 
 .hb-close-btn {
-    width: 28px;
-    height: 28px;
-    margin-left: 10px;
+    width: 26px;
+    height: 26px;
+    margin-left: 8px;
     padding-left: 0;
     padding-right: 0;
     padding-top: 0;
     padding-bottom: 0;
-    background-color: rgb(190, 45, 45);
+    background-color: rgb(185, 42, 42);
     color: rgb(255, 255, 255);
     border-width: 0;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
     border-bottom-left-radius: 4px;
     border-bottom-right-radius: 4px;
-    font-size: 14px;
+    font-size: 13px;
     -unity-font-style: bold;
 }
 
 .hb-close-btn:hover {
-    background-color: rgb(220, 55, 55);
+    background-color: rgb(215, 52, 52);
 }
 
 /* 로그 목록 ScrollView */
@@ -173,9 +261,9 @@
     padding-top: 5px;
     padding-bottom: 5px;
     margin-bottom: 2px;
-    background-color: rgba(32, 34, 40, 0.7);
+    background-color: rgba(30, 32, 38, 0.7);
     border-bottom-width: 1px;
-    border-bottom-color: rgba(50, 53, 62, 0.4);
+    border-bottom-color: rgba(48, 52, 62, 0.4);
     border-top-left-radius: 3px;
     border-top-right-radius: 3px;
     border-bottom-left-radius: 3px;
@@ -183,12 +271,12 @@
 }
 
 .hb-log-row:hover {
-    background-color: rgba(45, 48, 56, 0.9);
+    background-color: rgba(42, 46, 56, 0.9);
 }
 
 .hb-log-row-selected {
-    background-color: rgba(55, 75, 110, 0.9);
-    border-bottom-color: rgb(80, 110, 160);
+    background-color: rgba(52, 72, 108, 0.9);
+    border-bottom-color: rgb(75, 105, 155);
 }
 
 .hb-log-time {
@@ -239,9 +327,9 @@
 /* 하단 상세 영역 */
 .hb-detail-panel {
     height: 140px;
-    background-color: rgba(16, 17, 20, 0.95);
+    background-color: rgba(15, 16, 20, 0.96);
     border-top-width: 1px;
-    border-top-color: rgb(45, 47, 55);
+    border-top-color: rgb(42, 45, 54);
     padding-left: 10px;
     padding-right: 10px;
     padding-top: 6px;

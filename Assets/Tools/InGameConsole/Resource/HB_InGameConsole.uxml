@@ -1,35 +1,37 @@
-﻿<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
-    <ui:Style src="HB_InGameConsole.uss" />
-    <ui:VisualElement name="rootContainer" class="hb-root-container" picking-mode="Ignore">
-        <!-- 우상단 콘솔 열기 버튼 -->
-        <ui:Button name="openButton" class="hb-open-button" text="Logs [0]" />
-
-        <!-- 콘솔 메인 오버레이 윈도우 -->
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Tools/InGameConsole/Resource/HB_InGameConsole.uss?fileID=7433441132597879392&amp;guid=74617df47f024b6c958bdb5ab6e704d2&amp;type=3#HB_InGameConsole"/>
+    <ui:VisualElement name="rootContainer" picking-mode="Ignore" class="hb-root-container">
+        <ui:VisualElement name="fpsWidget" class="hb-fps-widget" style="height: 81px; width: 230px;">
+            <ui:VisualElement name="fpsInfoContainer" class="hb-fps-info">
+                <ui:Label name="fpsLabel" text="60 FPS" class="hb-fps-text hb-fps-good"/>
+                <ui:Label name="msLabel" text="16.6 ms" class="hb-ms-text"/>
+            </ui:VisualElement>
+            <ui:VisualElement name="fpsGraphCanvas" class="hb-fps-graph-canvas" style="height: 63px; width: 146px;"/>
+        </ui:VisualElement>
+        <ui:Button name="openButton" text="Logs [0]" class="hb-open-button"/>
         <ui:VisualElement name="consoleWindow" class="hb-console-window hb-hidden">
-            <!-- 상단 헤더 툴바 -->
             <ui:VisualElement name="headerBar" class="hb-header-bar">
-                <ui:Label text="In-Game Console Log" class="hb-header-title" />
+                <ui:VisualElement class="hb-header-left">
+                    <ui:Label text="In-Game Console Log" class="hb-header-title"/>
+                    <ui:Label name="consoleStatsLabel" text="[60 FPS | 16.6ms]" class="hb-header-stats"/>
+                </ui:VisualElement>
                 <ui:VisualElement name="toolbarGroup" class="hb-toolbar-group">
-                    <ui:Button name="filterAllBtn" text="All" class="hb-filter-btn hb-filter-active" />
-                    <ui:Button name="filterInfoBtn" text="Info" class="hb-filter-btn" />
-                    <ui:Button name="filterWarnBtn" text="Warn" class="hb-filter-btn" />
-                    <ui:Button name="filterErrorBtn" text="Error" class="hb-filter-btn" />
-                    <ui:Button name="autoScrollBtn" text="AutoScroll: ON" class="hb-filter-btn hb-filter-active" />
-                    <ui:Button name="clearBtn" text="Clear" class="hb-action-btn" />
-                    <ui:Button name="closeButton" text="✕" class="hb-close-btn" />
+                    <ui:Button name="filterAllBtn" text="All" class="hb-filter-btn hb-filter-active"/>
+                    <ui:Button name="filterInfoBtn" text="Info" class="hb-filter-btn"/>
+                    <ui:Button name="filterWarnBtn" text="Warn" class="hb-filter-btn"/>
+                    <ui:Button name="filterErrorBtn" text="Error" class="hb-filter-btn"/>
+                    <ui:Button name="autoScrollBtn" text="AutoScroll: ON" class="hb-filter-btn hb-filter-active"/>
+                    <ui:Button name="clearBtn" text="Clear" class="hb-action-btn"/>
+                    <ui:Button name="closeButton" text="✕" class="hb-close-btn"/>
                 </ui:VisualElement>
             </ui:VisualElement>
-
-            <!-- 로그 목록 ScrollView -->
-            <ui:ScrollView name="logScrollView" class="hb-log-scroll" />
-
-            <!-- 하단 선택 로그 상세 / 스택트레이스 -->
+            <ui:ScrollView name="logScrollView" class="hb-log-scroll"/>
             <ui:VisualElement name="detailPanel" class="hb-detail-panel">
                 <ui:VisualElement class="hb-detail-header">
-                    <ui:Label text="Selected Log / StackTrace" class="hb-detail-title" />
+                    <ui:Label text="Selected Log / StackTrace" class="hb-detail-title"/>
                 </ui:VisualElement>
                 <ui:ScrollView name="detailScrollView" class="hb-detail-scroll">
-                    <ui:Label name="detailLabel" text="Select a log to view details." class="hb-detail-body" />
+                    <ui:Label name="detailLabel" text="Select a log to view details." class="hb-detail-body"/>
                 </ui:ScrollView>
             </ui:VisualElement>
         </ui:VisualElement>
