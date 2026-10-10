@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
-using UnityEditor.Build.Profile;
 using UnityEngine;
 
 public readonly struct AndroidBuildParam
@@ -95,7 +94,9 @@ public static class BuildHelper
     public const string PROVISION_UUID = "provisionUuid";
     public const string ZIP_PACKAGE = "zipPackage";
 
-    public const string SYMBOL_DEFINE_PATH = "Assets/Tools/Build/DefineContainer.asset";
+    public const string USER_BUILD_DATA_DIR = "Assets/Editor/HBBuild";
+    public const string USER_DEFINE_CONTAINER_PATH = "Assets/Editor/HBBuild/DefineContainer.asset";
+    public const string USER_SCENE_DEFINE_PATH = "Assets/Editor/HBBuild/SceneDefine.asset";
     public const string NONE_SCENE_LIST = "NONE";
 
     private static List<string> s_Args = new List<string>();
@@ -160,7 +161,6 @@ public static class BuildHelper
         if (string.IsNullOrEmpty(argName) || s_Args == null || s_Args.Count == 0)
             return string.Empty;
 
-        // 대소문자 무시 및 앞쪽 대시(-) 여부 유연하게 검색
         for (int i = 0; i < s_Args.Count - 1; i++)
         {
             string current = s_Args[i].TrimStart('-');
@@ -208,7 +208,6 @@ public static class BuildHelper
         if (scenes.Length > 0)
             return scenes;
 
-        // BuildSettings가 비어있으면 Assets/Scenes 내 씬 검색
         var foundGuids = AssetDatabase.FindAssets("t:Scene", new[] { "Assets" });
         if (foundGuids.Length > 0)
         {
@@ -216,5 +215,17 @@ public static class BuildHelper
         }
 
         return Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Assets/Editor/HBBuild 폴더를 확인하고 없으면 자동 생성합니다.
+    /// </summary>
+    public static void EnsureUserBuildDataDirExists()
+    {
+        if (!Directory.Exists(USER_BUILD_DATA_DIR))
+        {
+            Directory.CreateDirectory(USER_BUILD_DATA_DIR);
+            AssetDatabase.Refresh();
+        }
     }
 }

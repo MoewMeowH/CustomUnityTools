@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-[System.Serializable, CreateAssetMenu(fileName = "DefineContainer", menuName = "Define/DefineContainer")]
+/// <summary>
+/// 환경별(DEV, QA, LIVE) 및 플랫폼별 Scripting Define Symbols(전처리기 심볼)을 정의하는 ScriptableObject입니다.
+/// 선택 사항(Optional)이며, 설정되지 않은 경우 기존 PlayerSettings 설정을 유지하고 건너뜁니다.
+/// </summary>
+[System.Serializable, CreateAssetMenu(fileName = "DefineContainer", menuName = "HB_Build/DefineContainer")]
 public class ProjectDefine : ScriptableObject
 {
     [System.Serializable]
@@ -63,5 +68,41 @@ public class ProjectDefine : ScriptableObject
             });
             return true;
         }
+    }
+
+    /// <summary>
+    /// Assets/Editor/HBBuild/DefineContainer.asset 위치에 에셋이 존재하면 로드합니다.
+    /// </summary>
+    public static ProjectDefine LoadIfExists()
+    {
+        if (File.Exists(BuildHelper.USER_DEFINE_CONTAINER_PATH))
+        {
+            return AssetDatabase.LoadAssetAtPath<ProjectDefine>(BuildHelper.USER_DEFINE_CONTAINER_PATH);
+        }
+
+        // 전체 프로젝트에서 검색
+        var guids = AssetDatabase.FindAssets("t:ProjectDefine");
+        if (guids.Length > 0)
+        {
+            return AssetDatabase.LoadAssetAtPath<ProjectDefine>(AssetDatabase.GUIDToAssetPath(guids[0]));
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Assets/Editor/HBBuild/DefineContainer.asset 에 새 ScriptableObject 에셋을 생성합니다.
+    /// </summary>
+    public static ProjectDefine CreateAssetInUserFolder()
+    {
+        BuildHelper.EnsureUserBuildDataDirExists();
+
+        var instance = CreateInstance<ProjectDefine>();
+        AssetDatabase.CreateAsset(instance, BuildHelper.USER_DEFINE_CONTAINER_PATH);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+
+        Debug.Log($"[ProjectDefine] Created user asset at: {BuildHelper.USER_DEFINE_CONTAINER_PATH}");
+        return instance;
     }
 }
