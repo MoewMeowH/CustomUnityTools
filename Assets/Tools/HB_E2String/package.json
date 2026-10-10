@@ -1,0 +1,17 @@
+﻿{
+  "name": "com.hb.e2string",
+  "version": "1.0.0",
+  "displayName": "HB E2String Generator Helper",
+  "description": "Zero-Allocation Enum to String Roslyn Source Generator helper with dedicated Editor Window.",
+  "unity": "2021.3",
+  "author": {
+    "name": "HB"
+  },
+  "keywords": [
+    "enum",
+    "string",
+    "source-generator",
+    "zero-allocation",
+    "hb"
+  ]
+}
