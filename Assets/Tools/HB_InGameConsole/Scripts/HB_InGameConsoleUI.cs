@@ -1,12 +1,12 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
+using InGameConsoleSystem;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 /// <summary>
-/// UITK 기반 인게임 콘솔 로그 UI 및 실시간 성능(FPS & FrameTime Graph) 모니터 컨트롤러입니다.
-/// 화면 좌상단에 실시간 FPS/FrameTime 꺾은선 그래프를 표시하여 미세 끊김(Micro-stutter)을 즉시 포착하며,
-/// 우상단 버튼을 통해 콘솔 창을 열고 닫을 수 있습니다.
-/// 런타임 빌드(Windows, Android, iOS) 및 에디터에서 가비지 컬렉션(GC) 할당 없이 고성능으로 동작합니다.
+/// UI Toolkit 기반 인게임 콘솔 UI 및 성능 모니터링 컨트롤러입니다.
+/// 실시간 Watch, 동적 태그 필터, 검색/제외 필터, 스택트레이스 정제 기능을 지원합니다.
 /// </summary>
 [RequireComponent(typeof(UIDocument))]
 public class HB_InGameConsoleUI : MonoBehaviour
@@ -19,15 +19,17 @@ public class HB_InGameConsoleUI : MonoBehaviour
         Error
     }
 
-    [Header("=== UI Toolkit 설정 ===")]
-    [Tooltip("콘솔 UI Document에 연결할 VisualTreeAsset")]
-    [SerializeField] private VisualTreeAsset consoleVisualTree;
+    private enum ConsoleViewMode
+    {
+        Logs,
+        Watch
+    }
 
-    [Tooltip("씬 전환 시에도 콘솔을 유지할지 여부")]
+    [Header("UI Toolkit")]
+    [SerializeField] private VisualTreeAsset consoleVisualTree;
     [SerializeField] private bool dontDestroyOnLoad = true;
 
-    [Header("=== 성능 모니터 설정 ===")]
-    [Tooltip("프레임 그래프 표시 여부")]
+    [Header("Performance Monitor")]
     [SerializeField] private bool showFpsGraph = true;
 
     private const int MaxUiLogCount = 1000;
@@ -36,7 +38,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private UIDocument uiDocument;
     private VisualElement rootElement;
 
-    // 콘솔 UI 요소
+    // View Mode elements
+    private Button viewLogsBtn;
+    private Button viewWatchBtn;
+    private ConsoleViewMode currentViewMode = ConsoleViewMode.Logs;
+
+    // Header Toolbar elements
     private Button openButton;
     private VisualElement consoleWindow;
     private Button closeButton;
@@ -46,23 +53,40 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private Button filterWarnButton;
     private Button filterErrorButton;
     private Button autoScrollButton;
-    private ScrollView logScrollView;
-    private Label detailLabel;
     private Label consoleStatsLabel;
 
-    // FPS & 그래프 UI 요소
+    // Sub Toolbar elements (Search & Tags)
+    private VisualElement subToolBar;
+    private TextField searchField;
+    private Button clearSearchBtn;
+    private ScrollView tagScrollView;
+    private Button tagAllButton;
+    private readonly Dictionary<string, Button> createdTagButtons = new Dictionary<string, Button>(StringComparer.OrdinalIgnoreCase);
+
+    // ScrollViews & Detail Panel
+    private ScrollView logScrollView;
+    private ScrollView watchScrollView;
+    private Label detailLabel;
+    private Button copyDetailBtn;
+
+    // FPS & Graph elements
     private VisualElement fpsWidget;
     private Label fpsLabel;
     private Label msLabel;
     private VisualElement fpsGraphCanvas;
 
-    // 로깅 상태
+    // State & Caches
     private LogFilter currentFilter = LogFilter.All;
+    private string currentTagFilter = string.Empty;
+    private string currentSearchQuery = string.Empty;
     private bool autoScrollEnabled = true;
+
     private readonly List<VisualElement> createdLogRows = new List<VisualElement>();
+    private readonly Dictionary<string, (VisualElement row, Label valLabel, Label timeLabel)> watchRowMap =
+        new Dictionary<string, (VisualElement row, Label valLabel, Label timeLabel)>(StringComparer.OrdinalIgnoreCase);
     private VisualElement selectedRow;
 
-    // 성능 & 그래프 데이터 (Zero GC Ring Buffer)
+    // Frame metrics
     private readonly float[] frameTimes = new float[GraphSampleCount];
     private int bufferIndex = 0;
     private int recordedCount = 0;
@@ -72,17 +96,23 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private int accumulatedFrames = 0;
     private bool isGraphCollapsed = false;
 
+    public bool IsConsoleOpen => consoleWindow != null && !consoleWindow.ClassListContains("hb-hidden");
+
     private void Awake()
     {
         uiDocument = GetComponent<UIDocument>();
 
-        Application.targetFrameRate = 60;
-        if (dontDestroyOnLoad)
+        var settings = InGameConsoleSettings.Instance;
+        if (settings != null)
         {
-            if (transform.parent == null)
-            {
-                DontDestroyOnLoad(gameObject);
-            }
+            dontDestroyOnLoad = settings.DontDestroyOnLoad;
+            showFpsGraph = settings.ShowFpsGraph;
+        }
+
+        Application.targetFrameRate = 60;
+        if (dontDestroyOnLoad && transform.parent == null)
+        {
+            DontDestroyOnLoad(gameObject);
         }
     }
 
@@ -91,9 +121,24 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (uiDocument == null)
             uiDocument = GetComponent<UIDocument>();
 
-        if (consoleVisualTree != null && uiDocument.visualTreeAsset == null)
+        var settings = InGameConsoleSettings.Instance;
+
+        if (uiDocument.visualTreeAsset == null)
         {
-            uiDocument.visualTreeAsset = consoleVisualTree;
+            if (consoleVisualTree != null)
+                uiDocument.visualTreeAsset = consoleVisualTree;
+            else if (settings != null && settings.ConsoleVisualTree != null)
+                uiDocument.visualTreeAsset = settings.ConsoleVisualTree;
+            else
+                uiDocument.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+        }
+
+        if (uiDocument.panelSettings == null)
+        {
+            if (settings != null && settings.PanelSettings != null)
+                uiDocument.panelSettings = settings.PanelSettings;
+            else
+                uiDocument.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
         }
 
         rootElement = uiDocument.rootVisualElement;
@@ -102,14 +147,15 @@ public class HB_InGameConsoleUI : MonoBehaviour
         BindUIElements();
         RegisterCallbacks();
 
-        // 기존 히스토리 로드
         RefreshAllLogs();
+        RefreshAllWatches();
+        RefreshAllTags();
 
-        // 실시간 로그 이벤트 구독
-        HB_Log.OnLogAdded += HandleLogAdded;
-        HB_Log.OnLogsCleared += HandleLogsCleared;
+        HLogCore.OnLogAdded += HandleLogAdded;
+        HLogCore.OnLogsCleared += HandleLogsCleared;
+        HLogCore.OnWatchUpdated += HandleWatchUpdated;
+        HLogCore.OnTagDiscovered += HandleTagDiscovered;
 
-        // 그래프 렌더링 콜백 등록
         if (fpsGraphCanvas != null)
         {
             fpsGraphCanvas.generateVisualContent += DrawFrameTimeGraph;
@@ -118,8 +164,10 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void OnDisable()
     {
-        HB_Log.OnLogAdded -= HandleLogAdded;
-        HB_Log.OnLogsCleared -= HandleLogsCleared;
+        HLogCore.OnLogAdded -= HandleLogAdded;
+        HLogCore.OnLogsCleared -= HandleLogsCleared;
+        HLogCore.OnWatchUpdated -= HandleWatchUpdated;
+        HLogCore.OnTagDiscovered -= HandleTagDiscovered;
 
         if (fpsGraphCanvas != null)
         {
@@ -141,17 +189,27 @@ public class HB_InGameConsoleUI : MonoBehaviour
         closeButton = rootElement.Q<Button>("closeButton");
         clearButton = rootElement.Q<Button>("clearBtn");
 
+        viewLogsBtn = rootElement.Q<Button>("viewLogsBtn");
+        viewWatchBtn = rootElement.Q<Button>("viewWatchBtn");
+
         filterAllButton = rootElement.Q<Button>("filterAllBtn");
         filterInfoButton = rootElement.Q<Button>("filterInfoBtn");
         filterWarnButton = rootElement.Q<Button>("filterWarnBtn");
         filterErrorButton = rootElement.Q<Button>("filterErrorBtn");
         autoScrollButton = rootElement.Q<Button>("autoScrollBtn");
 
+        subToolBar = rootElement.Q<VisualElement>("subToolBar");
+        searchField = rootElement.Q<TextField>("searchField");
+        clearSearchBtn = rootElement.Q<Button>("clearSearchBtn");
+        tagScrollView = rootElement.Q<ScrollView>("tagScrollView");
+
         logScrollView = rootElement.Q<ScrollView>("logScrollView");
+        watchScrollView = rootElement.Q<ScrollView>("watchScrollView");
+
         detailLabel = rootElement.Q<Label>("detailLabel");
+        copyDetailBtn = rootElement.Q<Button>("copyDetailBtn");
         consoleStatsLabel = rootElement.Q<Label>("consoleStatsLabel");
 
-        // FPS & Graph 위젯 바인딩
         fpsWidget = rootElement.Q<VisualElement>("fpsWidget");
         fpsLabel = rootElement.Q<Label>("fpsLabel");
         msLabel = rootElement.Q<Label>("msLabel");
@@ -169,13 +227,29 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (closeButton != null) closeButton.clicked += CloseConsole;
         if (clearButton != null) clearButton.clicked += ClearConsole;
 
+        if (viewLogsBtn != null) viewLogsBtn.clicked += () => SwitchViewMode(ConsoleViewMode.Logs);
+        if (viewWatchBtn != null) viewWatchBtn.clicked += () => SwitchViewMode(ConsoleViewMode.Watch);
+
         if (filterAllButton != null) filterAllButton.clicked += () => SetFilter(LogFilter.All);
         if (filterInfoButton != null) filterInfoButton.clicked += () => SetFilter(LogFilter.Info);
         if (filterWarnButton != null) filterWarnButton.clicked += () => SetFilter(LogFilter.Warning);
         if (filterErrorButton != null) filterErrorButton.clicked += () => SetFilter(LogFilter.Error);
         if (autoScrollButton != null) autoScrollButton.clicked += ToggleAutoScroll;
 
-        // FPS 위젯 클릭 시 미니 그래프 접기/펼치기
+        if (searchField != null)
+        {
+            searchField.RegisterValueChangedCallback(OnSearchValueChanged);
+        }
+        if (clearSearchBtn != null)
+        {
+            clearSearchBtn.clicked += () => { if (searchField != null) searchField.value = string.Empty; };
+        }
+
+        if (copyDetailBtn != null)
+        {
+            copyDetailBtn.clicked += CopySelectedDetail;
+        }
+
         if (fpsWidget != null)
         {
             fpsWidget.RegisterCallback<ClickEvent>(OnFpsWidgetClicked);
@@ -188,6 +262,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (closeButton != null) closeButton.clicked -= CloseConsole;
         if (clearButton != null) clearButton.clicked -= ClearConsole;
         if (autoScrollButton != null) autoScrollButton.clicked -= ToggleAutoScroll;
+
+        if (copyDetailBtn != null) copyDetailBtn.clicked -= CopySelectedDetail;
 
         if (fpsWidget != null)
         {
@@ -212,10 +288,6 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     #region Performance & Frame Graph
 
-    /// <summary>
-    /// Application.targetFrameRate를 기준으로 목표 FPS를 반환합니다.
-    /// 미설정(-1) 시 모니터 주사율 또는 60을 기본값으로 반환합니다.
-    /// </summary>
     private int GetTargetFps()
     {
         int target = Application.targetFrameRate;
@@ -237,18 +309,15 @@ public class HB_InGameConsoleUI : MonoBehaviour
         float dt = Time.unscaledDeltaTime;
         float frameMs = dt * 1000f;
 
-        // 원형 버퍼(Ring Buffer)에 기록 (Zero GC)
         frameTimes[bufferIndex] = frameMs;
         bufferIndex = (bufferIndex + 1) % GraphSampleCount;
         if (recordedCount < GraphSampleCount) recordedCount++;
 
-        // 그래프 리페인트 요청
         if (fpsGraphCanvas != null && !isGraphCollapsed)
         {
             fpsGraphCanvas.MarkDirtyRepaint();
         }
 
-        // 텍스트 업데이트 주기 (매 프레임 string 생성 GC 방지)
         accumulatedDelta += dt;
         accumulatedFrames++;
         textUpdateTimer += dt;
@@ -266,11 +335,6 @@ public class HB_InGameConsoleUI : MonoBehaviour
             if (fpsLabel != null)
             {
                 fpsLabel.text = $"{intFps} FPS";
-
-                // TargetFrameRate 기준 인디케이터 색상:
-                // 90% 이상: 녹색 (Good)
-                // 70% 이상 90% 미만: 주황색 (Warn)
-                // 그 외: 빨간색 (Bad)
                 fpsLabel.RemoveFromClassList("hb-fps-good");
                 fpsLabel.RemoveFromClassList("hb-fps-warn");
                 fpsLabel.RemoveFromClassList("hb-fps-bad");
@@ -313,7 +377,6 @@ public class HB_InGameConsoleUI : MonoBehaviour
         float targetMs = 1000f / Mathf.Max(targetFps, 1);
         float warnMs = 1000f / Mathf.Max(targetFps * 0.7f, 1);
 
-        // 스케일 계산: 기본 warnMs * 1.2f, 스파이크가 크면 최대 100ms까지 자동 조절
         float maxMs = Mathf.Max(warnMs * 1.25f, 40f);
         for (int i = 0; i < recordedCount; i++)
         {
@@ -323,7 +386,6 @@ public class HB_InGameConsoleUI : MonoBehaviour
             }
         }
 
-        // 1. Target FrameRate (100% 목표) 기준선 - 은은한 녹색
         float yTarget = height - (targetMs / maxMs * height);
         if (yTarget >= 0f && yTarget <= height)
         {
@@ -335,7 +397,6 @@ public class HB_InGameConsoleUI : MonoBehaviour
             painter.Stroke();
         }
 
-        // 2. 70% 위험 경계선 (Warn Threshold) - 은은한 주황색
         float yWarn = height - (warnMs / maxMs * height);
         if (yWarn >= 0f && yWarn <= height)
         {
@@ -347,11 +408,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
             painter.Stroke();
         }
 
-        // 3. 최근 프레임 꺾은선 및 하단 반투명 영역 칠하기
         int samples = recordedCount;
         float stepX = width / Mathf.Max(samples - 1, 1);
 
-        // 영역 채우기 (Fill)
         painter.fillColor = new Color(0.25f, 0.7f, 1f, 0.16f);
         painter.BeginPath();
         painter.MoveTo(new Vector2(0f, height));
@@ -369,7 +428,6 @@ public class HB_InGameConsoleUI : MonoBehaviour
         painter.ClosePath();
         painter.Fill();
 
-        // 라인 그리기 (Stroke)
         painter.lineWidth = 1.4f;
         painter.strokeColor = new Color(0.35f, 0.75f, 1f, 0.95f);
         painter.BeginPath();
@@ -391,7 +449,177 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     #endregion
 
-    #region Console UI
+    #region View Mode & Watch System
+
+    private void SwitchViewMode(ConsoleViewMode mode)
+    {
+        currentViewMode = mode;
+
+        if (mode == ConsoleViewMode.Logs)
+        {
+            viewLogsBtn?.AddToClassList("hb-filter-active");
+            viewWatchBtn?.RemoveFromClassList("hb-filter-active");
+
+            logScrollView?.RemoveFromClassList("hb-hidden");
+            watchScrollView?.AddToClassList("hb-hidden");
+            subToolBar?.RemoveFromClassList("hb-hidden");
+        }
+        else
+        {
+            viewWatchBtn?.AddToClassList("hb-filter-active");
+            viewLogsBtn?.RemoveFromClassList("hb-filter-active");
+
+            watchScrollView?.RemoveFromClassList("hb-hidden");
+            logScrollView?.AddToClassList("hb-hidden");
+            subToolBar?.AddToClassList("hb-hidden");
+
+            RefreshAllWatches();
+        }
+    }
+
+    private void HandleWatchUpdated(string key, string value)
+    {
+        UpdateWatchButtonCount();
+
+        if (watchScrollView == null) return;
+
+        if (watchRowMap.TryGetValue(key, out var rowInfo))
+        {
+            rowInfo.valLabel.text = value;
+            rowInfo.timeLabel.text = DateTime.Now.ToString("HH:mm:ss");
+        }
+        else
+        {
+            AddWatchElement(key, value, DateTime.Now);
+        }
+    }
+
+    private void RefreshAllWatches()
+    {
+        if (watchScrollView == null) return;
+
+        watchScrollView.Clear();
+        watchRowMap.Clear();
+
+        var map = HLogCore.Watches;
+        foreach (var kvp in map)
+        {
+            AddWatchElement(kvp.Key, kvp.Value.Value, kvp.Value.Timestamp);
+        }
+
+        UpdateWatchButtonCount();
+    }
+
+    private void AddWatchElement(string key, string value, DateTime time)
+    {
+        var row = new VisualElement();
+        row.AddToClassList("hb-watch-row");
+
+        var keyLabel = new Label(key);
+        keyLabel.AddToClassList("hb-watch-key");
+
+        var valLabel = new Label(value);
+        valLabel.AddToClassList("hb-watch-val");
+
+        var timeLabel = new Label(time.ToString("HH:mm:ss"));
+        timeLabel.AddToClassList("hb-watch-time");
+
+        row.Add(keyLabel);
+        row.Add(valLabel);
+        row.Add(timeLabel);
+
+        watchScrollView.Add(row);
+        watchRowMap[key] = (row, valLabel, timeLabel);
+    }
+
+    private void UpdateWatchButtonCount()
+    {
+        if (viewWatchBtn != null)
+        {
+            viewWatchBtn.text = $"Watch [{HLogCore.Watches.Count}]";
+        }
+    }
+
+    #endregion
+
+    #region Tag & Channel Filtering
+
+    private void RefreshAllTags()
+    {
+        if (tagScrollView == null) return;
+
+        tagScrollView.Clear();
+        createdTagButtons.Clear();
+
+        tagAllButton = new Button(() => SetTagFilter(string.Empty)) { text = "All Tags" };
+        tagAllButton.AddToClassList("hb-tag-btn");
+        if (string.IsNullOrEmpty(currentTagFilter))
+        {
+            tagAllButton.AddToClassList("hb-tag-btn-active");
+        }
+        tagScrollView.Add(tagAllButton);
+
+        foreach (var tag in HLogCore.KnownTags)
+        {
+            AddTagButton(tag);
+        }
+    }
+
+    private void HandleTagDiscovered(string tag)
+    {
+        if (tagScrollView == null || createdTagButtons.ContainsKey(tag)) return;
+        AddTagButton(tag);
+    }
+
+    private void AddTagButton(string tag)
+    {
+        var btn = new Button(() => SetTagFilter(tag)) { text = $"#{tag}#" };
+        btn.AddToClassList("hb-tag-btn");
+        if (string.Equals(currentTagFilter, tag, StringComparison.OrdinalIgnoreCase))
+        {
+            btn.AddToClassList("hb-tag-btn-active");
+        }
+
+        createdTagButtons[tag] = btn;
+        tagScrollView.Add(btn);
+    }
+
+    private void SetTagFilter(string tag)
+    {
+        currentTagFilter = tag;
+
+        if (tagAllButton != null)
+        {
+            if (string.IsNullOrEmpty(tag))
+                tagAllButton.AddToClassList("hb-tag-btn-active");
+            else
+                tagAllButton.RemoveFromClassList("hb-tag-btn-active");
+        }
+
+        foreach (var kvp in createdTagButtons)
+        {
+            if (!string.IsNullOrEmpty(tag) && string.Equals(kvp.Key, tag, StringComparison.OrdinalIgnoreCase))
+                kvp.Value.AddToClassList("hb-tag-btn-active");
+            else
+                kvp.Value.RemoveFromClassList("hb-tag-btn-active");
+        }
+
+        ApplyFilterToVisibleLogs();
+    }
+
+    #endregion
+
+    #region Search Filtering
+
+    private void OnSearchValueChanged(ChangeEvent<string> evt)
+    {
+        currentSearchQuery = evt.newValue != null ? evt.newValue.Trim() : string.Empty;
+        ApplyFilterToVisibleLogs();
+    }
+
+    #endregion
+
+    #region Console UI & Logs
 
     public void OpenConsole()
     {
@@ -409,9 +637,21 @@ public class HB_InGameConsoleUI : MonoBehaviour
         }
     }
 
+    public void ToggleConsole()
+    {
+        if (IsConsoleOpen)
+        {
+            CloseConsole();
+        }
+        else
+        {
+            OpenConsole();
+        }
+    }
+
     public void ClearConsole()
     {
-        HB_Log.Clear();
+        HLogCore.Clear();
         if (detailLabel != null)
         {
             detailLabel.text = "Logs cleared.";
@@ -474,7 +714,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         logScrollView.Clear();
         createdLogRows.Clear();
 
-        var history = HB_Log.History;
+        var history = HLogCore.History;
         for (int i = 0; i < history.Count; i++)
         {
             AddLogElement(history[i]);
@@ -483,15 +723,14 @@ public class HB_InGameConsoleUI : MonoBehaviour
         UpdateOpenButtonText(history.Count);
     }
 
-    private void HandleLogAdded(HB_Log.HB_LogEntry entry)
+    private void HandleLogAdded(HLogCore.LogEntry entry)
     {
         if (logScrollView == null) return;
 
         var row = AddLogElement(entry);
-        UpdateOpenButtonText(HB_Log.History.Count);
+        UpdateOpenButtonText(HLogCore.History.Count);
 
-        // AutoScroll 활성화 시 안전하게 해당 row로 스크롤
-        if (autoScrollEnabled && row != null)
+        if (autoScrollEnabled && row != null && currentViewMode == ConsoleViewMode.Logs)
         {
             logScrollView.schedule.Execute(() =>
             {
@@ -511,12 +750,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
         }
         createdLogRows.Clear();
         selectedRow = null;
+        RefreshAllWatches();
         UpdateOpenButtonText(0);
     }
 
-    private VisualElement AddLogElement(HB_Log.HB_LogEntry entry)
+    private VisualElement AddLogElement(HLogCore.LogEntry entry)
     {
-        // 1000개 초과 시 가장 오래된 UI 엘리먼트 제거 (메모리 보호)
         if (createdLogRows.Count >= MaxUiLogCount)
         {
             var oldest = createdLogRows[0];
@@ -531,42 +770,50 @@ public class HB_InGameConsoleUI : MonoBehaviour
         var timeLabel = new Label(entry.TimeString);
         timeLabel.AddToClassList("hb-log-time");
 
-        var tagLabel = new Label();
-        tagLabel.AddToClassList("hb-log-type-tag");
-
-        var msgLabel = new Label(entry.Message);
-        msgLabel.AddToClassList("hb-log-message");
+        var typeTagLabel = new Label();
+        typeTagLabel.AddToClassList("hb-log-type-tag");
 
         switch (entry.LogType)
         {
             case LogType.Warning:
-                tagLabel.text = "[WARN]";
-                tagLabel.AddToClassList("hb-type-warn");
-                msgLabel.AddToClassList("hb-text-warn");
-                row.userData = LogFilter.Warning;
+                typeTagLabel.text = "[WARN]";
+                typeTagLabel.AddToClassList("hb-type-warn");
                 break;
             case LogType.Error:
             case LogType.Assert:
             case LogType.Exception:
-                tagLabel.text = "[ERR]";
-                tagLabel.AddToClassList("hb-type-error");
-                msgLabel.AddToClassList("hb-text-error");
-                row.userData = LogFilter.Error;
+                typeTagLabel.text = "[ERR]";
+                typeTagLabel.AddToClassList("hb-type-error");
                 break;
             default:
-                tagLabel.text = "[INFO]";
-                tagLabel.AddToClassList("hb-type-info");
-                msgLabel.AddToClassList("hb-text-info");
-                row.userData = LogFilter.Info;
+                typeTagLabel.text = "[INFO]";
+                typeTagLabel.AddToClassList("hb-type-info");
                 break;
         }
 
         row.Add(timeLabel);
-        row.Add(tagLabel);
-        row.Add(msgLabel);
+        row.Add(typeTagLabel);
 
-        // 캡처 변수로 안전한 참조 보장
-        HB_Log.HB_LogEntry capturedEntry = entry;
+        if (!string.IsNullOrEmpty(entry.Tag))
+        {
+            var channelTag = new Label($"[{entry.Tag}]");
+            channelTag.AddToClassList("hb-log-channel-tag");
+            row.Add(channelTag);
+        }
+
+        var msgLabel = new Label(entry.Message);
+        msgLabel.AddToClassList("hb-log-message");
+        if (entry.LogType == LogType.Warning)
+            msgLabel.AddToClassList("hb-text-warn");
+        else if (entry.LogType == LogType.Error || entry.LogType == LogType.Exception)
+            msgLabel.AddToClassList("hb-text-error");
+        else
+            msgLabel.AddToClassList("hb-text-info");
+
+        row.Add(msgLabel);
+        row.userData = entry;
+
+        HLogCore.LogEntry capturedEntry = entry;
         row.RegisterCallback<ClickEvent>(evt =>
         {
             if (selectedRow != null)
@@ -578,17 +825,19 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
             if (detailLabel != null)
             {
-                string details = $"[{capturedEntry.LogType}] {capturedEntry.TimeString}\n{capturedEntry.Message}";
-                if (!string.IsNullOrEmpty(capturedEntry.StackTrace))
+                string tagInfo = !string.IsNullOrEmpty(capturedEntry.Tag) ? $" [{capturedEntry.Tag}]" : "";
+                string details = $"[{capturedEntry.LogType}]{tagInfo} {capturedEntry.TimeString}\n{capturedEntry.Message}";
+
+                string cleanedStack = HLogCore.FilterStackTrace(capturedEntry.StackTrace);
+                if (!string.IsNullOrEmpty(cleanedStack))
                 {
-                    details += $"\n\n--- Stack Trace ---\n{capturedEntry.StackTrace}";
+                    details += $"\n\n--- Stack Trace ---\n{cleanedStack}";
                 }
                 detailLabel.text = details;
             }
         });
 
-        // 필터링 적용 여부
-        bool isVisible = IsLogVisible(entry.LogType, currentFilter);
+        bool isVisible = EvaluateLogVisibility(entry);
         row.style.display = isVisible ? DisplayStyle.Flex : DisplayStyle.None;
 
         createdLogRows.Add(row);
@@ -597,19 +846,56 @@ public class HB_InGameConsoleUI : MonoBehaviour
         return row;
     }
 
+    private void CopySelectedDetail()
+    {
+        if (detailLabel != null && !string.IsNullOrEmpty(detailLabel.text))
+        {
+            GUIUtility.systemCopyBuffer = detailLabel.text;
+        }
+    }
+
     private void ApplyFilterToVisibleLogs()
     {
         foreach (var row in createdLogRows)
         {
-            if (row.userData is LogFilter logCategory)
+            if (row.userData is HLogCore.LogEntry entry)
             {
-                bool visible = (currentFilter == LogFilter.All) || (currentFilter == logCategory);
+                bool visible = EvaluateLogVisibility(entry);
                 row.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             }
         }
     }
 
-    private bool IsLogVisible(LogType type, LogFilter filter)
+    private bool EvaluateLogVisibility(HLogCore.LogEntry entry)
+    {
+        if (!IsLogTypeVisible(entry.LogType, currentFilter))
+            return false;
+
+        if (!string.IsNullOrEmpty(currentTagFilter))
+        {
+            if (!string.Equals(entry.Tag, currentTagFilter, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        if (!string.IsNullOrEmpty(currentSearchQuery))
+        {
+            if (currentSearchQuery.StartsWith("!") && currentSearchQuery.Length > 1)
+            {
+                string excludeWord = currentSearchQuery.Substring(1);
+                if (entry.RawMessage.IndexOf(excludeWord, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return false;
+            }
+            else
+            {
+                if (entry.RawMessage.IndexOf(currentSearchQuery, StringComparison.OrdinalIgnoreCase) < 0)
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool IsLogTypeVisible(LogType type, LogFilter filter)
     {
         if (filter == LogFilter.All) return true;
         if (filter == LogFilter.Info && type == LogType.Log) return true;

@@ -45,17 +45,11 @@ public static class HB_ScreenRecorder
     public static float ElapsedTime => s_IsRecording ? (float)(EditorApplication.timeSinceStartup - s_StartTime) : 0f;
     public static string CurrentSessionFolder => s_CurrentSessionFolder;
 
-    /// <summary>
-    /// Unity Recorder 패키지 설치 여부를 확인합니다.
-    /// </summary>
     public static bool IsRecorderAvailable()
     {
         return Type.GetType("UnityEditor.Recorder.RecorderController, Unity.Recorder.Editor") != null;
     }
 
-    /// <summary>
-    /// 프로젝트 루트의 Recording 디렉터리 경로를 반환하고, 없으면 생성합니다.
-    /// </summary>
     public static string GetRecordingRootDirectory()
     {
         string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -69,9 +63,6 @@ public static class HB_ScreenRecorder
         return recordingDir;
     }
 
-    /// <summary>
-    /// Unity Recorder를 사용하여 비디오 녹화를 시작합니다.
-    /// </summary>
     public static bool StartRecording(int targetFps = 30, string issueTag = "", string notes = "")
     {
         if (IsRecording)
@@ -96,7 +87,6 @@ public static class HB_ScreenRecorder
             Directory.CreateDirectory(s_CurrentSessionFolder);
         }
 
-        // RecorderControllerSettings 및 MovieRecorderSettings 설정
         var controllerSettings = ScriptableObject.CreateInstance<RecorderControllerSettings>();
         controllerSettings.SetRecordModeToManual();
         controllerSettings.FrameRatePlayback = FrameRatePlayback.Variable;
@@ -109,11 +99,9 @@ public static class HB_ScreenRecorder
         movieSettings.VideoBitRateMode = VideoBitrateMode.High;
         movieSettings.CaptureAudio = true;
 
-        // 비디오 출력 파일 경로 설정 (절대 경로)
         string videoFilePath = Path.Combine(s_CurrentSessionFolder, "recording");
         movieSettings.OutputFile = videoFilePath;
 
-        // GameView 입력 소스 설정
         movieSettings.ImageInputSettings = new GameViewInputSettings
         {
             OutputWidth = 1920,
@@ -129,13 +117,10 @@ public static class HB_ScreenRecorder
         s_RecorderController.StartRecording();
         s_IsRecording = true;
 
-        Debug.Log($"[HB_ScreenRecorder] Unity Recorder 녹화 시작! 저장 세션: {s_CurrentSessionFolder} (Target FPS: {s_TargetFps})");
+        Debug.Log($"[HB_ScreenRecorder] 녹화 시작: {s_CurrentSessionFolder} (Target FPS: {s_TargetFps})");
         return true;
     }
 
-    /// <summary>
-    /// 녹화를 종료하고 진단 로그 및 시스템 상태(State)를 함께 저장합니다.
-    /// </summary>
     public static void StopRecording()
     {
         if (!s_IsRecording) return;
@@ -149,15 +134,10 @@ public static class HB_ScreenRecorder
         }
         s_IsRecording = false;
 
-        // 관련 이상을 알 수 있는 로그 및 시스템 상태 덤프 저장
         SaveDiagnosticLogsAndState(s_CurrentSessionFolder, "Video Recording Session", duration);
-
-        Debug.Log($"[HB_ScreenRecorder] Unity Recorder 녹화 완료 ({duration:F2}초). 저장 디렉터리: {s_CurrentSessionFolder}");
+        Debug.Log($"[HB_ScreenRecorder] 녹화 완료 ({duration:F2}s): {s_CurrentSessionFolder}");
     }
 
-    /// <summary>
-    /// 현재 화면 스크린샷을 찍고 당시의 진단 로그와 상태를 함께 저장합니다.
-    /// </summary>
     public static string TakeScreenshot(string issueTag = "", string notes = "")
     {
         string rootDir = GetRecordingRootDirectory();
@@ -173,34 +153,26 @@ public static class HB_ScreenRecorder
 
         string imagePath = Path.Combine(screenshotsDir, $"{baseFileName}.png");
 
-        // 스크린샷 캡처
         ScreenCapture.CaptureScreenshot(imagePath);
 
-        // 스크린샷 관련 진단 정보 세션 폴더 생성 또는 Screenshots 폴더에 저장
         string infoPrefix = Path.Combine(screenshotsDir, baseFileName);
         SaveStateFile($"{infoPrefix}_State.json", issueTag, notes, 0f);
         SaveLogDumpFile($"{infoPrefix}_Logs.txt");
 
-        Debug.Log($"[HB_ScreenRecorder] 스크린샷 및 진단 데이터 저장 완료: {imagePath}");
+        Debug.Log($"[HB_ScreenRecorder] 스크린샷 저장 완료: {imagePath}");
         return imagePath;
     }
 
-    /// <summary>
-    /// 세션 폴더 내에 진단 로그와 상태 덤프, 그리고 요약 리포트를 생성합니다.
-    /// </summary>
     private static void SaveDiagnosticLogsAndState(string targetFolder, string sessionType, float duration)
     {
         try
         {
-            // 1. 상태 덤프 JSON 저장
             string statePath = Path.Combine(targetFolder, "Diagnostic_State.json");
             SaveStateFile(statePath, s_CurrentIssueTag, s_CurrentNotes, duration);
 
-            // 2. 진단 로그 TXT 저장
             string logPath = Path.Combine(targetFolder, "Diagnostic_Logs.txt");
             SaveLogDumpFile(logPath);
 
-            // 3. QA 요약 리포트 저장
             string summaryPath = Path.Combine(targetFolder, "QA_BugReport_Summary.txt");
             var sb = new StringBuilder();
             sb.AppendLine("==================================================");
@@ -272,8 +244,15 @@ public static class HB_ScreenRecorder
         sb.AppendLine($"Dump Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine("--------------------------------------------------");
 
-        // HB_Log가 프로젝트에 존재하는 경우(InGameConsole 패키지 등) 리플렉션으로 안전하게 조회
-        Type hbLogType = Type.GetType("HB_Log, HB.InGameConsole") 
+        Type hbLogType = Type.GetType("HLog.HLogCore, HB.InGameConsole")
+                      ?? Type.GetType("HLog.HLogCore")
+                      ?? Type.GetType("HLog, HB.InGameConsole")
+                      ?? Type.GetType("HLog, Assembly-CSharp")
+                      ?? Type.GetType("HLog")
+                      ?? Type.GetType("Logger, HB.InGameConsole") 
+                      ?? Type.GetType("Logger, Assembly-CSharp") 
+                      ?? Type.GetType("Logger")
+                      ?? Type.GetType("HB_Log, HB.InGameConsole") 
                       ?? Type.GetType("HB_Log, Assembly-CSharp") 
                       ?? Type.GetType("HB_Log");
 
@@ -327,7 +306,7 @@ public static class HB_ScreenRecorder
             }
         }
 
-        sb.AppendLine("No HB_Log instance found or InGameConsole is not installed.");
+        sb.AppendLine("No HLog/Logger/HB_Log instance found or InGameConsole is not installed.");
         sb.AppendLine("Standalone mode: Recording and Screenshot captured successfully.");
         File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
     }
@@ -342,9 +321,6 @@ public static class HB_ScreenRecorder
         return name.Trim();
     }
 
-    /// <summary>
-    /// OS 기본 파일 탐색기(Windows Explorer / macOS Finder)로 폴더를엽니다.
-    /// </summary>
     public static void OpenFolder(string path)
     {
         if (!Directory.Exists(path))

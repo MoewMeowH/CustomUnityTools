@@ -168,14 +168,22 @@
     align-items: center;
 }
 
+.hb-toolbar-separator {
+    width: 1px;
+    height: 16px;
+    background-color: rgb(55, 60, 70);
+    margin-left: 6px;
+    margin-right: 6px;
+}
+
 /* 필터 및 액션 버튼 */
 .hb-filter-btn {
     padding-left: 10px;
     padding-right: 10px;
     padding-top: 4px;
     padding-bottom: 4px;
-    margin-left: 3px;
-    margin-right: 3px;
+    margin-left: 2px;
+    margin-right: 2px;
     background-color: rgb(38, 40, 48);
     color: rgb(180, 185, 195);
     border-width: 1px;
@@ -204,8 +212,8 @@
     padding-right: 11px;
     padding-top: 4px;
     padding-bottom: 4px;
-    margin-left: 5px;
-    margin-right: 3px;
+    margin-left: 4px;
+    margin-right: 2px;
     background-color: rgb(48, 50, 60);
     color: rgb(220, 225, 235);
     border-width: 1px;
@@ -244,6 +252,89 @@
     background-color: rgb(215, 52, 52);
 }
 
+/* 서브 툴바 (검색 및 태그) */
+.hb-sub-toolbar {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    background-color: rgba(20, 21, 26, 0.95);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(38, 41, 50);
+}
+
+.hb-search-container {
+    flex-direction: row;
+    align-items: center;
+    width: 280px;
+    margin-right: 12px;
+}
+
+.hb-search-field {
+    flex-grow: 1;
+    font-size: 11px;
+    color: rgb(230, 230, 240);
+    margin: 0;
+}
+
+.hb-search-field > .unity-text-field__input {
+    background-color: rgb(28, 30, 36);
+    border-color: rgb(55, 59, 70);
+    border-radius: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+.hb-search-clear-btn {
+    width: 20px;
+    height: 20px;
+    margin-left: 2px;
+    padding: 0;
+    background-color: rgb(40, 44, 52);
+    color: rgb(180, 185, 195);
+    border-width: 0;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.hb-tag-scroll {
+    flex-grow: 1;
+    height: 26px;
+}
+
+.hb-tag-scroll .unity-scroll-view__content-container {
+    flex-direction: row;
+    align-items: center;
+}
+
+.hb-tag-btn {
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    margin-right: 4px;
+    background-color: rgb(32, 35, 42);
+    color: rgb(160, 168, 185);
+    border-width: 1px;
+    border-color: rgb(50, 55, 68);
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.hb-tag-btn:hover {
+    background-color: rgb(44, 48, 60);
+    color: rgb(230, 235, 245);
+}
+
+.hb-tag-btn-active {
+    background-color: rgb(35, 95, 175);
+    border-color: rgb(60, 125, 220);
+    color: rgb(255, 255, 255);
+    -unity-font-style: bold;
+}
+
 /* 로그 목록 ScrollView */
 .hb-log-scroll {
     flex-grow: 1;
@@ -251,6 +342,55 @@
     padding-right: 8px;
     padding-top: 6px;
     padding-bottom: 6px;
+}
+
+/* Watch 목록 ScrollView */
+.hb-watch-scroll {
+    flex-grow: 1;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+.hb-watch-row {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-bottom: 3px;
+    background-color: rgba(28, 30, 36, 0.85);
+    border-width: 1px;
+    border-color: rgba(50, 54, 66, 0.6);
+    border-radius: 4px;
+}
+
+.hb-watch-row:hover {
+    background-color: rgba(38, 42, 52, 0.95);
+    border-color: rgba(75, 82, 100, 0.9);
+}
+
+.hb-watch-key {
+    min-width: 160px;
+    color: rgb(140, 190, 255);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.hb-watch-val {
+    flex-grow: 1;
+    color: rgb(74, 222, 128);
+    font-size: 12px;
+    -unity-font-style: bold;
+    white-space: normal;
+}
+
+.hb-watch-time {
+    color: rgb(120, 125, 138);
+    font-size: 10px;
+    margin-left: 10px;
 }
 
 /* 로그 아이템 */
@@ -291,6 +431,17 @@
     -unity-font-style: bold;
     margin-right: 8px;
     min-width: 45px;
+}
+
+.hb-log-channel-tag {
+    font-size: 10px;
+    padding-left: 4px;
+    padding-right: 4px;
+    margin-right: 6px;
+    background-color: rgba(45, 60, 90, 0.75);
+    color: rgb(150, 190, 255);
+    border-radius: 2px;
+    -unity-font-style: bold;
 }
 
 .hb-log-message {
@@ -339,6 +490,7 @@
 .hb-detail-header {
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
     margin-bottom: 4px;
 }
 
@@ -346,6 +498,23 @@
     color: rgb(160, 165, 175);
     font-size: 11px;
     -unity-font-style: bold;
+}
+
+.hb-copy-btn {
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    background-color: rgb(40, 44, 52);
+    color: rgb(180, 185, 195);
+    border-width: 1px;
+    border-color: rgb(60, 65, 75);
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.hb-copy-btn:hover {
+    background-color: rgb(55, 60, 72);
 }
 
 .hb-detail-scroll {

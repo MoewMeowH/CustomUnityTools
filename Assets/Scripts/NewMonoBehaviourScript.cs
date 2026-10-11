@@ -16,7 +16,7 @@ public enum TestEnum
 
 /// <summary>
 /// 유저의 WASD 입력을 받아 오브젝트를 이동시키며,
-/// Vector3.Lerp를 활용해 카메라가 플레이어를 부드럽게 추적하도록 제어하는 컴포넌트입니다.
+/// Vector3.Lerp를 활용해 카메らが 플레이어를 부드럽게 추적하도록 제어하는 컴포넌트입니다.
 /// 최신 Unity Input System(6/7) 및 레거시 Input Manager 환경 모두를 지원합니다.
 /// </summary>
 public class NewMonoBehaviourScript : MonoBehaviour
@@ -68,17 +68,43 @@ public class NewMonoBehaviourScript : MonoBehaviour
 
     private void Start()
     {
-        HB_Log.Log("[Player] Player object initialized in scene.");
-        HB_Log.LogWarning("[Player] In-Game Console UI active! Click top-right 'Logs' button to view.");
+        HLog.Common.Log("[Player] Player object initialized in scene.");
+        HLog.Common.LogWarning("[Player] In-Game Console UI active! Click top-right 'Logs' button to view.");
 
         TestEnum t = TestEnum.Value1;
-        HB_Log.Log($"[E2String Test] TestEnum Fast String: {t.ToStringFast()}");
+        HLog.Common.Log($"[E2String Test] TestEnum Fast String: {t.ToStringFast()}");
+
+        // Null Watch 테스트 (Watch 탭의 Null 감지 지원 확인)
+        HLog.Common.Watch("Player/ImageSlot", m_Image);
+        HLog.Common.Watch("Player/NullRefTest", null);
+
+        // 코드 생성 없이 동적 채널 호출 테스트
+        HLog.Get("DynamicTag").Log("[Dynamic Channel Test] No code generation required!");
     }
 
     private void Update()
     {
         ProcessInput();
         MovePlayer();
+
+        // 런타임 변수 모니터링 (Watch 탭)
+        HLog.Common.Watch("Player/Position", transform.position);
+        HLog.Common.Watch("Player/Speed", moveSpeed);
+
+        var randVal = Random.Range(0f, 100f);
+        HLog.Common.Log(randVal);
+        HLog.UI.Log(randVal);
+        HLog.QWE.Log(randVal);
+        
+        // 예시 1: 비정상 속도 감지 시 즉시 에디터 Pause
+        HLog.Common.BreakIf(moveSpeed > 50f, $"Abnormal move speed detected: {moveSpeed}");
+
+        // 예시 2: 조건 만족 시 현재 Watch 변수 전체 + 링크한 추가 변수들을 텍스트 파일(Report)로 프로젝트 경로에 덤프하고 에디터 Pause
+        HLog.Common.ReportIf(moveSpeed > 30f, "High Speed Anomaly",
+            ("CurrentInput", currentInputVector),
+            ("RotationSpeed", rotationSpeed),
+            ("Is3DMovement", is3DMovement)
+        );
     }
 
     private void LateUpdate()
@@ -105,7 +131,7 @@ public class NewMonoBehaviourScript : MonoBehaviour
 #elif ENABLE_LEGACY_INPUT_MANAGER
         if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) input.y += 1f;
         if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) input.y -= 1f;
-        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) input.x += 1f;
+        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) input.x -= 1f;
         if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) input.x += 1f;
 #else
         float h = Input.GetAxisRaw("Horizontal");
@@ -132,29 +158,17 @@ public class NewMonoBehaviourScript : MonoBehaviour
 
         transform.position += moveDirection * (moveSpeed * Time.deltaTime);
 
-        logTimer += Time.deltaTime;
-        if (logTimer >= 2f)
-        {
-            logTimer = 0f;
-            HB_Log.Log($"[Player Movement] Current Position: {transform.position}");
-        }
-
         if (is3DMovement && rotateTowardsMovement && moveDirection != Vector3.zero)
         {
-            Quaternion targetRotation = Quaternion.LookRotation(moveDirection, Vector3.up);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            Quaternion targetRot = Quaternion.LookRotation(moveDirection, Vector3.up);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
         }
     }
 
     private void FollowCamera()
     {
-        Vector3 targetPosition = transform.position + cameraOffset;
-
-        targetCamera.transform.position = Vector3.Lerp(
-            targetCamera.transform.position,
-            targetPosition,
-            cameraSmoothSpeed * Time.deltaTime
-        );
+        Vector3 targetCamPos = transform.position + cameraOffset;
+        targetCamera.transform.position = Vector3.Lerp(targetCamera.transform.position, targetCamPos, cameraSmoothSpeed * Time.deltaTime);
 
         if (cameraLookAtPlayer)
         {
