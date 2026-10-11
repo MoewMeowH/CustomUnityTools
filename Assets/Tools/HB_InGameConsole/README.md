@@ -21,24 +21,22 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_InGameCon
    - `HLog`는 네임스페이스가 아닌 **전역 정적 partial 클래스(`public static partial class HLog`)**로 구현되어 있어, `using UnityEngine.UI;` 등 기존 엔진/프로젝트 네임스페이스와의 명칭 충돌이 전혀 발생하지 않습니다.
    - `HLog.UI.Log(...)`, `HLog.Common.Log(...)`, `HLog.System.Log(...)` 형태로 직관적이고 일관된 채널 접근을 제공합니다.
 
-2. **UPM 제로 설정 자동 부트스트랩 (Zero-Config UPM Auto-Bootstrap)**
-   - UPM으로 패키지를 설치하자마자, 에디터가 사용자 프로젝트 영역(`Assets/Scripts/LogChannels.cs`)에 기본 `HLog` 클래스 파일을 **자동으로 1회 생성**합니다.
-   - 별도로 생성기 메뉴를 열지 않아도 설치 즉시 `HLog.Common.Log(...)`가 오류 없이 작동합니다.
+2. **커스텀 Conditional 심볼 지원 (`USE_HLOG`)**
+   - 설정 파일(`LogChannelGeneratorSettings`)에서 컴파일 스트리핑에 사용될 **Conditional 심볼**을 자유롭게 지정할 수 있습니다 (기본값: `"USE_HLOG"`).
+   - 모든 채널 로깅 메서드(`Log`, `Warning`, `LogWarning`)에 `[Conditional("USE_HLOG")]`가 적용되어, 릴리즈 빌드나 심볼 미정의 환경에서는 컴파일 타임에 IL 호출 자체가 제로 오버헤드로 스트리핑됩니다.
 
-3. **정적 채널 & 동적 채널 하이브리드 지원 (Static & Dynamic Channels)**
-   - **정적 채널 (인텔리센스/자동완성)**: `HLog.UI.Log(...)`, `HLog.Common.Log(...)`
-   - **동적 채널 (코드 생성 불필요)**: `HLog.Get("Inventory").Log(...)`, `HLog.Channel("Quest").Log(...)`
-   - 임시 디버깅이나 빠른 프로토타이핑 시 코드 생성 없이도 즉시 임의의 채널 로깅이 가능합니다.
+3. **에디터 & 인게임 실시간 LogEnable 제어**
+   - **에디터 툴바**: `Log: ON/OFF` 런타임 토글 및 `USE_HLOG: ON/OFF` Scripting Define Symbol 원클릭 스위치 제공.
+   - **인게임 콘솔 Settings 탭**: 콘솔 헤더의 `Settings` 탭을 통해 게임 플레이 도중에도 마스터 로그 On/Off 및 **채널별(Common, UI, Network 등) 개별 On/Off**를 손쉽게 조작할 수 있습니다.
 
 4. **사전 채널 감지 & 가로 스크롤 필터 바 (Editor & In-Game)**
    - 로그를 한 번도 찍지 않아도 프로젝트에 정의된 모든 채널이 필터 탭에 즉시 표시됩니다.
    - 채널이 많아져 창 너비를 초과하는 경우 에디터 창과 인게임 콘솔 모두 **가로 스크롤(마우스 휠 및 터치 드래그)**을 지원합니다.
-   - **다중 채널 구독**: 단일 선택 방식이 아닌, 보고 싶은 여러 개의 채널을 동시에 체크/구독하여 복합 필터링할 수 있습니다.
+   - **다중 채널 구독**: 보고 싶은 여러 개의 채널을 동시에 체크/구독하여 복합 필터링할 수 있습니다.
 
 5. **실시간 람다 Watch (Lambda Getter Monitoring)**
    - `HLog.Common.Watch("Player/ImageSlot", () => m_Image);` 형태로 **람다(게터)**를 등록할 수 있습니다.
    - 매 프레임 `Update()`에서 반복 호출하지 않고 `Start()`에서 1회만 등록해 두면, 인스펙터나 코드에서 값이 변경되는 즉시 시스템이 실시간으로 감지하여 업데이트합니다.
-   - 직접 값을 넘기는 방식(`HLog.Common.Watch("Player/Pos", transform.position)`)도 완벽히 지원합니다.
 
 6. **조건부 에디터 Pause & 스냅샷 리포트 (Condition Triggers & Reports)**
    - **조건 트리거 (Condition Triggers)**: 특정 Watch 변수가 조건(예: `IsNotNull`, `== 0`, `> 100`)을 만족하면 에디터를 즉시 일시정지(`Debug.Break()`)시킵니다.
@@ -47,7 +45,6 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_InGameCon
 7. **Unity 6 / 7 수명 주기 관리 호환 (Lifecycle Safe)**
    - 채널 클래스에 `[NoAutoStaticsCleanup]`을 적용하여 도메인 리로드 시 인스턴스가 `null`로 초기화되는 문제를 원천 방지했습니다.
    - 에디터 모드(Edit Mode)와 플레이 모드(Play Mode) 양쪽 모두에서 안심하고 사용할 수 있습니다.
-   - Release 빌드 시 `[Conditional("UNITY_EDITOR")]`를 통해 오버헤드 0 및 GC 제로를 보장합니다.
 
 ---
 
@@ -102,14 +99,34 @@ HLog.Common.ReportIf(currentHp <= 0 && isInvincible, "무적 상태 사망 버�
 
 상단 메뉴: **Tools > InGameConsole > Console Window**
 
-1. **Logs 탭**:
+1. **상단 툴바**:
+   - `Log: ON / OFF`: 에디터 및 런타임 마스터 로깅 On/Off 즉시 제어.
+   - `USE_HLOG: ON / OFF`: Scripting Define Symbol 원클릭 추가/제거 스위치.
+   - `Clear`: 로그 히스토리 비우기.
+   - `Auto Scroll`, `Pause on Error`: 에러 발생 시 자동 일시정지.
+2. **Logs 탭**:
    - 상단 채널 바: 다중 채널 구독/해제 (`✓ Common`, `✓ UI` 등), 마우스 휠 가로 스크롤.
    - 우클릭 메뉴: `Only '[채널명]'` (단독 표시), `Subscribe All` (전체 구독), `Toggle Mute` (채널 음소거).
    - 로그 상세 창: 스택트레이스 라인 클릭 시 소스 코드로 즉시 점프.
-2. **Watch 탭**:
+3. **Watch 탭**:
    - **Watch Values**: 실시간 변수 트리, 값 변경 시각화, `null` 강조 표시, `+ Trigger` 버튼으로 즉시 감시 조건 등록.
    - **Condition Triggers**: 변수 조건식(`==`, `!=`, `>`, `<`, `IsNull`, `IsNotNull`), `Pause`(자동 일시정지), `Report`(스냅샷 덤프), `Once`(단일 발동) 설정.
    - 플레이 모드 진입 시 `Once` 발동 상태가 자동 초기화되어 매번 안정적으로 테스트 가능.
+
+---
+
+## 📱 인게임 콘솔 UI (In-Game Console UI)
+
+런타임 환경에서 우상단 `Logs` 플로팅 버튼을 터치/클릭하여 열 수 있습니다.
+
+- **`Logs` 탭**: 게임 런타임 로그 목록, 로그 레벨 필터(All/Info/Warn/Error), 검색창, 가로 스크롤 채널 필터 바.
+- **`Watch` 탭**: 게임 내 실시간 등록된 Watch 변수 목록 및 실시간 값 모니터링.
+- **`Settings` 탭 (분리된 전용 설정 뷰)**:
+  - **Master Log Enable**: 런타임 전체 로깅 On/Off 토글 버튼.
+  - **Show FPS Widget**: 좌상단 FPS 및 프레임타임 그래프 위젯 표시 On/Off.
+  - **Auto Scroll**: 새 로그 추가 시 자동 최하단 스크롤 On/Off.
+  - **Channel Log Enable (Per Channel)**: 프로젝트의 모든 채널(`Common`, `UI`, `System` 등)을 칩(Chip) 버튼으로 나열하여 **각 채널별로 로그 On/Off**를 독립 제어.
+  - **Clear All Log History**: 런타임 로그 히스토리 전체 비우기.
 
 ---
 
@@ -117,6 +134,10 @@ HLog.Common.ReportIf(currentHp <= 0 && isInvincible, "무적 상태 사망 버�
 
 상단 메뉴: **Tools > InGameConsole > Log Channel Generator**
 
-1. 새로운 채널 이름(예: `Battle`, `Inventory`, `Network`)을 입력하고 **채널 추가 (+)** 클릭.
-2. **"설정 저장 시 자동 코드 갱신"**을 체크해 두면 추가 즉시 `Assets/Scripts/LogChannels.cs`가 자동 갱신됩니다.
-3. 갱신 후 즉시 `HLog.Battle.Log(...)` 형태로 사용 가능합니다.
+1. **설정 관리**:
+   - **Conditional 심볼**: 메서드 스트리핑에 사용할 디파인 심볼 설정 (기본값: `USE_HLOG`).
+   - **생성 경로 & 파일 이름**: 기본 `Assets/Scripts/LogChannels.cs`.
+   - **설정 저장 시 자동 코드 갱신**: 체크 시 채널 추가/수정 즉시 C# 코드 자동 갱신.
+2. **채널 추가**:
+   - 원하는 채널 이름(예: `Battle`, `Inventory`, `Network`)을 입력하고 **채널 추가 (+)** 클릭.
+   - 갱신 후 즉시 `HLog.Battle.Log(...)` 형태로 사용 가능합니다.

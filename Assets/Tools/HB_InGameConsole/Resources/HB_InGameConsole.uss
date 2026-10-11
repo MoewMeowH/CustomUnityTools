@@ -125,6 +125,7 @@
     background-color: rgba(22, 23, 28, 0.94);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .hb-hidden {
@@ -133,6 +134,7 @@
 
 /* 헤더 툴바 */
 .hb-header-bar {
+    flex-shrink: 0;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
@@ -254,6 +256,7 @@
 
 /* 서브 툴바 (검색 및 태그) */
 .hb-sub-toolbar {
+    flex-shrink: 0;
     flex-direction: row;
     align-items: center;
     padding-left: 14px;
@@ -338,6 +341,10 @@
 /* 로그 목록 ScrollView */
 .hb-log-scroll {
     flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0px;
+    min-height: 0px;
+    overflow: hidden;
     padding-left: 8px;
     padding-right: 8px;
     padding-top: 6px;
@@ -347,6 +354,10 @@
 /* Watch 목록 ScrollView */
 .hb-watch-scroll {
     flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0px;
+    min-height: 0px;
+    overflow: hidden;
     padding-left: 10px;
     padding-right: 10px;
     padding-top: 8px;
@@ -477,7 +488,9 @@
 
 /* 하단 상세 영역 */
 .hb-detail-panel {
-    height: 140px;
+    height: 150px;
+    min-height: 120px;
+    flex-shrink: 0;
     background-color: rgba(15, 16, 20, 0.96);
     border-top-width: 1px;
     border-top-color: rgb(42, 45, 54);
@@ -487,7 +500,22 @@
     padding-bottom: 6px;
 }
 
+.hb-detail-panel-expanded {
+    height: 280px;
+    min-height: 280px;
+}
+
+.hb-detail-panel-collapsed {
+    height: 34px;
+    min-height: 34px;
+}
+
+.hb-detail-panel-collapsed .hb-detail-scroll {
+    display: none;
+}
+
 .hb-detail-header {
+    flex-shrink: 0;
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
@@ -500,11 +528,17 @@
     -unity-font-style: bold;
 }
 
+.hb-detail-header-actions {
+    flex-direction: row;
+    align-items: center;
+}
+
 .hb-copy-btn {
     padding-left: 8px;
     padding-right: 8px;
     padding-top: 2px;
     padding-bottom: 2px;
+    margin-left: 4px;
     background-color: rgb(40, 44, 52);
     color: rgb(180, 185, 195);
     border-width: 1px;
@@ -519,10 +553,149 @@
 
 .hb-detail-scroll {
     flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0px;
+    min-height: 0px;
 }
 
 .hb-detail-body {
     color: rgb(210, 215, 225);
     font-size: 11px;
     white-space: normal;
+}
+
+/* ========================================================================= */
+/* Settings View Styles                                                      */
+/* ========================================================================= */
+
+.hb-settings-scroll {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0px;
+    min-height: 0px;
+    overflow: hidden;
+    background-color: rgba(18, 20, 25, 0.98);
+}
+
+.hb-settings-content {
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 12px;
+    padding-bottom: 20px;
+}
+
+.hb-settings-title {
+    font-size: 14px;
+    -unity-font-style: bold;
+    color: rgb(215, 225, 245);
+    margin-bottom: 12px;
+}
+
+.hb-settings-card {
+    background-color: rgba(28, 30, 38, 0.85);
+    border-width: 1px;
+    border-color: rgba(55, 60, 75, 0.6);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+.hb-settings-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.hb-settings-row-text {
+    flex-direction: column;
+}
+
+.hb-settings-item-title {
+    font-size: 13px;
+    -unity-font-style: bold;
+    color: rgb(220, 225, 235);
+}
+
+.hb-settings-item-desc {
+    font-size: 10px;
+    color: rgb(130, 135, 150);
+}
+
+.hb-settings-toggle-btn {
+    min-width: 86px;
+    height: 26px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    font-size: 11px;
+    -unity-font-style: bold;
+    border-width: 1px;
+}
+
+.hb-toggle-on {
+    background-color: rgba(30, 110, 60, 0.9);
+    border-color: rgb(46, 175, 95);
+    color: rgb(235, 255, 240);
+}
+
+.hb-toggle-on:hover {
+    background-color: rgba(38, 135, 75, 1);
+}
+
+.hb-toggle-off {
+    background-color: rgba(90, 30, 30, 0.9);
+    border-color: rgb(185, 55, 55);
+    color: rgb(255, 230, 230);
+}
+
+.hb-toggle-off:hover {
+    background-color: rgba(115, 40, 40, 1);
+}
+
+.hb-channel-toggles-container {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+.hb-channel-chip {
+    margin-right: 6px;
+    margin-bottom: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 11px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    border-width: 1px;
+}
+
+.hb-settings-danger-btn {
+    height: 30px;
+    background-color: rgba(135, 35, 35, 0.85);
+    border-color: rgb(175, 50, 50);
+    border-width: 1px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    color: rgb(255, 230, 230);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.hb-settings-danger-btn:hover {
+    background-color: rgba(165, 45, 45, 1);
 }

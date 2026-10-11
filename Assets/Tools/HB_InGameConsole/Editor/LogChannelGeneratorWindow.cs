@@ -169,6 +169,7 @@ namespace InGameConsoleSystem.Editor
                 EditorGUI.BeginChangeCheck();
                 string newDir = EditorGUILayout.TextField("생성 경로", settings.OutputDirectory);
                 string newFile = EditorGUILayout.TextField("파일 이름", settings.OutputFileName);
+                string newCond = EditorGUILayout.TextField("Conditional 심볼", settings.ConditionalSymbol);
                 bool newUseSame = EditorGUILayout.Toggle("변수명과 태그명 동일하게 사용", settings.UseSameName);
                 bool newAutoSave = EditorGUILayout.Toggle("설정 저장 시 자동 코드 갱신", settings.AutoGenerateOnSave);
 
@@ -177,6 +178,7 @@ namespace InGameConsoleSystem.Editor
                     Undo.RecordObject(settings, "Modify Log Channel Generator Settings");
                     settings.OutputDirectory = newDir;
                     settings.OutputFileName = newFile;
+                    settings.ConditionalSymbol = newCond;
                     settings.UseSameName = newUseSame;
                     settings.AutoGenerateOnSave = newAutoSave;
 
@@ -383,9 +385,11 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("    }");
             sb.AppendLine();
 
-            AppendChannelClass(sb, "Common", "Common");
+            string cond = settings != null ? settings.ConditionalSymbol : "USE_HLOG";
+
+            AppendChannelClass(sb, "Common", "Common", cond);
             sb.AppendLine();
-            AppendChannelClass(sb, "System", "System");
+            AppendChannelClass(sb, "System", "System", cond);
 
             var channels = settings != null ? settings.Channels : new List<LogChannelGeneratorSettings.ChannelItem>();
             for (int i = 0; i < channels.Count; i++)
@@ -398,14 +402,14 @@ namespace InGameConsoleSystem.Editor
                 if (vName == "Common" || vName == "System" || vName == "Core") continue;
 
                 sb.AppendLine();
-                AppendChannelClass(sb, vName, tName);
+                AppendChannelClass(sb, vName, tName, cond);
             }
 
             sb.AppendLine("}");
             return sb.ToString();
         }
 
-        private static void AppendChannelClass(StringBuilder sb, string className, string tagName)
+        private static void AppendChannelClass(StringBuilder sb, string className, string tagName, string cond)
         {
             sb.AppendLine("    #if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER");
             sb.AppendLine("    [NoAutoStaticsCleanup]");
@@ -414,12 +418,15 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("    {");
             sb.AppendLine($"        public static readonly LogChannel Channel = new LogChannel(\"{tagName}\");");
             sb.AppendLine();
+            sb.AppendLine($"        [Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);");
             sb.AppendLine();
+            sb.AppendLine($"        [Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void LogWarning(object message, UnityEngine.Object context = null) => Channel.LogWarning(message, context);");
             sb.AppendLine();
+            sb.AppendLine($"        [Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);");
             sb.AppendLine();

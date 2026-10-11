@@ -1,4 +1,7 @@
-﻿using UnityEngine;
+﻿#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace InGameConsoleSystem
@@ -9,10 +12,23 @@ namespace InGameConsoleSystem
         Manual = 1
     }
 
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+    [NoAutoStaticsCleanup]
+#endif
     public class InGameConsoleSettings : ScriptableObject
     {
         private const string ResourcePath = "InGameConsoleSettings";
         private static InGameConsoleSettings s_Instance;
+
+#if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER)
+#if UNITY_EDITOR
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticsOnDomainReload()
+        {
+            s_Instance = null;
+        }
+#endif
+#endif
 
         [Header("Initialization")]
         [SerializeField] private ConsoleInitMode initMode = ConsoleInitMode.AutoOnGameStart;

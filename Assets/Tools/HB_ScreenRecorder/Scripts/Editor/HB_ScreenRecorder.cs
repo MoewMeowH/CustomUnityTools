@@ -12,6 +12,13 @@ using UnityEditor.Recorder.Input;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
+
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+[NoAutoStaticsCleanup]
+#endif
 public static class HB_ScreenRecorder
 {
     [Serializable]
@@ -40,6 +47,20 @@ public static class HB_ScreenRecorder
     private static int s_TargetFps = 30;
     private static string s_CurrentIssueTag = string.Empty;
     private static string s_CurrentNotes = string.Empty;
+
+#if UNITY_EDITOR
+    [InitializeOnLoadMethod]
+    private static void ResetStaticsOnDomainReload()
+    {
+        s_RecorderController = null;
+        s_IsRecording = false;
+        s_CurrentSessionFolder = string.Empty;
+        s_StartTime = 0;
+        s_TargetFps = 30;
+        s_CurrentIssueTag = string.Empty;
+        s_CurrentNotes = string.Empty;
+    }
+#endif
 
     public static bool IsRecording => s_IsRecording && s_RecorderController != null && s_RecorderController.IsRecording();
     public static float ElapsedTime => s_IsRecording ? (float)(EditorApplication.timeSinceStartup - s_StartTime) : 0f;
@@ -244,7 +265,9 @@ public static class HB_ScreenRecorder
         sb.AppendLine($"Dump Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine("--------------------------------------------------");
 
-        Type hbLogType = Type.GetType("HLog.HLogCore, HB.InGameConsole")
+        Type hbLogType = Type.GetType("InGameConsoleSystem.HLogCore, HB.InGameConsole")
+                      ?? Type.GetType("InGameConsoleSystem.HLogCore")
+                      ?? Type.GetType("HLog.HLogCore, HB.InGameConsole")
                       ?? Type.GetType("HLog.HLogCore")
                       ?? Type.GetType("HLog, HB.InGameConsole")
                       ?? Type.GetType("HLog, Assembly-CSharp")

@@ -820,7 +820,11 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 1
   webEnableSubmoduleStrippingCompatibility: 0
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    1: USE_HLOG
+    7: USE_HLOG
+    13: USE_HLOG
+    19: USE_HLOG
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:

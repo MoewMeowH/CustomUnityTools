@@ -17,6 +17,15 @@ public static partial class HLog
     public static void Clear() => HLogCore.Clear();
 
     /// <summary>
+    /// 전역 로그 활성화/비활성화 (런타임 및 에디터)
+    /// </summary>
+    public static bool IsLogEnabled
+    {
+        get => HLogCore.IsLogEnabled;
+        set => HLogCore.IsLogEnabled = value;
+    }
+
+    /// <summary>
     /// 코드 생성 없이 동적으로 임의의 태그 채널을 가져와 로깅합니다.
     /// </summary>
     public static LogChannel Get(string channelName) => HLogCore.GetChannel(channelName);
@@ -40,12 +49,15 @@ public static partial class HLog
     {
         public static readonly LogChannel Channel = new LogChannel("Common");
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void LogWarning(object message, UnityEngine.Object context = null) => Channel.LogWarning(message, context);
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);
 
@@ -90,12 +102,15 @@ public static partial class HLog
     {
         public static readonly LogChannel Channel = new LogChannel("System");
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void LogWarning(object message, UnityEngine.Object context = null) => Channel.LogWarning(message, context);
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);
 
@@ -140,12 +155,15 @@ public static partial class HLog
     {
         public static readonly LogChannel Channel = new LogChannel("Channel1");
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void LogWarning(object message, UnityEngine.Object context = null) => Channel.LogWarning(message, context);
 
+        [Conditional("USE_HLOG")]
         [HideInCallstack]
         public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);
 

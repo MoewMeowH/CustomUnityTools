@@ -15,6 +15,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp-Editor::InGameConsoleSystem.Editor.LogChannelGeneratorSettings
   outputDirectory: Assets/Scripts
   outputFileName: LogChannels.cs
+  conditionalSymbol: USE_HLOG
   useSameName: 1
   autoGenerateOnSave: 1
   channels:

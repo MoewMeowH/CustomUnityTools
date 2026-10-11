@@ -5,6 +5,13 @@ using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
+
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+[NoAutoStaticsCleanup]
+#endif
 public class HB_ScreenRecorderWindow : EditorWindow
 {
     private int targetFps = 30;
@@ -13,6 +20,14 @@ public class HB_ScreenRecorderWindow : EditorWindow
     private Vector2 scrollPosition;
 
     private static AddRequest s_InstallRequest;
+
+#if UNITY_EDITOR
+    [InitializeOnLoadMethod]
+    private static void ResetStaticsOnDomainReload()
+    {
+        s_InstallRequest = null;
+    }
+#endif
 
     [MenuItem("Tools/HB/Screen Recorder")]
     public static void ShowWindow()

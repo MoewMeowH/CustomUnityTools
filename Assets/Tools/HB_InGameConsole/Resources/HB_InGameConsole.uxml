@@ -24,13 +24,14 @@
                 <ui:VisualElement name="toolbarGroup" class="hb-toolbar-group">
                     <ui:Button name="viewLogsBtn" text="Logs" class="hb-filter-btn hb-filter-active"/>
                     <ui:Button name="viewWatchBtn" text="Watch [0]" class="hb-filter-btn"/>
+                    <ui:Button name="viewSettingsBtn" text="Settings" class="hb-filter-btn"/>
                     <ui:VisualElement class="hb-toolbar-separator"/>
                     <ui:Button name="filterAllBtn" text="All" class="hb-filter-btn hb-filter-active"/>
                     <ui:Button name="filterInfoBtn" text="Info" class="hb-filter-btn"/>
                     <ui:Button name="filterWarnBtn" text="Warn" class="hb-filter-btn"/>
                     <ui:Button name="filterErrorBtn" text="Error" class="hb-filter-btn"/>
                     <ui:VisualElement class="hb-toolbar-separator"/>
-                    <ui:Button name="autoScrollBtn" text="AutoScroll: ON" class="hb-filter-btn hb-filter-active"/>
+                    <ui:Button name="bottomBtn" text="▼ Bottom" class="hb-action-btn"/>
                     <ui:Button name="clearBtn" text="Clear" class="hb-action-btn"/>
                     <ui:Button name="closeButton" text="✕" class="hb-close-btn"/>
                 </ui:VisualElement>
@@ -53,11 +54,58 @@
             <!-- Watch 뷰어 (기본 숨김) -->
             <ui:ScrollView name="watchScrollView" class="hb-watch-scroll hb-hidden"/>
 
+            <!-- Settings 뷰어 (기본 숨김) -->
+            <ui:ScrollView name="settingsScrollView" class="hb-settings-scroll hb-hidden">
+                <ui:VisualElement name="settingsContent" class="hb-settings-content">
+                    <ui:Label text="Console &amp; Logging Settings" class="hb-settings-title"/>
+
+                    <!-- Global Log Enable Card -->
+                    <ui:VisualElement class="hb-settings-card">
+                        <ui:VisualElement class="hb-settings-row">
+                            <ui:VisualElement class="hb-settings-row-text">
+                                <ui:Label text="Master Log Enable" class="hb-settings-item-title"/>
+                                <ui:Label text="Toggle all logging output in runtime and console" class="hb-settings-item-desc"/>
+                            </ui:VisualElement>
+                            <ui:Button name="toggleLogEnableBtn" text="Log: ON" class="hb-settings-toggle-btn hb-toggle-on"/>
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <!-- FPS Display Card -->
+                    <ui:VisualElement class="hb-settings-card">
+                        <ui:VisualElement class="hb-settings-row">
+                            <ui:VisualElement class="hb-settings-row-text">
+                                <ui:Label text="Show FPS Widget" class="hb-settings-item-title"/>
+                                <ui:Label text="Display real-time FPS graph and frame time" class="hb-settings-item-desc"/>
+                            </ui:VisualElement>
+                            <ui:Button name="toggleFpsWidgetBtn" text="FPS: ON" class="hb-settings-toggle-btn hb-toggle-on"/>
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <!-- Channel Toggles Card -->
+                    <ui:VisualElement class="hb-settings-card">
+                        <ui:Label text="Channel Log Enable (Per Channel)" class="hb-settings-item-title" style="margin-bottom: 4px;"/>
+                        <ui:Label text="Click each channel chip to toggle logging for that specific tag" class="hb-settings-item-desc" style="margin-bottom: 8px;"/>
+                        <ui:VisualElement name="channelTogglesContainer" class="hb-channel-toggles-container">
+                            <!-- Channel chips dynamically populated -->
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <!-- Reset & Danger Zone Card -->
+                    <ui:VisualElement class="hb-settings-card">
+                        <ui:Button name="clearAllLogsSettingBtn" text="Clear All Log History" class="hb-settings-danger-btn"/>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:ScrollView>
+
             <!-- 하단 상세 패널 -->
             <ui:VisualElement name="detailPanel" class="hb-detail-panel">
                 <ui:VisualElement class="hb-detail-header">
                     <ui:Label text="Selected Log / StackTrace" class="hb-detail-title"/>
-                    <ui:Button name="copyDetailBtn" text="Copy" class="hb-copy-btn"/>
+                    <ui:VisualElement class="hb-detail-header-actions">
+                        <ui:Button name="copyDetailBtn" text="Copy" class="hb-copy-btn"/>
+                        <ui:Button name="toggleDetailSizeBtn" text="Expand" class="hb-copy-btn"/>
+                        <ui:Button name="collapseDetailBtn" text="Hide" class="hb-copy-btn"/>
+                    </ui:VisualElement>
                 </ui:VisualElement>
                 <ui:ScrollView name="detailScrollView" class="hb-detail-scroll">
                     <ui:Label name="detailLabel" text="Select a log to view details." class="hb-detail-body"/>

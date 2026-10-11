@@ -36,48 +36,55 @@ public class LogChannel
         set => _logger.filterLogType = value;
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Log(object message, UnityEngine.Object context = null)
     {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Log, Tag, message, context);
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Warning(object message, UnityEngine.Object context = null)
     {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Warning, Tag, message, context);
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("DEVELOPMENT_BUILD")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void LogWarning(object message, UnityEngine.Object context = null)
     {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Warning, Tag, message, context);
     }
 
     [HideInCallstack]
     public void Error(object message, UnityEngine.Object context = null)
     {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Error, Tag, message, context);
     }
 
     [HideInCallstack]
     public void LogError(object message, UnityEngine.Object context = null)
     {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Error, Tag, message, context);
     }
 
     [HideInCallstack]
     public void Exception(Exception exception, UnityEngine.Object context = null)
     {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.LogException(exception, context);
     }
 
     [HideInCallstack]
     public void LogException(Exception exception, UnityEngine.Object context = null)
     {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.LogException(exception, context);
     }
 

@@ -42,7 +42,7 @@ public static partial class InGameConsole
 #endif
 #endif
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoInitializeOnGameStart()
     {
         var settings = InGameConsoleSettings.Instance;
@@ -77,50 +77,53 @@ public static partial class InGameConsole
         var settings = InGameConsoleSettings.Instance;
         var go = new GameObject("[InGameConsole]");
         
-        var uiDocument = go.AddComponent<UIDocument>();
+        // Unity 6+ 권장 PanelRenderer 컴포넌트 생성 (UIDocument 대체)
+        var panelRenderer = go.AddComponent<PanelRenderer>();
+        panelRenderer.sortingOrder = 9999;
+
         if (settings != null)
         {
-            uiDocument.panelSettings = settings.PanelSettings != null 
+            panelRenderer.panelSettings = settings.PanelSettings != null 
                 ? settings.PanelSettings 
                 : Resources.Load<PanelSettings>("HB_PanelSettings");
 
-            uiDocument.visualTreeAsset = settings.ConsoleVisualTree != null 
+            panelRenderer.visualTreeAsset = settings.ConsoleVisualTree != null 
                 ? settings.ConsoleVisualTree 
                 : Resources.Load<VisualTreeAsset>("HB_InGameConsole");
         }
 
-        if (uiDocument.panelSettings == null)
+        if (panelRenderer.panelSettings == null)
         {
-            uiDocument.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
+            panelRenderer.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
         }
-        if (uiDocument.visualTreeAsset == null)
+        if (panelRenderer.visualTreeAsset == null)
         {
-            uiDocument.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+            panelRenderer.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
         }
 
 #if UNITY_EDITOR
-        if (uiDocument.panelSettings == null)
+        if (panelRenderer.panelSettings == null)
         {
             string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
             if (pGuids != null && pGuids.Length > 0)
             {
                 string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
-                uiDocument.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
+                panelRenderer.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
             }
         }
 
-        if (uiDocument.visualTreeAsset == null)
+        if (panelRenderer.visualTreeAsset == null)
         {
             string[] vGuids = UnityEditor.AssetDatabase.FindAssets("HB_InGameConsole t:VisualTreeAsset");
             if (vGuids != null && vGuids.Length > 0)
             {
                 string path = UnityEditor.AssetDatabase.GUIDToAssetPath(vGuids[0]);
-                uiDocument.visualTreeAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
+                panelRenderer.visualTreeAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
             }
         }
 #endif
 
-        if (uiDocument.panelSettings == null)
+        if (panelRenderer.panelSettings == null)
         {
             var fallback = ScriptableObject.CreateInstance<PanelSettings>();
             fallback.name = "HB_RuntimePanelSettings";
@@ -128,7 +131,7 @@ public static partial class InGameConsole
             fallback.referenceResolution = new Vector2Int(1200, 800);
             fallback.match = 0.5f;
             fallback.sortingOrder = 1000;
-            uiDocument.panelSettings = fallback;
+            panelRenderer.panelSettings = fallback;
         }
 
         s_UIInstance = go.AddComponent<HB_InGameConsoleUI>();
