@@ -1,13 +1,7 @@
-﻿#pragma warning disable UAL0010, UAL0013
-
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Unity의 UnityEngine.Debug를 감싸며, 빌드 후 런타임에서도 인게임 콘솔에 로그를 전달하는 커스텀 로거입니다.
-/// 클래스 네이밍 규칙(HB_ 접두사) 및 크로스 플랫폼(Android, iOS, Windows)을 준수합니다.
-/// </summary>
 public static class HB_Log
 {
     public class HB_LogEntry

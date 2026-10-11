@@ -1,13 +1,9 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 namespace HB.TestFrameworkHelper.Editor
 {
-    /// <summary>
-    /// [NeedSlotNullCheck] 인스펙터 슬롯 누락 및 Missing Script를 시각적으로 확인하고
-    /// 해당 프리팹으로 즉시 점프할 수 있는 에디터 윈도우입니다.
-    /// </summary>
     public class SlotValidatorWindow : EditorWindow
     {
         private List<SlotValidationIssue> m_Issues = new List<SlotValidationIssue>();
@@ -37,8 +33,8 @@ namespace HB.TestFrameworkHelper.Editor
         private void DrawHeader()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("🛠️ HB Test Framework Helper - Slot Validator", EditorStyles.boldLabel);
-            GUILayout.Label("프리팹의 [NeedSlotNullCheck] 필수 슬롯 누락 및 Missing 스크립트를 전수 검사합니다.", EditorStyles.miniLabel);
+            GUILayout.Label("HB Test Framework Helper - Slot Validator", EditorStyles.boldLabel);
+            GUILayout.Label("프리팹의 [NeedSlotNullCheck] 필수 슬롯 누락 및 Missing 스크립트를 검사합니다.", EditorStyles.miniLabel);
             EditorGUILayout.EndVertical();
         }
 
@@ -66,7 +62,7 @@ namespace HB.TestFrameworkHelper.Editor
             }
 
             GUI.backgroundColor = new Color(0.35f, 0.85f, 0.45f);
-            if (GUILayout.Button("🚀 전수 검사 실행", EditorStyles.toolbarButton, GUILayout.Width(110)))
+            if (GUILayout.Button("전체 검사 실행", EditorStyles.toolbarButton, GUILayout.Width(110)))
             {
                 ExecuteScan();
             }
@@ -86,21 +82,21 @@ namespace HB.TestFrameworkHelper.Editor
         {
             if (!m_HasScanned)
             {
-                EditorGUILayout.HelpBox("상단의 '전수 검사 실행' 버튼을 눌러 프로젝트 프리팹을 검사하세요.", MessageType.Info);
+                EditorGUILayout.HelpBox("상단의 '전체 검사 실행' 버튼을 눌러 프로젝트 프리팹을 검사하세요.", MessageType.Info);
                 return;
             }
 
             if (m_Issues.Count == 0)
             {
                 GUI.color = Color.green;
-                EditorGUILayout.HelpBox("🎉 완벽합니다! 누락된 [NeedSlotNullCheck] 슬롯이나 Missing 스크립트가 없습니다.", MessageType.Info);
+                EditorGUILayout.HelpBox("누락된 [NeedSlotNullCheck] 슬롯이나 Missing 스크립트가 없습니다.", MessageType.Info);
                 GUI.color = Color.white;
                 return;
             }
 
             EditorGUILayout.BeginHorizontal();
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            GUILayout.Label($"⚠️ 총 {m_Issues.Count}개의 슬롯/컴포넌트 누락이 발견되었습니다!", EditorStyles.boldLabel);
+            GUILayout.Label($"총 {m_Issues.Count}개의 슬롯/컴포넌트 누락이 발견되었습니다.", EditorStyles.boldLabel);
             GUI.color = Color.white;
             EditorGUILayout.EndHorizontal();
 
