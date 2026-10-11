@@ -139,10 +139,32 @@ public class HB_InGameConsoleUI : MonoBehaviour
                 uiDocument.panelSettings = settings.PanelSettings;
             else
                 uiDocument.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
+#if UNITY_EDITOR
+            if (uiDocument.panelSettings == null)
+            {
+                string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
+                if (pGuids != null && pGuids.Length > 0)
+                {
+                    string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
+                    uiDocument.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
+                }
+            }
+#endif
+            if (uiDocument.panelSettings == null)
+            {
+                var fallback = ScriptableObject.CreateInstance<PanelSettings>();
+                fallback.name = "HB_RuntimePanelSettings";
+                fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+                fallback.referenceResolution = new Vector2Int(1200, 800);
+                fallback.match = 0.5f;
+                fallback.sortingOrder = 1000;
+                uiDocument.panelSettings = fallback;
+            }
         }
 
         rootElement = uiDocument.rootVisualElement;
         if (rootElement == null) return;
+        EnsureStyleSheetAttached();
 
         BindUIElements();
         RegisterCallbacks();
@@ -159,6 +181,28 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (fpsGraphCanvas != null)
         {
             fpsGraphCanvas.generateVisualContent += DrawFrameTimeGraph;
+        }
+    }
+
+    private void EnsureStyleSheetAttached()
+    {
+        if (rootElement == null) return;
+
+        StyleSheet uss = Resources.Load<StyleSheet>("HB_InGameConsole");
+#if UNITY_EDITOR
+        if (uss == null)
+        {
+            string[] ussGuids = UnityEditor.AssetDatabase.FindAssets("HB_InGameConsole t:StyleSheet");
+            if (ussGuids != null && ussGuids.Length > 0)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(ussGuids[0]);
+                uss = UnityEditor.AssetDatabase.LoadAssetAtPath<StyleSheet>(path);
+            }
+        }
+#endif
+        if (uss != null && !rootElement.styleSheets.Contains(uss))
+        {
+            rootElement.styleSheets.Add(uss);
         }
     }
 
@@ -179,6 +223,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void Update()
     {
+        HLogCore.PollWatchGetters();
         UpdatePerformanceMetrics();
     }
 

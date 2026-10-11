@@ -74,13 +74,21 @@ public class NewMonoBehaviourScript : MonoBehaviour
         TestEnum t = TestEnum.Value1;
         HLog.Common.Log($"[E2String Test] TestEnum Fast String: {t.ToStringFast()}");
 
-        // Null Watch 테스트 (Watch 탭의 Null 감지 지원 확인)
-        HLog.Common.Watch("Player/ImageSlot", m_Image);
-        HLog.Common.Watch("Player/NullRefTest", null);
-
-        // 코드 생성 없이 동적 채널 호출 테스트
-        HLog.Get("DynamicTag").Log("[Dynamic Channel Test] No code generation required!");
+        // 실시간 Watch 테스트: 람다(() => m_Image)로 등록하면 인스펙터나 코드에서 값이 변경될 때 실시간 자동 감지됩니다.
+        HLog.Common.Watch("Player/ImageSlot", () => m_Image);
+        HLog.Common.Watch("Player/NullRefTest", () => (object)null);
     }
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        if (Application.isPlaying)
+        {
+            // 인스펙터에서 필드 연결/해제 시 즉각 Watch 반영
+            HLog.Common.Watch("Player/ImageSlot", m_Image);
+        }
+    }
+#endif
 
     private void Update()
     {
@@ -93,8 +101,6 @@ public class NewMonoBehaviourScript : MonoBehaviour
 
         var randVal = Random.Range(0f, 100f);
         HLog.Common.Log(randVal);
-        HLog.UI.Log(randVal);
-        HLog.QWE.Log(randVal);
         
         // 예시 1: 비정상 속도 감지 시 즉시 에디터 Pause
         HLog.Common.BreakIf(moveSpeed > 50f, $"Abnormal move speed detected: {moveSpeed}");

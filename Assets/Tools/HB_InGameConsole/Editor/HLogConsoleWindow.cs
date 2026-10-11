@@ -109,12 +109,16 @@ namespace InGameConsoleSystem.Editor
         private void OnEnable()
         {
             HLogCore.Initialize();
+            HLogCore.DiscoverAllChannels();
             LoadWatchTriggers();
 
             HLogCore.OnLogAdded += OnLogAdded;
             HLogCore.OnLogsCleared += OnLogsCleared;
             HLogCore.OnWatchUpdated += OnWatchUpdated;
             HLogCore.OnTagDiscovered += OnTagDiscovered;
+
+            EditorApplication.playModeStateChanged -= OnPlayModeChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeChanged;
 
             isDirty = true;
         }
@@ -127,6 +131,21 @@ namespace InGameConsoleSystem.Editor
             HLogCore.OnLogsCleared -= OnLogsCleared;
             HLogCore.OnWatchUpdated -= OnWatchUpdated;
             HLogCore.OnTagDiscovered -= OnTagDiscovered;
+
+            EditorApplication.playModeStateChanged -= OnPlayModeChanged;
+        }
+
+        private void OnPlayModeChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredPlayMode)
+            {
+                for (int i = 0; i < watchTriggers.Count; i++)
+                {
+                    watchTriggers[i].hasTriggered = false;
+                }
+                SaveWatchTriggers();
+                Repaint();
+            }
         }
 
         private void LoadWatchTriggers()
@@ -199,7 +218,10 @@ namespace InGameConsoleSystem.Editor
                 var tr = watchTriggers[i];
                 if (!tr.enabled) continue;
                 if (tr.triggerOnce && tr.hasTriggered) continue;
-                if (!string.Equals(tr.watchKey, key, StringComparison.OrdinalIgnoreCase)) continue;
+                bool keyMatches = string.Equals(tr.watchKey, key, StringComparison.OrdinalIgnoreCase)
+                                  || key.EndsWith("/" + tr.watchKey, StringComparison.OrdinalIgnoreCase)
+                                  || tr.watchKey.EndsWith("/" + key, StringComparison.OrdinalIgnoreCase);
+                if (!keyMatches) continue;
 
                 if (EvaluateTrigger(value, tr.op, tr.targetValue))
                 {
@@ -632,6 +654,15 @@ namespace InGameConsoleSystem.Editor
 
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndScrollView();
+
+            var tagScrollRect = GUILayoutUtility.GetLastRect();
+            if (Event.current.type == EventType.ScrollWheel && tagScrollRect.Contains(Event.current.mousePosition))
+            {
+                tagBarScroll.x += Event.current.delta.y * 25f;
+                tagBarScroll.x = Mathf.Max(0f, tagBarScroll.x);
+                Event.current.Use();
+                Repaint();
+            }
 
             EditorGUILayout.EndHorizontal();
         }
