@@ -2,6 +2,16 @@
 
 유니티 프로젝트의 프리팹 인스펙터 슬롯 누락(`[NeedSlotNullCheck]`) 및 Missing Script를 코딩 타임, 테스트 타임, 빌드 타임에 검증하는 에디터 도구입니다.
 
+---
+
+## 📦 UPM 패키지 설치 (Installation)
+
+```text
+https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrameworkHelper
+```
+
+---
+
 ## 주요 구성 및 기능
 1. **`[NeedSlotNullCheck]` 어트리뷰트**: 필수 연결이 필요한 직렬화 필드에 선언하여 검증 대상으로 등록합니다.
 2. **Roslyn Analyzer & CodeFix (`HB_TestFrameworkHelper.dll`)**:

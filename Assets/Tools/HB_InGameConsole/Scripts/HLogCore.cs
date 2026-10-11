@@ -82,6 +82,7 @@ public static class HLogCore
 
     private static readonly List<LogEntry> s_LogHistory = new List<LogEntry>();
     private static readonly Dictionary<string, WatchEntry> s_WatchMap = new Dictionary<string, WatchEntry>(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, Func<object>> s_WatchGetters = new ConcurrentDictionary<string, Func<object>>(StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> s_KnownTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, LogChannel> s_ChannelCache = new ConcurrentDictionary<string, LogChannel>(StringComparer.OrdinalIgnoreCase);
 
@@ -103,16 +104,43 @@ public static class HLogCore
         {
             s_LogHistory.Clear();
             s_WatchMap.Clear();
+            s_WatchGetters.Clear();
             s_KnownTags.Clear();
             s_ChannelCache.Clear();
         }
         s_IsListeningUnityLogs = false;
+        DiscoverAllChannels();
     }
 
 #if UNITY_EDITOR
     [UnityEditor.InitializeOnLoadMethod]
 #endif
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+#if UNITY_EDITOR
+    private static void InitEditorPolling()
+    {
+        UnityEditor.EditorApplication.update -= PollWatchGettersInEditor;
+        UnityEditor.EditorApplication.update += PollWatchGettersInEditor;
+        UnityEditor.EditorApplication.playModeStateChanged -= OnEditorPlayModeChanged;
+        UnityEditor.EditorApplication.playModeStateChanged += OnEditorPlayModeChanged;
+    }
+
+    private static void PollWatchGettersInEditor()
+    {
+        if (UnityEditor.EditorApplication.isPlaying)
+        {
+            PollWatchGetters();
+        }
+    }
+
+    private static void OnEditorPlayModeChanged(UnityEditor.PlayModeStateChange state)
+    {
+        if (state == UnityEditor.PlayModeStateChange.ExitingPlayMode)
+        {
+            s_WatchGetters.Clear();
+        }
+    }
+#endif
     public static void AutoInitialize()
     {
         Initialize();
@@ -120,6 +148,8 @@ public static class HLogCore
 
     public static void Initialize()
     {
+        DiscoverAllChannels();
+
         if (s_IsListeningUnityLogs) return;
 
         lock (s_Lock)
@@ -185,12 +215,86 @@ public static class HLogCore
     }
 
     /// <summary>
+    /// 새로운 채널 태그를 등록합니다. 이미 등록되어 있다면 무시됩니다.
+    /// </summary>
+    public static void RegisterTag(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return;
+        tag = tag.Trim();
+        bool newTag = false;
+        lock (s_Lock)
+        {
+            newTag = s_KnownTags.Add(tag);
+        }
+        if (newTag)
+        {
+            OnTagDiscovered?.Invoke(tag);
+        }
+    }
+
+    /// <summary>
+    /// 현재 프로젝트에 정의된 모든 채널(내장, HLog 정적 클래스, 설정 에셋)을 검색하여 태그 목록에 사전 등록합니다.
+    /// 로그가 한 번도 찍히지 않아도 필터 탭에 즉시 표시됩니다.
+    /// </summary>
+    public static void DiscoverAllChannels()
+    {
+        RegisterTag("Common");
+        RegisterTag("System");
+
+        // 1. Reflection을 통한 HLog 중첩 클래스 스캔
+        try
+        {
+            var hlogType = Type.GetType("HLog, Assembly-CSharp") ?? Type.GetType("HLog");
+            if (hlogType != null)
+            {
+                var nestedTypes = hlogType.GetNestedTypes(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                foreach (var nt in nestedTypes)
+                {
+                    if (nt.Name == "Core") continue;
+                    RegisterTag(nt.Name);
+                }
+            }
+        }
+        catch { }
+
+        // 2. 에디터 설정 에셋 채널 스캔
+#if UNITY_EDITOR
+        try
+        {
+            string[] guids = UnityEditor.AssetDatabase.FindAssets("t:LogChannelGeneratorSettings");
+            if (guids != null && guids.Length > 0)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+                var settings = UnityEditor.AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+                if (settings != null)
+                {
+                    var prop = settings.GetType().GetProperty("Channels");
+                    if (prop?.GetValue(settings) is System.Collections.IEnumerable list)
+                    {
+                        foreach (var item in list)
+                        {
+                            var fVar = item.GetType().GetField("varName");
+                            var fTag = item.GetType().GetField("tagName");
+                            string t = fTag?.GetValue(item) as string;
+                            if (string.IsNullOrEmpty(t)) t = fVar?.GetValue(item) as string;
+                            if (!string.IsNullOrEmpty(t)) RegisterTag(t);
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+#endif
+    }
+
+    /// <summary>
     /// 지정된 태그명의 LogChannel 인스턴스를 캐싱하여 반환합니다.
     /// 정적 코드 생성 없이도 동적으로 HLog.Get("채널명").Log(...) 형태의 호출을 지원합니다.
     /// </summary>
     public static LogChannel GetChannel(string tagName)
     {
         if (string.IsNullOrEmpty(tagName)) tagName = "Common";
+        RegisterTag(tagName);
         return s_ChannelCache.GetOrAdd(tagName, static tag => new LogChannel(tag));
     }
 
@@ -206,28 +310,92 @@ public static class HLogCore
         }
         else if (value is UnityEngine.Object uObj)
         {
-            valStr = uObj == null ? "null" : uObj.name;
+            if (uObj == null)
+            {
+                valStr = "null";
+            }
+            else
+            {
+                valStr = string.IsNullOrEmpty(uObj.name) ? uObj.GetType().Name : $"{uObj.name} ({uObj.GetType().Name})";
+            }
         }
         else
         {
             valStr = value.ToString();
         }
 
+        bool valueChanged = false;
         lock (s_Lock)
         {
             if (s_WatchMap.TryGetValue(key, out var entry))
             {
-                entry.Value = valStr;
-                entry.Timestamp = DateTime.Now;
+                if (!string.Equals(entry.Value, valStr, StringComparison.Ordinal))
+                {
+                    entry.Value = valStr;
+                    entry.Timestamp = DateTime.Now;
+                    valueChanged = true;
+                }
             }
             else
             {
                 entry = new WatchEntry(key, valStr);
                 s_WatchMap[key] = entry;
+                valueChanged = true;
             }
         }
 
-        OnWatchUpdated?.Invoke(key, valStr);
+        if (valueChanged)
+        {
+            OnWatchUpdated?.Invoke(key, valStr);
+        }
+    }
+
+    /// <summary>
+    /// 변수나 프로퍼티를 람다(게터) 형태로 등록하여 매 프레임 실시간 모니터링합니다.
+    /// 예: HLog.Common.Watch("Player/ImageSlot", () => m_Image);
+    /// </summary>
+    [HideInCallstack]
+    public static void Watch(string key, Func<object> getter)
+    {
+        if (string.IsNullOrEmpty(key) || getter == null) return;
+        s_WatchGetters[key] = getter;
+
+        try
+        {
+            Watch(key, getter());
+        }
+        catch (Exception ex)
+        {
+            Watch(key, $"<Error: {ex.Message}>");
+        }
+    }
+
+    [HideInCallstack]
+    public static void Watch<T>(string key, Func<T> getter)
+    {
+        if (getter == null) return;
+        Watch(key, () => (object)getter());
+    }
+
+    /// <summary>
+    /// 등록된 람다/게터 Watch 변수들을 일괄 평가하여 변경사항이 있으면 반영합니다.
+    /// </summary>
+    public static void PollWatchGetters()
+    {
+        if (s_WatchGetters.IsEmpty) return;
+
+        foreach (var kvp in s_WatchGetters)
+        {
+            try
+            {
+                object val = kvp.Value?.Invoke();
+                Watch(kvp.Key, val);
+            }
+            catch (Exception ex)
+            {
+                Watch(kvp.Key, $"<Error: {ex.Message}>");
+            }
+        }
     }
 
     private static void HandleUnityLog(string condition, string stackTrace, LogType type)
@@ -274,8 +442,8 @@ public static class HLogCore
         lock (s_Lock)
         {
             s_LogHistory.Clear();
-            s_KnownTags.Clear();
         }
+        DiscoverAllChannels();
         OnLogsCleared?.Invoke();
     }
 

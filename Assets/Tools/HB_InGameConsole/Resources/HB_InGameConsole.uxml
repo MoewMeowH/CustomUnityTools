@@ -1,5 +1,5 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
-    <Style src="project://database/Assets/Tools/HB_InGameConsole/Resources/HB_InGameConsole.uss?fileID=7433441132597879392&amp;guid=74617df47f024b6c958bdb5ab6e704d2&amp;type=3#HB_InGameConsole"/>
+    <Style src="HB_InGameConsole.uss" />
     <ui:VisualElement name="rootContainer" picking-mode="Ignore" class="hb-root-container">
         <!-- 좌상단 FPS & FrameTime 위젯 -->
         <ui:VisualElement name="fpsWidget" class="hb-fps-widget" style="height: 81px; width: 230px;">

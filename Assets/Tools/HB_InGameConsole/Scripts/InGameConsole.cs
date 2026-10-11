@@ -10,8 +10,6 @@ using UnityEngine.UIElements;
 #endif
 public static partial class InGameConsole
 {
-    // 신버전: [AutoStaticsCleanup]에 의해 도메인 리로드 / 플레이 모드 진입 시 자동 초기화됨
-    // (만약 자동 초기화가 불필요한 필드는 필드 단위로 [NoAutoStaticsCleanup] 지정 가능)
     private static HB_InGameConsoleUI s_UIInstance;
     private static bool s_IsInitialized = false;
 
@@ -34,7 +32,6 @@ public static partial class InGameConsole
     }
 
 #if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER)
-    // 구버전 Unity: AutoStaticsCleanup 기능이 없으므로 Domain Reload 비활성화 환경을 위해 SubsystemRegistration으로 수동 초기화
 #if UNITY_EDITOR
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStaticsOnDomainReload()
@@ -90,6 +87,48 @@ public static partial class InGameConsole
             uiDocument.visualTreeAsset = settings.ConsoleVisualTree != null 
                 ? settings.ConsoleVisualTree 
                 : Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+        }
+
+        if (uiDocument.panelSettings == null)
+        {
+            uiDocument.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
+        }
+        if (uiDocument.visualTreeAsset == null)
+        {
+            uiDocument.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+        }
+
+#if UNITY_EDITOR
+        if (uiDocument.panelSettings == null)
+        {
+            string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
+            if (pGuids != null && pGuids.Length > 0)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
+                uiDocument.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
+            }
+        }
+
+        if (uiDocument.visualTreeAsset == null)
+        {
+            string[] vGuids = UnityEditor.AssetDatabase.FindAssets("HB_InGameConsole t:VisualTreeAsset");
+            if (vGuids != null && vGuids.Length > 0)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(vGuids[0]);
+                uiDocument.visualTreeAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
+            }
+        }
+#endif
+
+        if (uiDocument.panelSettings == null)
+        {
+            var fallback = ScriptableObject.CreateInstance<PanelSettings>();
+            fallback.name = "HB_RuntimePanelSettings";
+            fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            fallback.referenceResolution = new Vector2Int(1200, 800);
+            fallback.match = 0.5f;
+            fallback.sortingOrder = 1000;
+            uiDocument.panelSettings = fallback;
         }
 
         s_UIInstance = go.AddComponent<HB_InGameConsoleUI>();
