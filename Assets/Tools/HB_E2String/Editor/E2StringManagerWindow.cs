@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -388,12 +388,12 @@ namespace HB.E2String.Editor
                 GUILayout.Label("HB E2String Manager", EditorStyles.boldLabel);
                 GUILayout.FlexibleSpace();
 
-                if (GUILayout.Button("🔄 Scan / Refresh", EditorStyles.toolbarButton, GUILayout.Width(110)))
+                if (GUILayout.Button("Scan / Refresh", EditorStyles.toolbarButton, GUILayout.Width(110)))
                 {
                     RefreshAll();
                 }
 
-                m_ShowGuide = GUILayout.Toggle(m_ShowGuide, "📖 Guide & Cheatsheet", EditorStyles.toolbarButton, GUILayout.Width(140));
+                m_ShowGuide = GUILayout.Toggle(m_ShowGuide, "Guide & Cheatsheet", EditorStyles.toolbarButton, GUILayout.Width(140));
             }
         }
 
@@ -407,7 +407,7 @@ namespace HB.E2String.Editor
                 if (m_IsAttributeInstalled)
                 {
                     EditorGUILayout.HelpBox(
-                        $"✅ E2StringAttribute 스크립트가 프로젝트에 정상적으로 존재합니다.\n위치: {m_InstalledAttributePath}",
+                        $"E2StringAttribute 스크립트가 프로젝트에 존재합니다.\n위치: {m_InstalledAttributePath}",
                         MessageType.Info);
 
                     using (new EditorGUILayout.HorizontalScope())
@@ -428,7 +428,7 @@ namespace HB.E2String.Editor
                 else
                 {
                     EditorGUILayout.HelpBox(
-                        "⚠️ 프로젝트 내에 E2StringAttribute 스크립트가 없습니다!\n" +
+                        "프로젝트 내에 E2StringAttribute 스크립트가 없습니다.\n" +
                         "Source Generator가 인식할 수 있도록 어트리뷰트 스크립트를 생성해주세요.\n" +
                         "(서버와 공유하는 Enum 디렉토리나 원하는 위치를 지정하여 생성할 수 있습니다.)",
                         MessageType.Warning);
@@ -461,7 +461,7 @@ namespace HB.E2String.Editor
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         m_UseGlobalNamespace = EditorGUILayout.ToggleLeft(
-                            "글로벌 + EString.Script 호환 (권장: using 없이 즉시 사용 및 서버/이전 코드 호환)",
+                            "글로벌 + EString.Script 호환 (using 없이 즉시 사용 및 서버/이전 코드 호환)",
                             m_UseGlobalNamespace);
                     }
 
@@ -480,7 +480,7 @@ namespace HB.E2String.Editor
                     {
                         GUILayout.FlexibleSpace();
                         GUI.backgroundColor = new Color(0.3f, 0.8f, 0.3f);
-                        if (GUILayout.Button("⚡ E2StringAttribute 스크립트 생성", GUILayout.Height(28), GUILayout.Width(230)))
+                        if (GUILayout.Button("E2StringAttribute 스크립트 생성", GUILayout.Height(28), GUILayout.Width(230)))
                         {
                             CreateAttributeScript();
                         }
@@ -548,8 +548,7 @@ namespace HB.E2String.Editor
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    // 아이콘 대체 및 Enum 이름
-                    GUILayout.Label("🔹", GUILayout.Width(20));
+                    GUILayout.Label("-", GUILayout.Width(16));
                     GUILayout.Label(item.EnumName, m_BoldLabelStyle);
 
                     if (!string.IsNullOrEmpty(item.Namespace))
@@ -563,7 +562,6 @@ namespace HB.E2String.Editor
 
                     GUILayout.FlexibleSpace();
 
-                    // 파일 열기 버튼
                     if (GUILayout.Button("스크립트 열기", EditorStyles.miniButton, GUILayout.Width(85)))
                     {
                         var asset = AssetDatabase.LoadAssetAtPath<MonoScript>(item.AssetPath);
@@ -573,7 +571,6 @@ namespace HB.E2String.Editor
                         }
                     }
 
-                    // Ping 버튼
                     if (GUILayout.Button("위치 표시", EditorStyles.miniButton, GUILayout.Width(70)))
                     {
                         var asset = AssetDatabase.LoadAssetAtPath<MonoScript>(item.AssetPath);
@@ -583,7 +580,6 @@ namespace HB.E2String.Editor
                         }
                     }
 
-                    // 복사 버튼
                     if (GUILayout.Button("호출 복사", EditorStyles.miniButton, GUILayout.Width(70)))
                     {
                         string copyText = $"{item.EnumName} myVal = default;\nstring str = myVal.ToStringFast();";
@@ -592,7 +588,6 @@ namespace HB.E2String.Editor
                     }
                 }
 
-                // 경로 및 멤버 미리보기
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     EditorGUILayout.LabelField($"파일: {item.AssetPath}:{item.LineNumber}", EditorStyles.miniLabel);
@@ -616,16 +611,12 @@ namespace HB.E2String.Editor
 
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                EditorGUILayout.LabelField("📖 E2String 자동 생성 확장 메서드 치트시트", m_BoldLabelStyle);
+                EditorGUILayout.LabelField("E2String 자동 생성 확장 메서드 요약", m_BoldLabelStyle);
                 EditorGUILayout.Space(2);
 
                 EditorGUILayout.HelpBox(
-                    "• myEnum.ToStringFast() : Zero-Allocation 문자열 변환 (switch 기반 분기, GC 부담 0)\n" +
-                    "• str.ToEnumFast<MyEnum>() : 문자열 -> Enum 고속 파싱\n" +
-                    "• MyEnumExtensions.TryParseFast(str, out var result) : 안전한 고속 파싱\n" +
-                    "• myEnum.ToIntFast() : UnsafeUtility 기반 고속 int 변환 (Unity 2021.3+)\n" +
-                    "• MyEnumExtensions.IsDefined(value) : GC 박싱 없는 고속 값 유효성 검사\n" +
-                    "• MyEnumExtensions.AllNames / AllValues : 미리 캐싱된 IReadOnlyList 컬렉션",
+                    "- myEnum.ToStringFast() : Zero-Allocation 문자열 변환 (switch 기반 분기)\n" +
+                    "- str.To{EnumName}() : 문자열 -> Enum 변환",
                     MessageType.None);
             }
         }

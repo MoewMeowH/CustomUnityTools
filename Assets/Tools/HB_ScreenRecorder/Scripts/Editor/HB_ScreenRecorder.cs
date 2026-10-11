@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0618, UAL0010, UAL0013
+#pragma warning disable CS0618
 
 using System;
 using System.IO;
@@ -12,11 +12,6 @@ using UnityEditor.Recorder.Input;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// Unity Recorder를 활용하여 에디터 화면을 고화질 MP4로 녹화하고,
-/// 스크린샷 및 버그 진단용 로그와 시스템 상태(State)를 함께 저장하는 QA 툴 엔진입니다.
-/// Windows 및 macOS 환경을 모두 지원하며, 런타임 빌드에는 포함되지 않습니다.
-/// </summary>
 public static class HB_ScreenRecorder
 {
     [Serializable]

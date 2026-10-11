@@ -137,7 +137,7 @@ public class ProjectBuild : EditorWindow
     private void DrawHeader()
     {
         EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-        GUILayout.Label("🛠️ HB Custom Build Manager", EditorStyles.boldLabel);
+        GUILayout.Label("HB Custom Build Manager", EditorStyles.boldLabel);
         GUILayout.Label("모듈형 파이프라인(IPreBuildStep/IPostBuildStep) 및 Jenkins Groovy 지원 도구", EditorStyles.miniLabel);
         EditorGUILayout.EndVertical();
     }
@@ -145,7 +145,7 @@ public class ProjectBuild : EditorWindow
     private void DrawPlatformSection()
     {
         EditorGUILayout.BeginVertical("box");
-        GUILayout.Label("📌 타겟 플랫폼 & 환경", EditorStyles.boldLabel);
+        GUILayout.Label("타겟 플랫폼 & 환경", EditorStyles.boldLabel);
 
         var prevPlatform = m_Platform;
         m_Platform = (ESelfBuildPlatform)EditorGUILayout.EnumPopup("Target Platform", m_Platform);
@@ -161,7 +161,7 @@ public class ProjectBuild : EditorWindow
     private void DrawOptionalAssetsSection()
     {
         EditorGUILayout.BeginVertical("box");
-        GUILayout.Label("📦 선택적 프로젝트 설정 에셋 (Optional Build Configs)", EditorStyles.boldLabel);
+        GUILayout.Label("선택적 프로젝트 설정 에셋 (Optional Build Configs)", EditorStyles.boldLabel);
 
         // 1. SceneDefine 에셋 슬롯
         EditorGUILayout.BeginHorizontal();
@@ -218,9 +218,6 @@ public class ProjectBuild : EditorWindow
         return ctx;
     }
 
-    /// <summary>
-    /// 파이프라인 스텝 시각화 및 클릭 시 실시간 코드 미리보기 패널
-    /// </summary>
     private void DrawPipelineStepsSequence()
     {
         EditorGUILayout.BeginVertical("box");
@@ -228,7 +225,7 @@ public class ProjectBuild : EditorWindow
         var previewContext = CreatePreviewContext();
 
         EditorGUILayout.BeginHorizontal();
-        m_ShowPipelineSteps = EditorGUILayout.Foldout(m_ShowPipelineSteps, $"📋 빌드 파이프라인 실행 순서 ({m_Platform} 타겟 조건부 적용)", true, EditorStyles.foldoutHeader);
+        m_ShowPipelineSteps = EditorGUILayout.Foldout(m_ShowPipelineSteps, $"빌드 파이프라인 실행 순서 ({m_Platform} 타겟 조건부 적용)", true, EditorStyles.foldoutHeader);
         
         if (GUILayout.Button(m_ShowOnlyActiveSteps ? "필터: 조건 만족만" : "필터: 전체 보기", EditorStyles.miniButton, GUILayout.Width(110)))
         {
@@ -244,7 +241,7 @@ public class ProjectBuild : EditorWindow
         if (m_ShowPipelineSteps)
         {
             EditorGUILayout.Space(4);
-            EditorGUILayout.HelpBox("💡 스텝 토글(체크박스)을 끄면 빌드에서 제외되며, 스텝 이름을 클릭하면 하단에 실제 C# 구현 코드를 미리보기할 수 있습니다.", MessageType.None);
+            EditorGUILayout.HelpBox("스텝 토글(체크박스)을 끄면 빌드에서 제외되며, 스텝 이름을 클릭하면 하단에 실제 C# 구현 코드를 미리보기할 수 있습니다.", MessageType.None);
 
             var allPre = BuildStepRegistry.GetAllPreBuildSteps();
             var allPost = BuildStepRegistry.GetAllPostBuildSteps();
@@ -275,7 +272,7 @@ public class ProjectBuild : EditorWindow
             // 2. 실제 유니티 빌드 코어
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
             GUI.color = new Color(0.4f, 0.9f, 0.5f);
-            GUILayout.Label("⚡ [Core]", EditorStyles.boldLabel, GUILayout.Width(65));
+            GUILayout.Label("[Core]", EditorStyles.boldLabel, GUILayout.Width(65));
             GUILayout.Label($"Unity BuildPipeline.BuildPlayer ({m_Platform} 플레이어 빌드 수행)", EditorStyles.boldLabel);
             GUI.color = Color.white;
             EditorGUILayout.EndHorizontal();
@@ -303,7 +300,7 @@ public class ProjectBuild : EditorWindow
                 EditorGUILayout.HelpBox("현재 조건에서 실행될 Post-Build Step이 없습니다.", MessageType.None);
             }
 
-            // 4. 선택된 스텝 코드 미리보기 패널 노출!
+            // 4. 선택된 스텝 코드 미리보기 패널 노출
             DrawCodePreviewSection();
         }
 
@@ -315,7 +312,6 @@ public class ProjectBuild : EditorWindow
         bool isEnabled = BuildStepRegistry.IsStepEnabled(stepId);
         bool isSelected = m_PreviewStepId == stepId;
 
-        // 선택 상태에 따라 배경 하이라이트
         var rowStyle = isSelected ? EditorStyles.selectionRect : EditorStyles.helpBox;
         EditorGUILayout.BeginHorizontal(rowStyle);
 
@@ -326,7 +322,7 @@ public class ProjectBuild : EditorWindow
             BuildStepRegistry.SetStepEnabled(stepId, newEnabled);
         }
 
-        // 2. 스텝 정보 클릭 버튼 (토글 말고 자체를 누르면 코드 미리보기 토글!)
+        // 2. 스텝 정보 클릭 버튼
         string labelText = $"[Order {executionOrder}] {stepName}";
         if (!conditionActive)
             labelText += " (타겟 불일치로 스킵)";
@@ -346,8 +342,8 @@ public class ProjectBuild : EditorWindow
         }
         GUI.color = Color.white;
 
-        // 3. 소스 보기 돋보기 아이콘 버튼
-        string btnText = isSelected ? "닫기" : "🔍 코드";
+        // 3. 소스 보기 버튼
+        string btnText = isSelected ? "닫기" : "코드";
         if (GUILayout.Button(new GUIContent(btnText, "C# 구현 코드 미리보기 토글"), EditorStyles.miniButton, GUILayout.Width(55)))
         {
             ToggleCodePreview(stepId, stepName, stepType);
@@ -360,7 +356,6 @@ public class ProjectBuild : EditorWindow
     {
         if (m_PreviewStepId == stepId)
         {
-            // 이미 열려있으면 접기
             m_PreviewStepId = string.Empty;
             m_PreviewClassSource = string.Empty;
             m_PreviewFullSource = string.Empty;
@@ -388,10 +383,9 @@ public class ProjectBuild : EditorWindow
         // 상단 헤더 툴바
         EditorGUILayout.BeginHorizontal();
         GUI.color = new Color(0.35f, 0.85f, 1f);
-        GUILayout.Label($"📄 [C# 소스 미리보기] {m_PreviewStepName}", EditorStyles.boldLabel);
+        GUILayout.Label($"[C# 소스 미리보기] {m_PreviewStepName}", EditorStyles.boldLabel);
         GUI.color = Color.white;
 
-        // 클래스만 보기 vs 전체 파일 보기 토글 버튼
         if (GUILayout.Button(m_ShowOnlyClassBlock ? "전체 파일 보기" : "이 클래스만 보기", EditorStyles.miniButton, GUILayout.Width(100)))
         {
             m_ShowOnlyClassBlock = !m_ShowOnlyClassBlock;
@@ -423,13 +417,11 @@ public class ProjectBuild : EditorWindow
         }
         EditorGUILayout.EndHorizontal();
 
-        // 파일 경로 및 라인 정보
         string locInfo = string.IsNullOrEmpty(m_PreviewScriptPath) 
             ? "위치: 경로 미확인" 
             : $"파일: {m_PreviewScriptPath} (Line {m_PreviewLineNumber})";
         EditorGUILayout.LabelField(locInfo, EditorStyles.miniLabel);
 
-        // 코드 내용 텍스트 뷰어 (스크롤뷰)
         m_CodePreviewScroll = EditorGUILayout.BeginScrollView(m_CodePreviewScroll, GUILayout.Height(240));
         EditorGUILayout.TextArea(displayCode, CodePreviewStyle);
         EditorGUILayout.EndScrollView();
@@ -464,7 +456,7 @@ public class ProjectBuild : EditorWindow
             }
         }
 
-        // 2. DefaultBuildSteps.cs 확인 (여러 스텝 클래스가 모여 있는 기본 파일)
+        // 2. DefaultBuildSteps.cs 확인
         if (string.IsNullOrEmpty(targetPath))
         {
             string defaultPath = "Assets/Tools/HB_Build/DefaultBuildSteps.cs";
@@ -485,7 +477,6 @@ public class ProjectBuild : EditorWindow
             return null;
         }
 
-        // 클래스 시작 라인 및 코드 블록 추출
         var lines = fullCode.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         int classStartLine = -1;
         for (int i = 0; i < lines.Length; i++)
@@ -500,14 +491,12 @@ public class ProjectBuild : EditorWindow
 
         if (classStartLine >= 0)
         {
-            // 상단 요약 주석(xml doc)이 있으면 주석부터 포함
             int commentStart = classStartLine;
             while (commentStart > 0 && (lines[commentStart - 1].Trim().StartsWith("///") || lines[commentStart - 1].Trim().StartsWith("//")))
             {
                 commentStart--;
             }
 
-            // 중괄호 쌍을 맞춰 클래스 종료 지점 탐색
             int braceCount = 0;
             bool foundOpenBrace = false;
             int classEndLine = lines.Length - 1;
@@ -548,7 +537,7 @@ public class ProjectBuild : EditorWindow
     private void DrawVersionSection()
     {
         EditorGUILayout.BeginVertical("box");
-        GUILayout.Label("🏷️ 버전 정보", EditorStyles.boldLabel);
+        GUILayout.Label("버전 정보", EditorStyles.boldLabel);
 
         m_Version = EditorGUILayout.TextField("App Version (BundleVersion)", m_Version);
         m_VersionCode = EditorGUILayout.TextField("Version Code (BuildNumber)", m_VersionCode);
@@ -564,7 +553,7 @@ public class ProjectBuild : EditorWindow
     private void DrawOptionsSection()
     {
         EditorGUILayout.BeginVertical("box");
-        GUILayout.Label("⚙️ 빌드 세부 옵션", EditorStyles.boldLabel);
+        GUILayout.Label("빌드 세부 옵션", EditorStyles.boldLabel);
 
         m_DevBuild = EditorGUILayout.Toggle("Development Build", m_DevBuild);
         if (m_DevBuild)
@@ -595,7 +584,7 @@ public class ProjectBuild : EditorWindow
     private void DrawPathSection()
     {
         EditorGUILayout.BeginVertical("box");
-        GUILayout.Label("📁 빌드 출력 경로 (Output Path)", EditorStyles.boldLabel);
+        GUILayout.Label("빌드 출력 경로 (Output Path)", EditorStyles.boldLabel);
 
         EditorGUILayout.BeginHorizontal();
         m_OutputPath = EditorGUILayout.TextField(m_OutputPath);
@@ -619,7 +608,7 @@ public class ProjectBuild : EditorWindow
     private void DrawSceneSection()
     {
         EditorGUILayout.BeginVertical("box");
-        GUILayout.Label($"🎬 빌드 씬 목록 ({m_ScenePath.Count}개)", EditorStyles.boldLabel);
+        GUILayout.Label($"빌드 씬 목록 ({m_ScenePath.Count}개)", EditorStyles.boldLabel);
 
         EditorGUILayout.BeginHorizontal();
         if (GUILayout.Button("Build Settings에서 불러오기", GUILayout.Height(24)))
@@ -663,7 +652,7 @@ public class ProjectBuild : EditorWindow
     private void DrawActionButtons()
     {
         GUI.backgroundColor = new Color(0.35f, 0.85f, 0.45f);
-        if (GUILayout.Button("🚀 Local Player Build 실행", GUILayout.Height(38)))
+        if (GUILayout.Button("Local Player Build 실행", GUILayout.Height(38)))
         {
             ExecuteLocalBuild();
         }
@@ -672,7 +661,7 @@ public class ProjectBuild : EditorWindow
         EditorGUILayout.Space(4);
 
         GUI.backgroundColor = new Color(0.3f, 0.7f, 1f);
-        if (GUILayout.Button("📄 Generate Jenkinsfile (Groovy Pipeline 생성)", GUILayout.Height(34)))
+        if (GUILayout.Button("Generate Jenkinsfile (Groovy Pipeline 생성)", GUILayout.Height(34)))
         {
             GenerateJenkinsfile();
         }
@@ -680,7 +669,7 @@ public class ProjectBuild : EditorWindow
 
         EditorGUILayout.Space(2);
 
-        if (GUILayout.Button("📋 Jenkins CLI 명령어 복사", GUILayout.Height(28)))
+        if (GUILayout.Button("Jenkins CLI 명령어 복사", GUILayout.Height(28)))
         {
             string cliCmd = GetCommandLinePreview();
             GUIUtility.systemCopyBuffer = cliCmd;
