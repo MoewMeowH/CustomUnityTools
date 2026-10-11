@@ -97,8 +97,6 @@ namespace InGameConsoleSystem.Editor
         private static readonly Regex PatternInLine = new Regex(@"in (.+):line (\d+)", RegexOptions.Compiled);
         private static readonly Regex PatternFileColon = new Regex(@"([a-zA-Z0-9_\-\.\/\\:]+\.cs):(\d+)", RegexOptions.Compiled);
 
-        [MenuItem("Tools/InGameConsole/Console Window", priority = 90)]
-        [MenuItem("Window/General/HLog Console", priority = 200)]
         #region Scripting Define Symbols Helper
 
         public static bool IsScriptingDefineSymbolDefined(string symbol)
@@ -151,6 +149,8 @@ namespace InGameConsoleSystem.Editor
 
         #endregion
 
+        [MenuItem("Tools/InGameConsole/Console Window", priority = 90)]
+        [MenuItem("Window/General/HLog Console", priority = 200)]
         public static void OpenWindow()
         {
             var window = GetWindow<HLogConsoleWindow>("HLog Console");
