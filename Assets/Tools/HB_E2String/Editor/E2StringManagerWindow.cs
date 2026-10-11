@@ -582,7 +582,14 @@ namespace HB.E2String.Editor
 
                     if (GUILayout.Button("호출 복사", EditorStyles.miniButton, GUILayout.Width(70)))
                     {
-                        string copyText = $"{item.EnumName} myVal = default;\nstring str = myVal.ToStringFast();";
+                        string safeClassName = item.EnumName;
+                        string copyText =
+                            $"// [E2String] {item.FullTypeName} 사용 예시\n" +
+                            $"string str = {item.EnumName}.{ (item.Members.Count > 0 ? item.Members[0] : "None") }.ToStringFast();\n" +
+                            $"int num = {item.EnumName}.{ (item.Members.Count > 0 ? item.Members[0] : "None") }.ToIntFast();\n" +
+                            $"{item.EnumName} parsed = str.To{item.EnumName}();\n" +
+                            $"bool ok = {safeClassName}Extensions.TryParseFast(str, out var result);\n" +
+                            $"var allValues = {safeClassName}Extensions.AllValues;";
                         EditorGUIUtility.systemCopyBuffer = copyText;
                         ShowNotification(new GUIContent($"'{item.EnumName}' 호출 코드 복사됨"));
                     }
@@ -611,12 +618,16 @@ namespace HB.E2String.Editor
 
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                EditorGUILayout.LabelField("E2String 자동 생성 확장 메서드 요약", m_BoldLabelStyle);
+                EditorGUILayout.LabelField("E2String 자동 생성 확장 메서드 요약 ({EnumName}Extensions)", m_BoldLabelStyle);
                 EditorGUILayout.Space(2);
 
                 EditorGUILayout.HelpBox(
-                    "- myEnum.ToStringFast() : Zero-Allocation 문자열 변환 (switch 기반 분기)\n" +
-                    "- str.To{EnumName}() : 문자열 -> Enum 변환",
+                    "- myEnum.ToStringFast(fallback) : Zero-Allocation 문자열 변환 (switch 식)\n" +
+                    "- str.To{EnumName}(fallback) / {EnumName}Extensions.TryParseFast(str, out res) : 문자열 -> Enum 고속 파싱\n" +
+                    "- myEnum.ToInt() / myEnum.ToIntFast() : Enum -> int 변환 (Unity 2021.3+ UnsafeUtility.As 지원)\n" +
+                    "- intVal.To{EnumName}(fallback) / intVal.To{EnumName}Fast() : int -> Enum 변환\n" +
+                    "- {EnumName}Extensions.IsDefined(val) : Enum 또는 int 값 유효성 검사\n" +
+                    "- {EnumName}Extensions.Count / Names / AllNames / Values / AllValues : 캐싱된 배열 및 읽기 전용 리스트",
                     MessageType.None);
             }
         }
