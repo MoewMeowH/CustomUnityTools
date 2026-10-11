@@ -1,6 +1,7 @@
 ﻿#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
+using System.Reflection;
 using InGameConsoleSystem;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -134,6 +135,8 @@ public static partial class InGameConsole
             panelRenderer.panelSettings = fallback;
         }
 
+        EnsureThemeStyleSheet(panelRenderer.panelSettings);
+
         s_UIInstance = go.AddComponent<HB_InGameConsoleUI>();
 
         bool shouldDontDestroy = settings == null || settings.DontDestroyOnLoad;
@@ -143,6 +146,41 @@ public static partial class InGameConsole
         }
 
         return s_UIInstance;
+    }
+
+    internal static void EnsureThemeStyleSheet(PanelSettings panelSettings)
+    {
+        if (panelSettings == null) return;
+
+        if (panelSettings.themeStyleSheet == null)
+        {
+            var theme = Resources.Load<ThemeStyleSheet>("HB_DefaultRuntimeTheme");
+            if (theme != null)
+            {
+                panelSettings.themeStyleSheet = theme;
+            }
+#if UNITY_EDITOR
+            if (panelSettings.themeStyleSheet == null)
+            {
+                string[] guids = UnityEditor.AssetDatabase.FindAssets("HB_DefaultRuntimeTheme t:ThemeStyleSheet");
+                if (guids != null && guids.Length > 0)
+                {
+                    string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+                    panelSettings.themeStyleSheet = UnityEditor.AssetDatabase.LoadAssetAtPath<ThemeStyleSheet>(path);
+                }
+            }
+#endif
+        }
+
+        try
+        {
+            var field = typeof(PanelSettings).GetField("m_DisableNoThemeWarning", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (field != null)
+            {
+                field.SetValue(panelSettings, true);
+            }
+        }
+        catch { }
     }
 
     public static void Open() => Instance?.OpenConsole();

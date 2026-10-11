@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Script: {fileID: 19101, guid: 0000000000000000e000000000000000, type: 0}
   m_Name: HB_PanelSettings
   m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.PanelSettings
-  themeUss: {fileID: -4733365628477956816, guid: bdab1f77dbf83a44db6261b5879a7899, type: 3}
-  m_DisableNoThemeWarning: 0
+  themeUss: {fileID: -4733365628477956816, guid: e1a0c8423f5b4976a479d20c78a3e901, type: 3}
+  m_DisableNoThemeWarning: 1
   m_TargetTexture: {fileID: 0}
   m_RenderMode: 0
   m_ColliderUpdateMode: 0

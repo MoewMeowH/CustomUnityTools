@@ -266,6 +266,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
                 }
             }
 
+            InGameConsole.EnsureThemeStyleSheet(panelRenderer.panelSettings);
+
             if (panelRenderer.sortingOrder < 1000)
             {
                 panelRenderer.sortingOrder = 9999;
@@ -325,6 +327,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
                     uiDocument.panelSettings = fallback;
                 }
             }
+
+            InGameConsole.EnsureThemeStyleSheet(uiDocument.panelSettings);
 
             if (uiDocument.sortingOrder < 1000)
             {
