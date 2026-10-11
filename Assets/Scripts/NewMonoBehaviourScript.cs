@@ -16,7 +16,7 @@ public enum TestEnum
 
 /// <summary>
 /// 유저의 WASD 입력을 받아 오브젝트를 이동시키며,
-/// Vector3.Lerp를 활용해 카메らが 플레이어를 부드럽게 추적하도록 제어하는 컴포넌트입니다.
+/// Vector3.Lerp를 활용해 카메라가 플레이어를 부드럽게 추적하도록 제어하는 컴포넌트입니다.
 /// 최신 Unity Input System(6/7) 및 레거시 Input Manager 환경 모두를 지원합니다.
 /// </summary>
 public class NewMonoBehaviourScript : MonoBehaviour
@@ -56,7 +56,6 @@ public class NewMonoBehaviourScript : MonoBehaviour
     [SerializeField] private bool cameraLookAtPlayer = true;
 
     private Vector2 currentInputVector = Vector2.zero;
-    private float logTimer = 0f;
 
     private void Awake()
     {

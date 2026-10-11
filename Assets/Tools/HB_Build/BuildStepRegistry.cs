@@ -4,10 +4,17 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
+
 /// <summary>
 /// 프로젝트 내 모든 IPreBuildStep 및 IPostBuildStep을 TypeCache를 통해 자동 감지하고 관리하는 레지스트리입니다.
 /// 상속 오버라이드(자식 클래스 우선) 및 에디터 윈도우 체크박스(On/Off) 저장을 지원합니다.
 /// </summary>
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+[NoAutoStaticsCleanup]
+#endif
 public static class BuildStepRegistry
 {
     private const string DisabledStepsPrefKey = "HB_Build_DisabledSteps";
@@ -20,6 +27,16 @@ public static class BuildStepRegistry
     {
         LoadDisabledStepIds();
     }
+
+#if UNITY_EDITOR
+    [InitializeOnLoadMethod]
+    private static void ResetStaticsOnDomainReload()
+    {
+        s_AllPreBuildSteps = null;
+        s_AllPostBuildSteps = null;
+        s_DisabledStepIds = null;
+    }
+#endif
 
     public static IReadOnlyList<IPreBuildStep> GetAllPreBuildSteps()
     {

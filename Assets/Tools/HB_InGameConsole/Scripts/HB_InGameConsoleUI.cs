@@ -6,9 +6,9 @@ using UnityEngine.UIElements;
 
 /// <summary>
 /// UI Toolkit 기반 인게임 콘솔 UI 및 성능 모니터링 컨트롤러입니다.
+/// Unity 6+ 권장 사양인 PanelRenderer(또는 하위 호환 UIDocument) 컴포넌트와 연동되어 동작하며,
 /// 실시간 Watch, 동적 태그 필터, 검색/제외 필터, 스택트레이스 정제 기능을 지원합니다.
 /// </summary>
-[RequireComponent(typeof(UIDocument))]
 public class HB_InGameConsoleUI : MonoBehaviour
 {
     private enum LogFilter
@@ -22,10 +22,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private enum ConsoleViewMode
     {
         Logs,
-        Watch
+        Watch,
+        Settings
     }
 
     [Header("UI Toolkit")]
+    [Tooltip("비워둘 경우 PanelRenderer/UIDocument의 VisualTreeAsset 또는 InGameConsoleSettings 설정을 자동으로 사용합니다.")]
     [SerializeField] private VisualTreeAsset consoleVisualTree;
     [SerializeField] private bool dontDestroyOnLoad = true;
 
@@ -35,12 +37,15 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private const int MaxUiLogCount = 1000;
     private const int GraphSampleCount = 80;
 
+    private PanelRenderer panelRenderer;
     private UIDocument uiDocument;
     private VisualElement rootElement;
+    private int handledUIVersion = -1;
 
     // View Mode elements
     private Button viewLogsBtn;
     private Button viewWatchBtn;
+    private Button viewSettingsBtn;
     private ConsoleViewMode currentViewMode = ConsoleViewMode.Logs;
 
     // Header Toolbar elements
@@ -52,7 +57,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private Button filterInfoButton;
     private Button filterWarnButton;
     private Button filterErrorButton;
-    private Button autoScrollButton;
+    private Button bottomBtn;
     private Label consoleStatsLabel;
 
     // Sub Toolbar elements (Search & Tags)
@@ -66,8 +71,20 @@ public class HB_InGameConsoleUI : MonoBehaviour
     // ScrollViews & Detail Panel
     private ScrollView logScrollView;
     private ScrollView watchScrollView;
+    private ScrollView settingsScrollView;
+    private VisualElement detailPanel;
     private Label detailLabel;
     private Button copyDetailBtn;
+    private Button toggleDetailSizeBtn;
+    private Button collapseDetailBtn;
+    private bool isDetailExpanded = false;
+    private bool isDetailCollapsed = false;
+
+    // Settings elements
+    private Button toggleLogEnableBtn;
+    private Button toggleFpsWidgetBtn;
+    private VisualElement channelTogglesContainer;
+    private Button clearAllLogsSettingBtn;
 
     // FPS & Graph elements
     private VisualElement fpsWidget;
@@ -79,12 +96,22 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private LogFilter currentFilter = LogFilter.All;
     private string currentTagFilter = string.Empty;
     private string currentSearchQuery = string.Empty;
-    private bool autoScrollEnabled = true;
 
     private readonly List<VisualElement> createdLogRows = new List<VisualElement>();
     private readonly Dictionary<string, (VisualElement row, Label valLabel, Label timeLabel)> watchRowMap =
         new Dictionary<string, (VisualElement row, Label valLabel, Label timeLabel)>(StringComparer.OrdinalIgnoreCase);
     private VisualElement selectedRow;
+
+    // Delegate caches for clean event unregistration
+    private Action onLogsModeClicked;
+    private Action onWatchModeClicked;
+    private Action onSettingsModeClicked;
+    private Action onFilterAllClicked;
+    private Action onFilterInfoClicked;
+    private Action onFilterWarnClicked;
+    private Action onFilterErrorClicked;
+    private Action onClearSearchClicked;
+    private EventCallback<ChangeEvent<string>> onSearchChangedCallback;
 
     // Frame metrics
     private readonly float[] frameTimes = new float[GraphSampleCount];
@@ -97,9 +124,13 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private bool isGraphCollapsed = false;
 
     public bool IsConsoleOpen => consoleWindow != null && !consoleWindow.ClassListContains("hb-hidden");
+    public PanelRenderer PanelRendererComponent => panelRenderer != null ? panelRenderer : (panelRenderer = GetComponent<PanelRenderer>());
+    public UIDocument Document => uiDocument != null ? uiDocument : (uiDocument = GetComponent<UIDocument>());
+    public VisualElement RootElement => rootElement;
 
     private void Awake()
     {
+        panelRenderer = GetComponent<PanelRenderer>();
         uiDocument = GetComponent<UIDocument>();
 
         var settings = InGameConsoleSettings.Instance;
@@ -118,52 +149,48 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void OnEnable()
     {
+        if (panelRenderer == null)
+            panelRenderer = GetComponent<PanelRenderer>();
         if (uiDocument == null)
             uiDocument = GetComponent<UIDocument>();
 
-        var settings = InGameConsoleSettings.Instance;
-
-        if (uiDocument.visualTreeAsset == null)
+        // 둘 다 없으면 기본적으로 PanelRenderer 추가 (Unity 6+)
+        if (panelRenderer == null && uiDocument == null)
         {
-            if (consoleVisualTree != null)
-                uiDocument.visualTreeAsset = consoleVisualTree;
-            else if (settings != null && settings.ConsoleVisualTree != null)
-                uiDocument.visualTreeAsset = settings.ConsoleVisualTree;
-            else
-                uiDocument.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+            panelRenderer = gameObject.AddComponent<PanelRenderer>();
         }
 
-        if (uiDocument.panelSettings == null)
+        InitializePanelHost();
+
+        if (panelRenderer != null)
         {
-            if (settings != null && settings.PanelSettings != null)
-                uiDocument.panelSettings = settings.PanelSettings;
-            else
-                uiDocument.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
-#if UNITY_EDITOR
-            if (uiDocument.panelSettings == null)
-            {
-                string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
-                if (pGuids != null && pGuids.Length > 0)
-                {
-                    string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
-                    uiDocument.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
-                }
-            }
-#endif
-            if (uiDocument.panelSettings == null)
-            {
-                var fallback = ScriptableObject.CreateInstance<PanelSettings>();
-                fallback.name = "HB_RuntimePanelSettings";
-                fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
-                fallback.referenceResolution = new Vector2Int(1200, 800);
-                fallback.match = 0.5f;
-                fallback.sortingOrder = 1000;
-                uiDocument.panelSettings = fallback;
-            }
+            panelRenderer.RegisterUIReloadCallback(OnPanelReloaded);
+        }
+        else if (uiDocument != null)
+        {
+            InitializeWithRoot(uiDocument.rootVisualElement);
         }
 
-        rootElement = uiDocument.rootVisualElement;
+        HLogCore.OnLogAdded += HandleLogAdded;
+        HLogCore.OnLogsCleared += HandleLogsCleared;
+        HLogCore.OnWatchUpdated += HandleWatchUpdated;
+        HLogCore.OnTagDiscovered += HandleTagDiscovered;
+    }
+
+    private void OnPanelReloaded(PanelRenderer renderer, VisualElement root, int version)
+    {
+        if (version == handledUIVersion) return;
+        handledUIVersion = version;
+
+        InitializeWithRoot(root);
+    }
+
+    private void InitializeWithRoot(VisualElement root)
+    {
+        rootElement = root;
         if (rootElement == null) return;
+
+        EnsureVisualTreeCloned();
         EnsureStyleSheetAttached();
 
         BindUIElements();
@@ -173,14 +200,152 @@ public class HB_InGameConsoleUI : MonoBehaviour
         RefreshAllWatches();
         RefreshAllTags();
 
-        HLogCore.OnLogAdded += HandleLogAdded;
-        HLogCore.OnLogsCleared += HandleLogsCleared;
-        HLogCore.OnWatchUpdated += HandleWatchUpdated;
-        HLogCore.OnTagDiscovered += HandleTagDiscovered;
-
         if (fpsGraphCanvas != null)
         {
+            fpsGraphCanvas.generateVisualContent -= DrawFrameTimeGraph;
             fpsGraphCanvas.generateVisualContent += DrawFrameTimeGraph;
+        }
+    }
+
+    private void InitializePanelHost()
+    {
+        var settings = InGameConsoleSettings.Instance;
+
+        if (panelRenderer != null)
+        {
+            if (panelRenderer.visualTreeAsset == null)
+            {
+                if (consoleVisualTree != null)
+                    panelRenderer.visualTreeAsset = consoleVisualTree;
+                else if (settings != null && settings.ConsoleVisualTree != null)
+                    panelRenderer.visualTreeAsset = settings.ConsoleVisualTree;
+                else
+                    panelRenderer.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+
+#if UNITY_EDITOR
+                if (panelRenderer.visualTreeAsset == null)
+                {
+                    string[] vGuids = UnityEditor.AssetDatabase.FindAssets("HB_InGameConsole t:VisualTreeAsset");
+                    if (vGuids != null && vGuids.Length > 0)
+                    {
+                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(vGuids[0]);
+                        panelRenderer.visualTreeAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
+                    }
+                }
+#endif
+            }
+
+            if (panelRenderer.panelSettings == null)
+            {
+                if (settings != null && settings.PanelSettings != null)
+                    panelRenderer.panelSettings = settings.PanelSettings;
+                else
+                    panelRenderer.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
+
+#if UNITY_EDITOR
+                if (panelRenderer.panelSettings == null)
+                {
+                    string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
+                    if (pGuids != null && pGuids.Length > 0)
+                    {
+                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
+                        panelRenderer.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
+                    }
+                }
+#endif
+
+                if (panelRenderer.panelSettings == null)
+                {
+                    var fallback = ScriptableObject.CreateInstance<PanelSettings>();
+                    fallback.name = "HB_RuntimePanelSettings";
+                    fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+                    fallback.referenceResolution = new Vector2Int(1200, 800);
+                    fallback.match = 0.5f;
+                    fallback.sortingOrder = 1000;
+                    panelRenderer.panelSettings = fallback;
+                }
+            }
+
+            if (panelRenderer.sortingOrder < 1000)
+            {
+                panelRenderer.sortingOrder = 9999;
+            }
+        }
+        else if (uiDocument != null)
+        {
+            if (uiDocument.visualTreeAsset == null)
+            {
+                if (consoleVisualTree != null)
+                    uiDocument.visualTreeAsset = consoleVisualTree;
+                else if (settings != null && settings.ConsoleVisualTree != null)
+                    uiDocument.visualTreeAsset = settings.ConsoleVisualTree;
+                else
+                    uiDocument.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+
+#if UNITY_EDITOR
+                if (uiDocument.visualTreeAsset == null)
+                {
+                    string[] vGuids = UnityEditor.AssetDatabase.FindAssets("HB_InGameConsole t:VisualTreeAsset");
+                    if (vGuids != null && vGuids.Length > 0)
+                    {
+                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(vGuids[0]);
+                        uiDocument.visualTreeAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
+                    }
+                }
+#endif
+            }
+
+            if (uiDocument.panelSettings == null)
+            {
+                if (settings != null && settings.PanelSettings != null)
+                    uiDocument.panelSettings = settings.PanelSettings;
+                else
+                    uiDocument.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
+
+#if UNITY_EDITOR
+                if (uiDocument.panelSettings == null)
+                {
+                    string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
+                    if (pGuids != null && pGuids.Length > 0)
+                    {
+                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
+                        uiDocument.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
+                    }
+                }
+#endif
+
+                if (uiDocument.panelSettings == null)
+                {
+                    var fallback = ScriptableObject.CreateInstance<PanelSettings>();
+                    fallback.name = "HB_RuntimePanelSettings";
+                    fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+                    fallback.referenceResolution = new Vector2Int(1200, 800);
+                    fallback.match = 0.5f;
+                    fallback.sortingOrder = 1000;
+                    uiDocument.panelSettings = fallback;
+                }
+            }
+
+            if (uiDocument.sortingOrder < 1000)
+            {
+                uiDocument.sortingOrder = 9999;
+            }
+        }
+    }
+
+    private void EnsureVisualTreeCloned()
+    {
+        if (rootElement == null) return;
+
+        VisualTreeAsset vta = null;
+        if (panelRenderer != null) vta = panelRenderer.visualTreeAsset;
+        else if (uiDocument != null) vta = uiDocument.visualTreeAsset;
+        if (vta == null) vta = consoleVisualTree;
+
+        // VisualTree가 자동 클론되지 않은 경우 직접 복제
+        if (rootElement.Q<VisualElement>("rootContainer") == null && vta != null)
+        {
+            vta.CloneTree(rootElement);
         }
     }
 
@@ -218,6 +383,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
             fpsGraphCanvas.generateVisualContent -= DrawFrameTimeGraph;
         }
 
+        if (panelRenderer != null)
+        {
+            panelRenderer.UnregisterUIReloadCallback(OnPanelReloaded);
+        }
+
         UnregisterCallbacks();
     }
 
@@ -236,12 +406,13 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
         viewLogsBtn = rootElement.Q<Button>("viewLogsBtn");
         viewWatchBtn = rootElement.Q<Button>("viewWatchBtn");
+        viewSettingsBtn = rootElement.Q<Button>("viewSettingsBtn");
 
         filterAllButton = rootElement.Q<Button>("filterAllBtn");
         filterInfoButton = rootElement.Q<Button>("filterInfoBtn");
         filterWarnButton = rootElement.Q<Button>("filterWarnBtn");
         filterErrorButton = rootElement.Q<Button>("filterErrorBtn");
-        autoScrollButton = rootElement.Q<Button>("autoScrollBtn");
+        bottomBtn = rootElement.Q<Button>("bottomBtn");
 
         subToolBar = rootElement.Q<VisualElement>("subToolBar");
         searchField = rootElement.Q<TextField>("searchField");
@@ -250,15 +421,51 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
         logScrollView = rootElement.Q<ScrollView>("logScrollView");
         watchScrollView = rootElement.Q<ScrollView>("watchScrollView");
+        settingsScrollView = rootElement.Q<ScrollView>("settingsScrollView");
+        detailPanel = rootElement.Q<VisualElement>("detailPanel");
+
+        toggleLogEnableBtn = rootElement.Q<Button>("toggleLogEnableBtn");
+        toggleFpsWidgetBtn = rootElement.Q<Button>("toggleFpsWidgetBtn");
+        channelTogglesContainer = rootElement.Q<VisualElement>("channelTogglesContainer");
+        clearAllLogsSettingBtn = rootElement.Q<Button>("clearAllLogsSettingBtn");
 
         detailLabel = rootElement.Q<Label>("detailLabel");
         copyDetailBtn = rootElement.Q<Button>("copyDetailBtn");
+        toggleDetailSizeBtn = rootElement.Q<Button>("toggleDetailSizeBtn");
+        collapseDetailBtn = rootElement.Q<Button>("collapseDetailBtn");
         consoleStatsLabel = rootElement.Q<Label>("consoleStatsLabel");
 
         fpsWidget = rootElement.Q<VisualElement>("fpsWidget");
         fpsLabel = rootElement.Q<Label>("fpsLabel");
         msLabel = rootElement.Q<Label>("msLabel");
         fpsGraphCanvas = rootElement.Q<VisualElement>("fpsGraphCanvas");
+
+        // 레이아웃 고정 제약 설정 (로그 증가 시 디테일 패널 축소/소멸 완전 방지)
+        if (detailPanel != null)
+        {
+            detailPanel.style.flexShrink = 0;
+        }
+        if (logScrollView != null)
+        {
+            logScrollView.style.flexGrow = 1;
+            logScrollView.style.flexShrink = 1;
+            logScrollView.style.flexBasis = 0;
+            logScrollView.style.minHeight = 0;
+        }
+        if (watchScrollView != null)
+        {
+            watchScrollView.style.flexGrow = 1;
+            watchScrollView.style.flexShrink = 1;
+            watchScrollView.style.flexBasis = 0;
+            watchScrollView.style.minHeight = 0;
+        }
+        if (settingsScrollView != null)
+        {
+            settingsScrollView.style.flexGrow = 1;
+            settingsScrollView.style.flexShrink = 1;
+            settingsScrollView.style.flexBasis = 0;
+            settingsScrollView.style.minHeight = 0;
+        }
 
         if (fpsWidget != null && !showFpsGraph)
         {
@@ -268,31 +475,56 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void RegisterCallbacks()
     {
+        onLogsModeClicked = () => SwitchViewMode(ConsoleViewMode.Logs);
+        onWatchModeClicked = () => SwitchViewMode(ConsoleViewMode.Watch);
+        onSettingsModeClicked = () => SwitchViewMode(ConsoleViewMode.Settings);
+
+        onFilterAllClicked = () => SetFilter(LogFilter.All);
+        onFilterInfoClicked = () => SetFilter(LogFilter.Info);
+        onFilterWarnClicked = () => SetFilter(LogFilter.Warning);
+        onFilterErrorClicked = () => SetFilter(LogFilter.Error);
+
+        onClearSearchClicked = () => { if (searchField != null) searchField.value = string.Empty; };
+        onSearchChangedCallback = OnSearchValueChanged;
+
         if (openButton != null) openButton.clicked += OpenConsole;
         if (closeButton != null) closeButton.clicked += CloseConsole;
         if (clearButton != null) clearButton.clicked += ClearConsole;
 
-        if (viewLogsBtn != null) viewLogsBtn.clicked += () => SwitchViewMode(ConsoleViewMode.Logs);
-        if (viewWatchBtn != null) viewWatchBtn.clicked += () => SwitchViewMode(ConsoleViewMode.Watch);
+        if (viewLogsBtn != null) viewLogsBtn.clicked += onLogsModeClicked;
+        if (viewWatchBtn != null) viewWatchBtn.clicked += onWatchModeClicked;
+        if (viewSettingsBtn != null) viewSettingsBtn.clicked += onSettingsModeClicked;
 
-        if (filterAllButton != null) filterAllButton.clicked += () => SetFilter(LogFilter.All);
-        if (filterInfoButton != null) filterInfoButton.clicked += () => SetFilter(LogFilter.Info);
-        if (filterWarnButton != null) filterWarnButton.clicked += () => SetFilter(LogFilter.Warning);
-        if (filterErrorButton != null) filterErrorButton.clicked += () => SetFilter(LogFilter.Error);
-        if (autoScrollButton != null) autoScrollButton.clicked += ToggleAutoScroll;
+        if (toggleLogEnableBtn != null) toggleLogEnableBtn.clicked += ToggleMasterLogEnable;
+        if (toggleFpsWidgetBtn != null) toggleFpsWidgetBtn.clicked += ToggleFpsWidget;
+        if (clearAllLogsSettingBtn != null) clearAllLogsSettingBtn.clicked += ClearConsole;
+
+        if (filterAllButton != null) filterAllButton.clicked += onFilterAllClicked;
+        if (filterInfoButton != null) filterInfoButton.clicked += onFilterInfoClicked;
+        if (filterWarnButton != null) filterWarnButton.clicked += onFilterWarnClicked;
+        if (filterErrorButton != null) filterErrorButton.clicked += onFilterErrorClicked;
+        if (bottomBtn != null) bottomBtn.clicked += ScrollToBottom;
 
         if (searchField != null)
         {
-            searchField.RegisterValueChangedCallback(OnSearchValueChanged);
+            searchField.RegisterValueChangedCallback(onSearchChangedCallback);
         }
         if (clearSearchBtn != null)
         {
-            clearSearchBtn.clicked += () => { if (searchField != null) searchField.value = string.Empty; };
+            clearSearchBtn.clicked += onClearSearchClicked;
         }
 
         if (copyDetailBtn != null)
         {
             copyDetailBtn.clicked += CopySelectedDetail;
+        }
+        if (toggleDetailSizeBtn != null)
+        {
+            toggleDetailSizeBtn.clicked += ToggleDetailSize;
+        }
+        if (collapseDetailBtn != null)
+        {
+            collapseDetailBtn.clicked += ToggleDetailCollapsed;
         }
 
         if (fpsWidget != null)
@@ -306,9 +538,33 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (openButton != null) openButton.clicked -= OpenConsole;
         if (closeButton != null) closeButton.clicked -= CloseConsole;
         if (clearButton != null) clearButton.clicked -= ClearConsole;
-        if (autoScrollButton != null) autoScrollButton.clicked -= ToggleAutoScroll;
+
+        if (viewLogsBtn != null && onLogsModeClicked != null) viewLogsBtn.clicked -= onLogsModeClicked;
+        if (viewWatchBtn != null && onWatchModeClicked != null) viewWatchBtn.clicked -= onWatchModeClicked;
+        if (viewSettingsBtn != null && onSettingsModeClicked != null) viewSettingsBtn.clicked -= onSettingsModeClicked;
+
+        if (toggleLogEnableBtn != null) toggleLogEnableBtn.clicked -= ToggleMasterLogEnable;
+        if (toggleFpsWidgetBtn != null) toggleFpsWidgetBtn.clicked -= ToggleFpsWidget;
+        if (clearAllLogsSettingBtn != null) clearAllLogsSettingBtn.clicked -= ClearConsole;
+
+        if (filterAllButton != null && onFilterAllClicked != null) filterAllButton.clicked -= onFilterAllClicked;
+        if (filterInfoButton != null && onFilterInfoClicked != null) filterInfoButton.clicked -= onFilterInfoClicked;
+        if (filterWarnButton != null && onFilterWarnClicked != null) filterWarnButton.clicked -= onFilterWarnClicked;
+        if (filterErrorButton != null && onFilterErrorClicked != null) filterErrorButton.clicked -= onFilterErrorClicked;
+        if (bottomBtn != null) bottomBtn.clicked -= ScrollToBottom;
+
+        if (searchField != null && onSearchChangedCallback != null)
+        {
+            searchField.UnregisterValueChangedCallback(onSearchChangedCallback);
+        }
+        if (clearSearchBtn != null && onClearSearchClicked != null)
+        {
+            clearSearchBtn.clicked -= onClearSearchClicked;
+        }
 
         if (copyDetailBtn != null) copyDetailBtn.clicked -= CopySelectedDetail;
+        if (toggleDetailSizeBtn != null) toggleDetailSizeBtn.clicked -= ToggleDetailSize;
+        if (collapseDetailBtn != null) collapseDetailBtn.clicked -= ToggleDetailCollapsed;
 
         if (fpsWidget != null)
         {
@@ -500,27 +756,140 @@ public class HB_InGameConsoleUI : MonoBehaviour
     {
         currentViewMode = mode;
 
+        viewLogsBtn?.RemoveFromClassList("hb-filter-active");
+        viewWatchBtn?.RemoveFromClassList("hb-filter-active");
+        viewSettingsBtn?.RemoveFromClassList("hb-filter-active");
+
+        logScrollView?.AddToClassList("hb-hidden");
+        watchScrollView?.AddToClassList("hb-hidden");
+        settingsScrollView?.AddToClassList("hb-hidden");
+        subToolBar?.AddToClassList("hb-hidden");
+        detailPanel?.AddToClassList("hb-hidden");
+
         if (mode == ConsoleViewMode.Logs)
         {
             viewLogsBtn?.AddToClassList("hb-filter-active");
-            viewWatchBtn?.RemoveFromClassList("hb-filter-active");
-
             logScrollView?.RemoveFromClassList("hb-hidden");
-            watchScrollView?.AddToClassList("hb-hidden");
             subToolBar?.RemoveFromClassList("hb-hidden");
+            detailPanel?.RemoveFromClassList("hb-hidden");
+        }
+        else if (mode == ConsoleViewMode.Watch)
+        {
+            viewWatchBtn?.AddToClassList("hb-filter-active");
+            watchScrollView?.RemoveFromClassList("hb-hidden");
+            detailPanel?.RemoveFromClassList("hb-hidden");
+            RefreshAllWatches();
+        }
+        else if (mode == ConsoleViewMode.Settings)
+        {
+            viewSettingsBtn?.AddToClassList("hb-filter-active");
+            settingsScrollView?.RemoveFromClassList("hb-hidden");
+            RefreshSettingsView();
+        }
+    }
+
+    #region Settings View Handlers
+
+    private void RefreshSettingsView()
+    {
+        UpdateLogEnableButtonUI();
+        UpdateFpsWidgetButtonUI();
+        RefreshChannelToggles();
+    }
+
+    private void UpdateLogEnableButtonUI()
+    {
+        if (toggleLogEnableBtn == null) return;
+        bool isEnabled = HLogCore.IsLogEnabled;
+        toggleLogEnableBtn.text = isEnabled ? "Log: ON" : "Log: OFF";
+        if (isEnabled)
+        {
+            toggleLogEnableBtn.AddToClassList("hb-toggle-on");
+            toggleLogEnableBtn.RemoveFromClassList("hb-toggle-off");
         }
         else
         {
-            viewWatchBtn?.AddToClassList("hb-filter-active");
-            viewLogsBtn?.RemoveFromClassList("hb-filter-active");
-
-            watchScrollView?.RemoveFromClassList("hb-hidden");
-            logScrollView?.AddToClassList("hb-hidden");
-            subToolBar?.AddToClassList("hb-hidden");
-
-            RefreshAllWatches();
+            toggleLogEnableBtn.AddToClassList("hb-toggle-off");
+            toggleLogEnableBtn.RemoveFromClassList("hb-toggle-on");
         }
     }
+
+    private void ToggleMasterLogEnable()
+    {
+        HLogCore.IsLogEnabled = !HLogCore.IsLogEnabled;
+        UpdateLogEnableButtonUI();
+    }
+
+    private void UpdateFpsWidgetButtonUI()
+    {
+        if (toggleFpsWidgetBtn == null) return;
+        bool isVisible = fpsWidget != null && fpsWidget.style.display != DisplayStyle.None;
+        toggleFpsWidgetBtn.text = isVisible ? "FPS: ON" : "FPS: OFF";
+        if (isVisible)
+        {
+            toggleFpsWidgetBtn.AddToClassList("hb-toggle-on");
+            toggleFpsWidgetBtn.RemoveFromClassList("hb-toggle-off");
+        }
+        else
+        {
+            toggleFpsWidgetBtn.AddToClassList("hb-toggle-off");
+            toggleFpsWidgetBtn.RemoveFromClassList("hb-toggle-on");
+        }
+    }
+
+    private void ToggleFpsWidget()
+    {
+        if (fpsWidget == null) return;
+        bool isVisible = fpsWidget.style.display != DisplayStyle.None;
+        fpsWidget.style.display = isVisible ? DisplayStyle.None : DisplayStyle.Flex;
+        UpdateFpsWidgetButtonUI();
+    }
+
+    private void RefreshChannelToggles()
+    {
+        if (channelTogglesContainer == null) return;
+        channelTogglesContainer.Clear();
+
+        var knownTags = HLogCore.KnownTags;
+        if (knownTags.Count == 0)
+        {
+            HLogCore.DiscoverAllChannels();
+            knownTags = HLogCore.KnownTags;
+        }
+
+        foreach (var tag in knownTags)
+        {
+            string tagName = tag;
+            var channel = HLogCore.GetChannel(tagName);
+            bool isChEnabled = channel.Enabled;
+
+            var chipBtn = new Button();
+            chipBtn.text = isChEnabled ? $"{tagName}: ON" : $"{tagName}: OFF";
+            chipBtn.AddToClassList("hb-channel-chip");
+            chipBtn.AddToClassList(isChEnabled ? "hb-toggle-on" : "hb-toggle-off");
+
+            chipBtn.clicked += () =>
+            {
+                channel.Enabled = !channel.Enabled;
+                bool nowEnabled = channel.Enabled;
+                chipBtn.text = nowEnabled ? $"{tagName}: ON" : $"{tagName}: OFF";
+                if (nowEnabled)
+                {
+                    chipBtn.AddToClassList("hb-toggle-on");
+                    chipBtn.RemoveFromClassList("hb-toggle-off");
+                }
+                else
+                {
+                    chipBtn.AddToClassList("hb-toggle-off");
+                    chipBtn.RemoveFromClassList("hb-toggle-on");
+                }
+            };
+
+            channelTogglesContainer.Add(chipBtn);
+        }
+    }
+
+    #endregion
 
     private void HandleWatchUpdated(string key, string value)
     {
@@ -703,17 +1072,31 @@ public class HB_InGameConsoleUI : MonoBehaviour
         }
     }
 
-    private void ToggleAutoScroll()
+    /// <summary>
+    /// 로그 목록의 가장 최신(맨 아래) 위치로 스크롤합니다.
+    /// </summary>
+    public void ScrollToBottom()
     {
-        autoScrollEnabled = !autoScrollEnabled;
-        if (autoScrollButton != null)
+        if (logScrollView == null) return;
+
+        logScrollView.schedule.Execute(() =>
         {
-            autoScrollButton.text = autoScrollEnabled ? "AutoScroll: ON" : "AutoScroll: OFF";
-            if (autoScrollEnabled)
-                autoScrollButton.AddToClassList("hb-filter-active");
-            else
-                autoScrollButton.RemoveFromClassList("hb-filter-active");
-        }
+            if (logScrollView == null) return;
+
+            if (createdLogRows.Count > 0)
+            {
+                var latest = createdLogRows[createdLogRows.Count - 1];
+                if (latest != null)
+                {
+                    logScrollView.ScrollTo(latest);
+                }
+            }
+
+            if (logScrollView.verticalScroller != null)
+            {
+                logScrollView.verticalScroller.value = logScrollView.verticalScroller.highValue;
+            }
+        });
     }
 
     public void SetFilter(int filterIndex)
@@ -772,19 +1155,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
     {
         if (logScrollView == null) return;
 
-        var row = AddLogElement(entry);
+        AddLogElement(entry);
         UpdateOpenButtonText(HLogCore.History.Count);
-
-        if (autoScrollEnabled && row != null && currentViewMode == ConsoleViewMode.Logs)
-        {
-            logScrollView.schedule.Execute(() =>
-            {
-                if (logScrollView != null && row != null)
-                {
-                    logScrollView.ScrollTo(row);
-                }
-            });
-        }
     }
 
     private void HandleLogsCleared()
@@ -868,6 +1240,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
             selectedRow = row;
             selectedRow.AddToClassList("hb-log-row-selected");
 
+            // 디테일 패널이 숨겨져 있었다면 자동으로 표시
+            if (isDetailCollapsed)
+            {
+                SetDetailCollapsed(false);
+            }
+
             if (detailLabel != null)
             {
                 string tagInfo = !string.IsNullOrEmpty(capturedEntry.Tag) ? $" [{capturedEntry.Tag}]" : "";
@@ -889,6 +1267,61 @@ public class HB_InGameConsoleUI : MonoBehaviour
         logScrollView.Add(row);
 
         return row;
+    }
+
+    private void ToggleDetailSize()
+    {
+        if (detailPanel == null) return;
+
+        if (isDetailCollapsed)
+        {
+            SetDetailCollapsed(false);
+        }
+
+        isDetailExpanded = !isDetailExpanded;
+        if (isDetailExpanded)
+        {
+            detailPanel.AddToClassList("hb-detail-panel-expanded");
+            if (toggleDetailSizeBtn != null) toggleDetailSizeBtn.text = "Normal";
+        }
+        else
+        {
+            detailPanel.RemoveFromClassList("hb-detail-panel-expanded");
+            if (toggleDetailSizeBtn != null) toggleDetailSizeBtn.text = "Expand";
+        }
+    }
+
+    private void ToggleDetailCollapsed()
+    {
+        SetDetailCollapsed(!isDetailCollapsed);
+    }
+
+    private void SetDetailCollapsed(bool collapsed)
+    {
+        if (detailPanel == null) return;
+        isDetailCollapsed = collapsed;
+        if (isDetailCollapsed)
+        {
+            detailPanel.RemoveFromClassList("hb-detail-panel-expanded");
+            detailPanel.AddToClassList("hb-detail-panel-collapsed");
+            if (collapseDetailBtn != null) collapseDetailBtn.text = "Show";
+            if (toggleDetailSizeBtn != null) toggleDetailSizeBtn.style.display = DisplayStyle.None;
+        }
+        else
+        {
+            detailPanel.RemoveFromClassList("hb-detail-panel-collapsed");
+            if (isDetailExpanded)
+            {
+                detailPanel.AddToClassList("hb-detail-panel-expanded");
+                if (toggleDetailSizeBtn != null) toggleDetailSizeBtn.text = "Normal";
+            }
+            else
+            {
+                if (toggleDetailSizeBtn != null) toggleDetailSizeBtn.text = "Expand";
+            }
+            if (collapseDetailBtn != null) collapseDetailBtn.text = "Hide";
+            if (toggleDetailSizeBtn != null) toggleDetailSizeBtn.style.display = DisplayStyle.Flex;
+        }
     }
 
     private void CopySelectedDetail()

@@ -95,6 +95,27 @@ public static class HLogCore
     public static event Action<string, string> OnWatchUpdated;
     public static event Action<string> OnTagDiscovered;
 
+    private static bool s_IsLogEnabled = true;
+
+    /// <summary>
+    /// 전역 로그 활성화/비활성화 (에디터 및 런타임)
+    /// false일 경우 로그 기록 및 인게임/에디터 콘솔 출력이 차단됩니다.
+    /// </summary>
+    public static bool IsLogEnabled
+    {
+        get => s_IsLogEnabled;
+        set
+        {
+            if (s_IsLogEnabled != value)
+            {
+                s_IsLogEnabled = value;
+                OnLogEnableChanged?.Invoke(value);
+            }
+        }
+    }
+
+    public static event Action<bool> OnLogEnableChanged;
+
     public static bool IsInitialized => s_IsListeningUnityLogs;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -372,7 +393,7 @@ public static class HLogCore
 
     [HideInCallstack]
     public static void Watch<T>(string key, Func<T> getter)
-    {
+    { 
         if (getter == null) return;
         Watch(key, () => (object)getter());
     }
@@ -400,6 +421,7 @@ public static class HLogCore
 
     private static void HandleUnityLog(string condition, string stackTrace, LogType type)
     {
+        if (!s_IsLogEnabled) return;
         if (string.IsNullOrEmpty(stackTrace))
         {
 #if UNITY_EDITOR
@@ -479,17 +501,4 @@ public static class HLogCore
         string result = sb.ToString().TrimEnd();
         return string.IsNullOrEmpty(result) ? stackTrace : result;
     }
-}
-
-// 글로벌 네임스페이스 레거시 호환성 별칭
-[Obsolete("HB_Log is deprecated. Use HLog.Common instead.")]
-public static class HB_Log
-{
-    public static void Log(object message, UnityEngine.Object context = null) => UnityEngine.Debug.Log(message, context);
-    public static void LogWarning(object message, UnityEngine.Object context = null) => UnityEngine.Debug.LogWarning(message, context);
-    public static void Error(object message, UnityEngine.Object context = null) => UnityEngine.Debug.LogError(message, context);
-    public static void LogError(object message, UnityEngine.Object context = null) => UnityEngine.Debug.LogError(message, context);
-    public static void LogException(Exception exception, UnityEngine.Object context = null) => UnityEngine.Debug.LogException(exception, context);
-    public static void Watch(string key, object value) => HLogCore.Watch(key, value);
-    public static void Clear() => HLogCore.Clear();
 }

@@ -7,6 +7,10 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine;
 
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
+
 public readonly struct AndroidBuildParam
 {
     public readonly string BundleVersion;
@@ -73,6 +77,9 @@ public enum EPlatformType
     MOBILE,
 }
 
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+[NoAutoStaticsCleanup]
+#endif
 public static class BuildHelper
 {
     public const string JENKINS_BUILD_NUM = "BUILD_NUMBER";
@@ -107,6 +114,19 @@ public static class BuildHelper
     public static bool IsAutoProfile = false;
     public static bool IsCleanBuild = false;
     public static string ProjectPath = string.Empty;
+
+#if UNITY_EDITOR
+    [InitializeOnLoadMethod]
+    private static void ResetStaticsOnDomainReload()
+    {
+        s_Args = new List<string>();
+        IsDevBuild = false;
+        IsDeepProfile = false;
+        IsAutoProfile = false;
+        IsCleanBuild = false;
+        ProjectPath = string.Empty;
+    }
+#endif
 
     public static bool IsNullOrEmptyCollection<T>(this ICollection<T> collection)
     {

@@ -99,6 +99,58 @@ namespace InGameConsoleSystem.Editor
 
         [MenuItem("Tools/InGameConsole/Console Window", priority = 90)]
         [MenuItem("Window/General/HLog Console", priority = 200)]
+        #region Scripting Define Symbols Helper
+
+        public static bool IsScriptingDefineSymbolDefined(string symbol)
+        {
+            try
+            {
+                var buildTargetGroup = EditorUserBuildSettings.selectedBuildTargetGroup;
+#if UNITY_2023_1_OR_NEWER
+                var namedBuildTarget = UnityEditor.Build.NamedBuildTarget.FromBuildTargetGroup(buildTargetGroup);
+                string defines = PlayerSettings.GetScriptingDefineSymbols(namedBuildTarget);
+#else
+                string defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(buildTargetGroup);
+#endif
+                var list = new HashSet<string>(defines.Split(';', StringSplitOptions.RemoveEmptyEntries));
+                return list.Contains(symbol);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static void SetScriptingDefineSymbol(string symbol, bool enable)
+        {
+            try
+            {
+                var buildTargetGroup = EditorUserBuildSettings.selectedBuildTargetGroup;
+#if UNITY_2023_1_OR_NEWER
+                var namedBuildTarget = UnityEditor.Build.NamedBuildTarget.FromBuildTargetGroup(buildTargetGroup);
+                string defines = PlayerSettings.GetScriptingDefineSymbols(namedBuildTarget);
+#else
+                string defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(buildTargetGroup);
+#endif
+                var list = new HashSet<string>(defines.Split(';', StringSplitOptions.RemoveEmptyEntries));
+                if (enable) list.Add(symbol);
+                else list.Remove(symbol);
+
+                string newDefines = string.Join(";", list);
+#if UNITY_2023_1_OR_NEWER
+                PlayerSettings.SetScriptingDefineSymbols(namedBuildTarget, newDefines);
+#else
+                PlayerSettings.SetScriptingDefineSymbolsForGroup(buildTargetGroup, newDefines);
+#endif
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[HLog] Failed to update Scripting Define Symbols: {ex.Message}");
+            }
+        }
+
+        #endregion
+
         public static void OpenWindow()
         {
             var window = GetWindow<HLogConsoleWindow>("HLog Console");
@@ -498,6 +550,27 @@ namespace InGameConsoleSystem.Editor
             // Options
             autoScroll = GUILayout.Toggle(autoScroll, "Auto Scroll", EditorStyles.toolbarButton, GUILayout.Width(75));
             pauseOnError = GUILayout.Toggle(pauseOnError, "Pause on Error", EditorStyles.toolbarButton, GUILayout.Width(95));
+
+            GUILayout.Space(6);
+
+            // Log Enable Toggle (Runtime & Editor)
+            bool prevLogEnable = HLogCore.IsLogEnabled;
+            GUI.color = prevLogEnable ? new Color(0.4f, 0.9f, 0.5f) : new Color(1f, 0.45f, 0.45f);
+            if (GUILayout.Button(prevLogEnable ? "Log: ON" : "Log: OFF", EditorStyles.toolbarButton, GUILayout.Width(66)))
+            {
+                HLogCore.IsLogEnabled = !prevLogEnable;
+            }
+            GUI.color = Color.white;
+
+            // Scripting Define Symbol Toggle
+            string condSymbol = LogChannelGeneratorSettings.FindSettings()?.ConditionalSymbol ?? "USE_HLOG";
+            bool isSymbolDefined = IsScriptingDefineSymbolDefined(condSymbol);
+            GUI.color = isSymbolDefined ? new Color(0.35f, 0.8f, 1f) : new Color(0.7f, 0.7f, 0.7f);
+            if (GUILayout.Button(isSymbolDefined ? $"{condSymbol}: ON" : $"{condSymbol}: OFF", EditorStyles.toolbarButton, GUILayout.Width(105)))
+            {
+                SetScriptingDefineSymbol(condSymbol, !isSymbolDefined);
+            }
+            GUI.color = Color.white;
 
             GUILayout.FlexibleSpace();
 

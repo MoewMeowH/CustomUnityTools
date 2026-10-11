@@ -36,6 +36,7 @@ namespace InGameConsoleSystem.Editor
 
         [SerializeField] private string outputDirectory = "Assets/Scripts";
         [SerializeField] private string outputFileName = "LogChannels.cs";
+        [SerializeField] private string conditionalSymbol = "USE_HLOG";
         [SerializeField] private bool useSameName = true;
         [SerializeField] private bool autoGenerateOnSave = true;
         [SerializeField] private List<ChannelItem> channels = new List<ChannelItem>();
@@ -50,6 +51,12 @@ namespace InGameConsoleSystem.Editor
         {
             get => outputFileName;
             set => outputFileName = value;
+        }
+
+        public string ConditionalSymbol
+        {
+            get => string.IsNullOrWhiteSpace(conditionalSymbol) ? "USE_HLOG" : conditionalSymbol.Trim();
+            set => conditionalSymbol = string.IsNullOrWhiteSpace(value) ? "USE_HLOG" : value.Trim();
         }
 
         public bool UseSameName

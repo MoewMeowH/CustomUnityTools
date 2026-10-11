@@ -7,11 +7,18 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
+
 /// <summary>
 /// Unity 커스텀 빌드 매니저 및 Jenkins CI/CD 연동 에디터 윈도우입니다.
 /// 조건부 파이프라인 스텝 필터링, 체크박스 On/Off, 스텝 행 클릭 시 인라인 C# 소스 코드 미리보기,
 /// 선택적 SceneDefine/ProjectDefine 에셋 관리 및 Jenkinsfile 생성을 지원합니다.
 /// </summary>
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+[NoAutoStaticsCleanup]
+#endif
 public class ProjectBuild : EditorWindow
 {
     public enum ESelfBuildPlatform
@@ -52,6 +59,14 @@ public class ProjectBuild : EditorWindow
     private bool m_ShowOnlyClassBlock = true;
     private Vector2 m_CodePreviewScroll;
     private static GUIStyle s_CodePreviewStyle;
+
+#if UNITY_EDITOR
+    [InitializeOnLoadMethod]
+    private static void ResetStaticsOnDomainReload()
+    {
+        s_CodePreviewStyle = null;
+    }
+#endif
 
     private static GUIStyle CodePreviewStyle
     {
@@ -250,7 +265,7 @@ public class ProjectBuild : EditorWindow
             EditorGUILayout.LabelField("▶ 1단계: 사전 빌드 설정 (Pre-Build Steps)", EditorStyles.miniBoldLabel);
 
             int shownPreCount = 0;
-            for (int i = 0; i < allPre.Count; i++)
+            for (int i = 0; i < allPre.Count; i++ )
             {
                 var step = allPre[i];
                 bool conditionActive = step.IsActive(previewContext);
@@ -283,7 +298,7 @@ public class ProjectBuild : EditorWindow
             EditorGUILayout.LabelField("▶ 2단계: 사후 빌드 처리 (Post-Build Steps)", EditorStyles.miniBoldLabel);
 
             int shownPostCount = 0;
-            for (int i = 0; i < allPost.Count; i++)
+            for (int i = 0; i < allPost.Count; i++ )
             {
                 var step = allPost[i];
                 bool conditionActive = step.IsActive(previewContext);
@@ -479,7 +494,7 @@ public class ProjectBuild : EditorWindow
 
         var lines = fullCode.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         int classStartLine = -1;
-        for (int i = 0; i < lines.Length; i++)
+        for (int i = 0; i < lines.Length; i++ )
         {
             if (lines[i].Contains($"class {type.Name}"))
             {
@@ -501,7 +516,7 @@ public class ProjectBuild : EditorWindow
             bool foundOpenBrace = false;
             int classEndLine = lines.Length - 1;
 
-            for (int i = classStartLine; i < lines.Length; i++)
+            for (int i = classStartLine; i < lines.Length; i++ )
             {
                 foreach (char ch in lines[i])
                 {
@@ -630,7 +645,7 @@ public class ProjectBuild : EditorWindow
         EditorGUILayout.Space(4);
 
         int removeIdx = -1;
-        for (int i = 0; i < m_ScenePath.Count; i++)
+        for (int i = 0; i < m_ScenePath.Count; i++ )
         {
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField($"{i + 1}. {m_ScenePath[i]}", EditorStyles.miniLabel);
