@@ -53,7 +53,8 @@ namespace HB.Cheat
 
     /// <summary>
     /// 서버 치트 전송. 프로젝트에서 구현해 CheatSystem.ServerTransport에 등록한다 (예: C2P_RequestCheat 패킷 전송).
-    /// 서버 응답을 받으면 CheatSystem.ReportServerResult를 호출한다.
+    /// 서버 응답을 받으면 CheatSystem.ReportServerResult를 호출한다 (네트워크 스레드에서 불러도 다음 프레임에 메인 스레드에서 처리).
+    /// 시간 초과가 나면 서버 큐가 멈춘다. 재접속 처리에서 CheatSystem.ResumeServerQueue를 부르면 재개된다.
     /// </summary>
     public interface ICheatServerTransport
     {

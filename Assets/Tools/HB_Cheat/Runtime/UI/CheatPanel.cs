@@ -245,6 +245,8 @@ namespace HB.Cheat.UI
             CheatSystem.ExecutionChanged += OnExecutionChanged;
             CheatSystem.FavoritesChanged -= OnFavoritesChanged;
             CheatSystem.FavoritesChanged += OnFavoritesChanged;
+            CheatSystem.ServerQueueChanged -= OnServerQueueChanged;
+            CheatSystem.ServerQueueChanged += OnServerQueueChanged;
             m_Root = null;
             RebuildNav();
         }
@@ -254,6 +256,7 @@ namespace HB.Cheat.UI
             CheatRegistry.Changed -= OnRegistryChanged;
             CheatSystem.ExecutionChanged -= OnExecutionChanged;
             CheatSystem.FavoritesChanged -= OnFavoritesChanged;
+            CheatSystem.ServerQueueChanged -= OnServerQueueChanged;
         }
 
         private void OnRegistryChanged()
@@ -266,6 +269,14 @@ namespace HB.Cheat.UI
         {
             if (execution == m_LastExecution) RefreshStatus();
             if (execution == m_LastRawExecution) RefreshRawStatus();
+            if (m_Mode == Mode.History) RebuildNav();
+        }
+
+        // 멈춤·재개는 대기 중인 건의 메시지만 바꾸므로 상태 줄과 히스토리를 다시 그린다
+        private void OnServerQueueChanged()
+        {
+            RefreshStatus();
+            RefreshRawStatus();
             if (m_Mode == Mode.History) RebuildNav();
         }
 
@@ -477,6 +488,21 @@ namespace HB.Cheat.UI
 
         private void BuildHistory(VisualElement content)
         {
+            if (CheatSystem.IsServerQueuePaused)
+            {
+                var paused = CheatStyles.Card();
+                paused.style.borderLeftWidth = 4;
+                paused.style.borderLeftColor = CheatStyles.Warning;
+                paused.Add(CheatStyles.Label($"Server queue paused — {CheatSystem.ServerQueuePauseReason}", CheatStyles.SmallFontSize, CheatStyles.Warning, bold: true));
+                paused.Add(CheatStyles.Label(
+                    $"{CheatSystem.QueuedServerCount} waiting. Resumes when the late response arrives. Resume only after reconnecting, or the late response will be taken as the next result.",
+                    CheatStyles.SmallFontSize, CheatStyles.TextDim));
+                var row = CheatStyles.Row();
+                row.Add(CheatStyles.Button("Resume", CheatSystem.ResumeServerQueue, CheatStyles.Accent));
+                paused.Add(row);
+                content.Add(paused);
+            }
+
             var history = CheatSystem.History;
             if (history.Count == 0)
             {

@@ -82,12 +82,19 @@ public sealed class PacketCheatTransport : ICheatServerTransport
 // 초기화 코드 어딘가에서
 CheatSystem.ServerTransport = new PacketCheatTransport();
 
-// 서버 응답 핸들러에서
+// 서버 응답 핸들러에서 (네트워크 스레드여도 됨: 다음 프레임에 메인 스레드에서 처리)
 CheatSystem.ReportServerResult(packet.Result == Result.Success, packet.Result.ToString());
+
+// 재접속에 성공했을 때 (시간 초과로 멈춘 큐 재개)
+CheatSystem.ResumeServerQueue();
 ```
 
 - 응답에 요청 식별자가 없으므로 **서버 치트는 한 번에 하나만 전송**합니다. 나머지는 순서대로 대기합니다 (`Queued`).
-- 응답이 `ServerTimeoutSeconds`(기본 10초) 안에 오지 않으면 `TimedOut`이 되고 다음 건을 보냅니다. 시간 초과 뒤 늦게 온 응답은 다음 요청의 결과로 처리될 수 있으니, 서버 응답이 느리다면 시간을 늘리세요.
+- 응답이 `ServerTimeoutSeconds`(기본 10초) 안에 오지 않으면 `TimedOut`이 되고 **서버 큐가 멈춥니다**. 늦게 온 응답이 다음 요청의 결과로 잘못 처리되지 않게 하기 위함입니다.
+  - 멈춘 뒤 늦은 응답이 도착하면 그 응답은 버리고 자동으로 재개합니다.
+  - 응답이 끝내 오지 않으면(연결 끊김 등) 재접속 처리에서 `CheatSystem.ResumeServerQueue()`를 부르거나, 패널 **History** 탭의 **Resume** 버튼을 누릅니다. 재접속 전에 재개하면 늦은 응답이 다음 결과로 처리될 수 있습니다.
+  - 응답을 기다리는 중에 치트 시스템이 종료되면(씬 전환 등), 다시 초기화해도 멈춘 상태로 시작합니다.
+  - 상태는 `CheatSystem.IsServerQueuePaused`, `ServerQueuePauseReason`, `ServerQueueChanged`로 확인합니다.
 - 서버 없이 확인할 때는 `CheatSystem.ServerTransport = new CheatLogTransport();`을 쓰면 명령이 로그로만 출력됩니다.
 
 ---
