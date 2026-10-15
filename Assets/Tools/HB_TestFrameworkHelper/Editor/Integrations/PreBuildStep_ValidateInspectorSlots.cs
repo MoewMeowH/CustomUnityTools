@@ -1,10 +1,12 @@
-﻿using UnityEditor;
+﻿#if HB_CUSTOM_BUILD_ENABLED
+using UnityEditor;
 using UnityEngine;
 
 namespace HB.TestFrameworkHelper.Editor
 {
     /// <summary>
     /// HB Custom Build Manager 연동: 빌드 실행 전 인스펙터 슬롯([NeedSlotNullCheck]) 및 Missing Script 사전 검증
+    /// com.hb.custombuild 패키지가 프로젝트에 설치되어 있을 때만 활성화됩니다.
     /// </summary>
     public class PreBuildStep_ValidateInspectorSlots : IPreBuildStep
     {
@@ -40,3 +42,4 @@ namespace HB.TestFrameworkHelper.Editor
         }
     }
 }
+#endif
