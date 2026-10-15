@@ -1,19 +1,22 @@
 # Custom Unity Tools
 
 Unity 프로젝트 개발 생산성, 로깅, 최적화, 자동화 및 QA 검증을 위한 커스텀 패키지 도구 모음입니다.  
-각 툴은 **Unity Package Manager (UPM)**의 Git URL을 통해 프로젝트에 독립적으로 임포트하여 사용할 수 있습니다.
+각 툴은 Unity Package Manager (UPM)의 Git URL을 통해 프로젝트에 독립적으로 임포트하여 사용할 수 있습니다.
+
+## 저장소의 목적
+AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴이나 만들까? 가 점점 커져버림
 
 ---
 
-## 📦 UPM 패키지 설치 방법 (Installation)
+## UPM 패키지 설치 방법 (Installation)
 
 1. Unity 에디터 상단 메뉴에서 **Window > Package Manager**를 엽니다.
-2. 좌측 상단의 **`+`** 버튼을 클릭하고 **`Add package from git URL...`**을 선택합니다.
+2. 좌측 상단의 `+` 버튼을 클릭하고 **`Add package from git URL...`**을 선택합니다.
 3. 아래 목록에서 원하는 도구의 **UPM Git URL**을 복사하여 입력한 뒤 **`Add`**를 클릭합니다.
 
 ---
 
-## 🛠️ 도구 목록 (Tools)
+## 도구 목록 (Tools)
 
 | 도구명 | UPM Git URL | 설명 | 문서 링크 |
 | :--- | :--- | :--- | :---: |
