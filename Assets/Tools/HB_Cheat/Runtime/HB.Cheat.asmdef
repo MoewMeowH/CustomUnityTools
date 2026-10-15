@@ -1,0 +1,24 @@
+{
+    "name": "HB.Cheat",
+    "rootNamespace": "HB.Cheat",
+    "references": [
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "HB_CHEAT"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "1.0.0",
+            "define": "HB_CHEAT_INPUT_SYSTEM"
+        }
+    ],
+    "noEngineReferences": false
+}

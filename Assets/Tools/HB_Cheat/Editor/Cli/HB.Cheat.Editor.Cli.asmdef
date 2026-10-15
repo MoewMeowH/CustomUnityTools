@@ -1,0 +1,28 @@
+{
+    "name": "HB.Cheat.Editor.Cli",
+    "rootNamespace": "HB.Cheat.Editor",
+    "references": [
+        "HB.Cheat",
+        "Unity.Pipeline.Attributes"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "HB_CHEAT",
+        "HB_CHEAT_PIPELINE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.pipeline",
+            "expression": "0.0.1",
+            "define": "HB_CHEAT_PIPELINE"
+        }
+    ],
+    "noEngineReferences": false
+}

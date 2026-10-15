@@ -1,0 +1,21 @@
+{
+    "name": "HB.Cheat.Editor.Generator",
+    "rootNamespace": "HB.Cheat.Editor",
+    "references": [
+        "HB.Cheat",
+        "HB.Cheat.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "HB_CHEAT"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
