@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -100,8 +100,10 @@ public static class BuildHelper
     public const string OUTPUT_PATH = "outputPath";
     public const string PROVISION_UUID = "provisionUuid";
     public const string ZIP_PACKAGE = "zipPackage";
+    public const string BUILD_PROFILE = "buildProfile";
 
     public const string USER_BUILD_DATA_DIR = "Assets/Editor/HBBuild";
+    public const string USER_PROFILES_DIR = "Assets/Editor/HBBuild/Profiles";
     public const string USER_DEFINE_CONTAINER_PATH = "Assets/Editor/HBBuild/DefineContainer.asset";
     public const string USER_SCENE_DEFINE_PATH = "Assets/Editor/HBBuild/SceneDefine.asset";
     public const string NONE_SCENE_LIST = "NONE";
