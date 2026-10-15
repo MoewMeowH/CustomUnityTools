@@ -1,6 +1,6 @@
 # HB_E2String
 
-`Enum.ToString()`, `Enum.Parse()`, `Enum.IsDefined()`, `Enum.GetValues()` 호출 시 발생하는 리플렉션·박싱(Boxing) 및 힙 할당을 제거하기 위한 Roslyn Source Generator(`EString.dll`) 및 에디터 관리 도구입니다.
+`Enum.ToString()`, `Enum.Parse()`, `Enum.IsDefined()` 호출 시 발생하는 리플렉션·박싱(Boxing) 및 힙 할당을 제거하기 위한 Roslyn Source Generator(`EString.dll`) 및 에디터 관리 도구입니다.
 
 ---
 
@@ -12,41 +12,122 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String
 
 ---
 
-## 주요 기능
-- **Roslyn Source Generator (`E2StringGenerator`)**:
-  - `[E2String]` 어트리뷰트가 선언된 Enum을 컴파일 타임에 탐색하여 `{EnumName}_Extensions.g.cs` 파일을 자동 생성합니다.
-  - **상수 및 캐시 컬렉션**: `Count`, `Names`(`string[]`), `AllNames`(`IReadOnlyList<string>`), `Values`(`T[]`), `AllValues`(`IReadOnlyList<T>`)
-  - **Enum <-> String 변환**: `switch` 식 기반의 `ToStringFast(fallback)`, `To{EnumName}(fallback)`, `TryParseFast(value, out result, fallback)`
-  - **Enum <-> Int 변환**: Unity 2021.3 이상에서는 `UnsafeUtility.As<T, int>`를, 그 외 환경에서는 명시적 캐스팅을 사용하는 `ToInt()`, `ToIntFast()`, `To{EnumName}(int, fallback)`, `To{EnumName}Fast(int)`
-  - **유효성 검사**: `switch` 식 기반의 `IsDefined(T value)` 및 `IsDefined(int value)`
-- **에디터 매니저 윈도우 (`Tools > HB > E2String Manager`)**:
-  - 프로젝트 내 `[E2String]`이 적용된 모든 Enum 목록과 멤버, 선언 위치를 스캔하여 시각화합니다.
-  - 프로젝트 내 `E2StringAttribute.cs` 존재 여부를 확인하고, 서버 공유 디렉터리 등 `Assets` 하위 경로에 어트리뷰트 스크립트를 생성하는 기능을 제공합니다.
+## 시작하기
+
+1. 패키지를 설치합니다. `Plugins/EString.dll`이 `RoslynAnalyzer` 라벨로 들어 있어 별도 설정이 필요 없습니다.
+2. `Tools > HB > E2String Manager`를 엽니다.
+3. **1. 어트리뷰트 스크립트 상태**에서 생성 폴더를 정하고 **E2StringAttribute 스크립트 생성**을 누릅니다.
+   - 어트리뷰트(`E2StringAttribute`)와 옵션(`E2StringOptions`)은 패키지에 들어 있지 않습니다. 서버와 공유하는 폴더 등 원하는 `Assets` 하위 위치에 직접 생성합니다.
+   - **글로벌 + EString.Script 호환**(기본): 글로벌 네임스페이스와 `EString.Script` 양쪽에 어트리뷰트를 만듭니다. `using` 없이 바로 쓸 수 있습니다.
+   - 체크를 해제하면 지정한 네임스페이스에만 만듭니다. 비워두면 글로벌에만 만듭니다.
+4. Enum에 `[E2String]`을 붙이면 컴파일 시 `{Enum}Extensions` 클래스가 생성됩니다.
+
+> 이전 버전으로 생성한 `E2StringAttribute.cs`에는 `E2StringOptions`가 없습니다. 옵션을 쓰려면 매니저에서 다시 생성(덮어쓰기)하세요.
+
+## 옵션 (`E2StringOptions`)
+
+어트리뷰트에 옵션을 넘겨 생성할 멤버를 고릅니다. 생략하면 `ParseExact`(문자열 변환만)입니다.
+
+```csharp
+[Flags]
+public enum E2StringOptions
+{
+    ParseExact    = 0,       // ToStringFast, To{Enum}Fast(string) — 항상 생성
+    IntConversion = 1 << 1,  // ToIntFast, To{Enum}Fast(int), IsDefinedFast (+ [Flags]면 IsValidFlagsFast)
+    Collections   = 1 << 2,  // Values
+    All           = ~0,
+}
+```
 
 ## 사용 예시
 
 ```csharp
-[E2String]
-public enum CharacterState
-{
-    Idle,
-    Move,
-    Attack,
-    Die
-}
+[E2String]                                         // ParseExact: 문자열 변환만
+public enum Region { Kr, Us }
 
-// 1. 제로 할당 문자열 변환
-string stateName = CharacterState.Move.ToStringFast(); // "Move"
+[E2String(E2StringOptions.All)]
+public enum CharacterState { Idle, Move, Attack, Die }
 
-// 2. 빠른 파싱
-if (CharacterStateExtensions.TryParseFast("Attack", out CharacterState result))
-{
-    // result == CharacterState.Attack
-}
+[E2String(E2StringOptions.IntConversion), System.Flags]
+public enum Perm { None = 0, Read = 1, Write = 2, Exec = 4 }
 
-// 3. 캐시된 값 순회 (GC Alloc 0)
-foreach (var name in CharacterStateExtensions.AllNames)
-{
-    // ...
-}
+// 1. Enum -> String (할당 없음)
+string name  = CharacterState.Move.ToStringFast();          // "Move"
+string bad   = ((CharacterState)9).ToStringFast();          // "not defined CharacterState"
+string bad2  = ((CharacterState)9).ToStringFast("?");       // "?"
+
+// 2. String -> Enum (정확히 일치)
+CharacterState s1 = "Attack".ToCharacterStateFast();                         // Attack
+CharacterState s2 = "attack".ToCharacterStateFast();                         // 대소문자가 달라 실패 → default (Idle)
+CharacterState s3 = "Jump".ToCharacterStateFast(fallback: CharacterState.Idle); // 실패 시 fallback
+
+// 3. Enum <-> int (IntConversion)
+int  i  = CharacterState.Attack.ToIntFast();                 // 2
+CharacterState s4 = 1.ToCharacterStateFast();                // 정의 검사 후 변환
+bool ok = CharacterStateExtensions.IsDefinedFast(5);         // false
+
+// 4. 값 순회 (Collections) — 배열을 for로 돌면 GC 0
+var values = CharacterStateExtensions.Values;
+for (int k = 0; k < values.Length; k++) { /* ... */ }
+
+// [Flags]
+string p  = (Perm.Read | Perm.Exec).ToStringFast();          // "Read, Exec" (조합마다 첫 호출에서만 할당 후 캐시)
+Perm   q  = "Read, Exec".ToPermFast();                       // 조합 파싱
+bool   vf = PermExtensions.IsValidFlagsFast(5);              // true
 ```
+
+## 생성되는 멤버
+
+클래스 이름은 `{바깥타입_}{Enum}Extensions`이며 Enum과 같은 네임스페이스에 생성됩니다 (예: 중첩 `Outer.MyEnum` → `Outer_MyEnumExtensions`).
+Enum이 `internal`이면 클래스도 `internal`로 생성됩니다.
+
+| 옵션 | 멤버 | 설명 |
+|---|---|---|
+| (항상) | `string ToStringFast(this T, string fallback = "not defined {Enum}")` | switch로 문자열 반환. 정의 밖 값이면 `fallback` |
+| (항상) | `T To{Enum}Fast(this string?, T fallback = default)` | 이름이 대소문자까지 정확히 일치해야 함 (공백·숫자 문자열 불허) |
+| IntConversion | `int ToIntFast(this T)` | Enum → int (명시적 캐스트) |
+| IntConversion | `T To{Enum}Fast(this int, T fallback = default)` | 정의 검사 후 변환 (`[Flags]`는 조합 검사) |
+| IntConversion | `static bool IsDefinedFast(T)` / `IsDefinedFast(int)` | 이름이 정의된 값인지 검사 |
+| IntConversion | `static bool IsValidFlagsFast(T)` / `IsValidFlagsFast(int)` | `[Flags]` 전용. 정의된 플래그 조합인지 검사 (0 포함) |
+| Collections | `static readonly T[] Values` | 값 (선언 순서, 별칭 포함) |
+
+### 동작 규칙
+
+- **기본 형식**: `byte` ~ `ulong` 모두 지원합니다. int 범위를 벗어난 멤버가 있으면 `IntConversion`일 때 경고 `E2S003`이 뜨며, int API는 그 멤버를 다루지 못합니다.
+- **같은 값의 별칭**(`A = 1, B = 1`): `ToStringFast`는 먼저 선언된 이름을 반환하고, 문자열 파싱은 두 이름 모두 받습니다.
+- **`[Flags]`**: 조합 값을 `"A, B"` 형식으로 출력·파싱합니다. 정의된 플래그로 표현할 수 없는 값은 `fallback`이 됩니다.
+- **키워드 멤버**: `@class` 같은 멤버는 `"class"`로 출력·파싱합니다.
+
+### 생성하지 않는 경우 (경고)
+
+| ID | 상황 |
+|---|---|
+| `E2S001` | 제네릭 타입(`Outer<T>`) 안의 Enum |
+| `E2S002` | Enum 또는 바깥 타입이 `private` · `protected` |
+| `E2S004` | 생성 클래스 이름이 같은 네임스페이스에서 겹침 (예: 최상위 `Outer_E`와 중첩 `Outer.E`) |
+
+## 에디터 매니저 윈도우 (`Tools > HB > E2String Manager`)
+
+- **어트리뷰트 스크립트 상태**: 프로젝트에 `E2StringAttribute` 정의가 있는지 확인하고, 없으면 원하는 위치에 생성합니다.
+- **E2String 적용 Enum 목록**: `[E2String]`이 붙은 Enum과 멤버, 선언 위치를 보여줍니다.
+  - **호출 복사**: 해당 Enum의 옵션에 맞는 호출 예시 코드를 클립보드에 복사합니다.
+- **가이드**: 생성되는 확장 메서드 요약을 보여줍니다.
+
+## 성능 (Unity 7 IL2CPP · Windows x64 · 100개 멤버 Enum · 호출 1회 기준)
+
+| | 기존 | E2String |
+|---|---|---|
+| Enum → String | `ToString()` 55.6 ns | `ToStringFast()` 11.2 ns |
+| String → Enum | `Enum.TryParse` 765 ns | `To{Enum}Fast(string)` 16.1 ns |
+| 정의 검사 | `Enum.IsDefined` 149 ns / 20 B | `IsDefinedFast` 1.1 ns / 0 B |
+| 전체 값 순회 (원소당) | `Enum.GetValues` 184 ns / 44.6 B | `Values` 0.8 ns / 0 B |
+
+시간은 Release, 할당은 Development 플레이어 기준입니다. IL2CPP에서는 `ToString()` · `Enum.TryParse`도 할당하지 않으므로 이득은 주로 속도입니다.
+비용은 Enum 하나당 `GameAssembly.dll` 약 +19 KB입니다. CoreCLR · Unity 6.x Mono 수치, 빌드 크기, 측정 방법은 [벤치마크 리포트](https://github.com/MoewMeowH/CustomUnityTools/blob/main/Assets/Tools/Benchmarks/E2String/Benchmark.md)를 참고하세요.
+
+## 주의 사항
+
+- 문자열 → Enum 변환은 대소문자를 구분합니다. 대소문자 무시 파싱은 벤치마크에서 기본 API보다 이득이 없어 제공하지 않습니다.
+- `[Flags]` 조합 문자열 캐시는 프로세스가 끝날 때까지 유지됩니다. 서로 다른 조합 값이 아주 많이 생기는 용도라면 메모리를 확인하세요.
+- `Values`는 배열이라 외부에서 내용을 바꿀 수 있습니다. 수정하지 마세요.
+- 매니저의 Enum 목록·호출 복사는 소스 텍스트를 스캔해 옵션을 판단합니다. `(E2StringOptions)6`처럼 숫자로 지정한 옵션은 인식하지 않습니다 (코드 생성에는 영향 없음).
