@@ -138,6 +138,19 @@ CheatSystem.ReportServerResult(packet.Result == Result.Success, packet.Result.To
 > `BuildPlayerOptions.extraScriptingDefines`로 넣은 심볼은 빌드 리포트에서 읽을 수 없습니다. 그 경로로 릴리즈를 빌드한다면 `HB_CHEAT_RELEASE=1`을 함께 설정하세요. (HB_Build는 PlayerSettings를 쓰므로 해당되지 않습니다.)
 > 빌드 가드는 산출물을 만들기 전에 멈추는 장치입니다. 배포 단계(CI)의 검사를 대신하지 않습니다.
 
+### IDE(Rider · Visual Studio) 표시
+
+치트 심볼이 꺼져 있으면 IDE에서 치트 코드가 다르게 보입니다. **실제 Unity 컴파일에는 문제가 없습니다**.
+
+| 치트 코드 위치 | 심볼 OFF일 때 IDE 표시 |
+|---|---|
+| Assembly-CSharp (`#if DEV_CHEAT`) | `#if` 안쪽이 회색(비활성)으로 보임 |
+| 치트 전용 asmdef | Unity가 그 asmdef의 csproj를 **파일 없이** 만들기 때문에, 치트 파일이 프로젝트 밖 파일로 잡혀 **빨간 에러**로 보임 |
+
+치트를 작성하거나 수정하는 동안에는 에디터 플랫폼(보통 Standalone)에서 심볼을 켜 두세요. 릴리즈 빌드는 빌드 가드가 막습니다.
+`Tools > HB > Cheat`는 치트 asmdef가 있는데 현재 플랫폼의 심볼이 꺼져 있으면 경고와 `켜기` 버튼을 보여줍니다.
+(External Tools에서 Git packages의 csproj 생성을 켰다면 패키지 코드도 같은 이유로 빨갛게 보일 수 있습니다.)
+
 ---
 
 ## 🖥 InGameConsole 연동

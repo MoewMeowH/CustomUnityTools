@@ -17,12 +17,36 @@ namespace HB.Cheat.Editor
         private SerializedObject m_SerializedSettings;
         private string m_NewClassName = "ItemCheats";
 
+        // 치트 심볼을 defineConstraints로 요구하는 프로젝트 asmdef (패키지 자체 asmdef 제외)
+        private string[] m_ConstrainedCheatAsmdefs = System.Array.Empty<string>();
+
         [MenuItem("Tools/HB/Cheat", priority = 30)]
         public static void Open()
         {
             var window = GetWindow<CheatEditorWindow>("HB Cheat");
             window.minSize = new Vector2(460, 520);
             window.Show();
+        }
+
+        private void OnEnable() => RefreshConstrainedAsmdefs();
+
+        private void OnProjectChange()
+        {
+            RefreshConstrainedAsmdefs();
+            Repaint();
+        }
+
+        private void RefreshConstrainedAsmdefs()
+        {
+            m_ConstrainedCheatAsmdefs = AssetDatabase.FindAssets("t:AssemblyDefinitionAsset", new[] { "Assets" })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(path => !System.IO.Path.GetFileNameWithoutExtension(path).StartsWith("HB.Cheat", System.StringComparison.Ordinal))
+                .Where(path =>
+                {
+                    string text = System.IO.File.ReadAllText(path);
+                    return text.Contains("defineConstraints") && text.Contains($"\"{CheatDefines.CoreDefine}\"");
+                })
+                .ToArray();
         }
 
         private void OnGUI()
@@ -88,6 +112,8 @@ namespace HB.Cheat.Editor
                 }
             }
 
+            DrawIdeProjectWarning(settings);
+
             var profileDefines = CheatDefines.GetActiveProfileDefines();
             if (profileDefines.Contains(CheatDefines.CoreDefine) || profileDefines.Contains(settings.UserDefine))
             {
@@ -98,6 +124,28 @@ namespace HB.Cheat.Editor
             {
                 EditorGUILayout.HelpBox($"InGameConsole이 UPM 패키지가 아닌 Assets 폴더에 있어 {CheatDefines.ConsoleDefine}를 심볼과 함께 관리합니다.", MessageType.None);
             }
+        }
+
+        /// <summary>
+        /// 치트 asmdef는 심볼이 꺼지면 Unity가 파일 없는 csproj를 만들어, IDE(Rider 등)에서 치트 파일이 프로젝트 밖으로 잡히고 에러로 표시된다.
+        /// </summary>
+        private void DrawIdeProjectWarning(CheatSettings settings)
+        {
+            if (m_ConstrainedCheatAsmdefs.Length == 0) return;
+
+            var activeGroup = BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget);
+            var activeTarget = NamedBuildTarget.FromBuildTargetGroup(activeGroup);
+            var defines = CheatDefines.GetDefines(activeTarget);
+            if (defines.Contains(CheatDefines.CoreDefine) && defines.Contains(settings.UserDefine)) return;
+
+            EditorGUILayout.HelpBox(
+                $"현재 플랫폼({activeTarget.TargetName})에서 치트 심볼이 꺼져 있어, 다음 asmdef의 치트 코드가 IDE에서 프로젝트 밖 파일로 표시됩니다 (빨간 에러, 실제 Unity 컴파일과는 무관).\n" +
+                string.Join("\n", m_ConstrainedCheatAsmdefs.Select(p => "  - " + p)) +
+                "\n치트를 작성·수정하는 동안에는 켜 두세요. 릴리즈 빌드는 빌드 가드가 막습니다.",
+                MessageType.Warning);
+
+            if (GUILayout.Button($"{activeTarget.TargetName}에서 켜기"))
+                CheatDefines.SetEnabled(activeTarget, true);
         }
 
         private void DrawSettingsAsset()
