@@ -101,6 +101,7 @@ public static class BuildHelper
     public const string PROVISION_UUID = "provisionUuid";
     public const string ZIP_PACKAGE = "zipPackage";
     public const string BUILD_PROFILE = "buildProfile";
+    public const string DISABLED_STEPS = "disabledSteps";
 
     public const string USER_BUILD_DATA_DIR = "Assets/Editor/HBBuild";
     public const string USER_PROFILES_DIR = "Assets/Editor/HBBuild/Profiles";
@@ -195,13 +196,25 @@ public static class BuildHelper
         return string.Empty;
     }
 
+    /// <summary>
+    /// 기본 출력 경로 (프로젝트 루트 기준 상대 경로). 절대 경로를 프로필에 저장하지 않도록 상대 경로로 반환합니다.
+    /// </summary>
     public static string GetDefaultOutputPath(BuildTarget target)
     {
-        string root = string.IsNullOrEmpty(ProjectPath) 
-            ? Path.GetFullPath(Path.Combine(Application.dataPath, "..")) 
-            : ProjectPath;
+        return Path.Combine("BuildOutput", target.ToString()).Replace('\\', '/');
+    }
 
-        return Path.Combine(root, "BuildOutput", target.ToString());
+    /// <summary>
+    /// 상대 경로를 프로젝트 루트 기준 절대 경로로 변환합니다.
+    /// </summary>
+    public static string ResolveProjectRelativePath(string path)
+    {
+        if (Path.IsPathRooted(path)) return path;
+
+        string root = string.IsNullOrEmpty(ProjectPath)
+            ? Path.GetFullPath(Path.Combine(Application.dataPath, ".."))
+            : ProjectPath;
+        return Path.GetFullPath(Path.Combine(root, path));
     }
 
     public static void Log(string str)
@@ -226,23 +239,15 @@ public static class BuildHelper
         _ => BuildTargetGroup.Standalone,
     };
 
+    /// <summary>
+    /// Build Settings에서 활성화된 씬 목록을 반환합니다. 없으면 빈 배열 (빌드 시 실패 처리됨).
+    /// </summary>
     public static string[] GetDefaultBuildScenes()
     {
-        var scenes = EditorBuildSettings.scenes
+        return EditorBuildSettings.scenes
             .Where(s => s.enabled && !string.IsNullOrEmpty(s.path))
             .Select(s => s.path)
             .ToArray();
-
-        if (scenes.Length > 0)
-            return scenes;
-
-        var foundGuids = AssetDatabase.FindAssets("t:Scene", new[] { "Assets" });
-        if (foundGuids.Length > 0)
-        {
-            return new[] { AssetDatabase.GUIDToAssetPath(foundGuids[0]) };
-        }
-
-        return Array.Empty<string>();
     }
 
     /// <summary>

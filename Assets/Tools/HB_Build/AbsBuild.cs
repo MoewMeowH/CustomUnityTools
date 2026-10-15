@@ -22,6 +22,7 @@ public sealed class BuildProcess
 /// <summary>
 /// 빌드 파이프라인 오케스트레이터입니다.
 /// IPreBuildStep 설정 실행 -> Unity BuildPipeline.BuildPlayer -> IPostBuildStep 사후 처리만 순수하게 수행합니다.
+/// 스텝이 변경한 PlayerSettings 등은 빌드 성공/실패와 관계없이 빌드 전 상태로 복원합니다.
 /// </summary>
 public static class AbsBuild
 {
@@ -29,35 +30,72 @@ public static class AbsBuild
     {
         EnsureActiveBuildTarget(context.TargetGroup, context.Target);
 
+        var snapshot = BuildSettingsSnapshot.Capture(context.TargetGroup);
+        bool pipelineSucceeded = false;
         var sw = Stopwatch.StartNew();
         Log($"==========================================================================");
         Log($"🚀 [Build Pipeline Started] Target: {context.Target} | Mode: {context.BuildType} | Version: {context.Version}");
         Log($"==========================================================================");
 
-        // 1. 사전 빌드 스텝들 순차 실행 (IPreBuildStep)
-        BuildStepRegistry.ExecutePreBuildSteps(context);
-
-        // 2. 실제 Unity 빌드 실행
-        Log($"[Pipeline] Invoking Unity BuildPipeline.BuildPlayer -> {context.PlayerOptions.locationPathName}");
-        BuildReport report = BuildPipeline.BuildPlayer(context.PlayerOptions);
-        context.Report = report;
-
-        if (report.summary.result != BuildResult.Succeeded)
+        try
         {
-            throw ThrowError($"Build Failed: Result={report.summary.result}, Errors={report.summary.totalErrors}");
+            // 1. 사전 빌드 스텝들 순차 실행 (IPreBuildStep)
+            BuildStepRegistry.ExecutePreBuildSteps(context);
+
+            if (context.PlayerOptions.scenes == null || context.PlayerOptions.scenes.Length == 0)
+            {
+                throw ThrowError("No scenes to build. Enable scenes in Build Settings or set the scene list in the build profile.");
+            }
+
+            // Windows는 같은 이름의 빌드 폴더가 있으면 덮어쓰지 않고 "이름 (2)" 폴더로 분리한다 (이전 빌드 잔여 파일 섞임 방지)
+            if (context.Target is BuildTarget.StandaloneWindows or BuildTarget.StandaloneWindows64)
+                context.PlayerOptions.locationPathName = GetUniqueBuildFolderLocation(context.PlayerOptions.locationPathName);
+
+            string outputDir = Path.GetDirectoryName(context.PlayerOptions.locationPathName);
+            if (!string.IsNullOrEmpty(outputDir))
+                Directory.CreateDirectory(outputDir);
+
+            // 2. 실제 Unity 빌드 실행
+            Log($"[Pipeline] Invoking Unity BuildPipeline.BuildPlayer -> {context.PlayerOptions.locationPathName}");
+            BuildReport report = BuildPipeline.BuildPlayer(context.PlayerOptions);
+            context.Report = report;
+
+            if (report.summary.result != BuildResult.Succeeded)
+            {
+                throw ThrowError($"Build Failed: Result={report.summary.result}, Errors={report.summary.totalErrors}");
+            }
+
+            Log($"[Pipeline] Build Succeeded! Output Size: {report.summary.totalSize / (1024d * 1024d):F1} MB");
+
+            // 3. 사후 빌드 스텝들 순차 실행 (IPostBuildStep)
+            BuildStepRegistry.ExecutePostBuildSteps(context);
+
+            sw.Stop();
+            Log($"==========================================================================");
+            Log($"🎉 [Build Pipeline Completed Successfully in {sw.Elapsed.TotalSeconds:F1}s]");
+            Log($"==========================================================================");
+
+            pipelineSucceeded = true;
+            return report;
         }
+        finally
+        {
+            try
+            {
+                snapshot.Restore();
+            }
+            catch (Exception restoreEx)
+            {
+                UnityEngine.Debug.LogException(restoreEx);
 
-        Log($"[Pipeline] Build Succeeded! Output Size: {report.summary.totalSize / (1024 * 1024):F1} MB");
+                // 빌드가 이미 실패했다면 원래 예외를 가리지 않도록 경고만 남기고,
+                // 빌드는 성공했는데 복원만 실패했다면 설정이 바뀐 채 남으므로 실패로 처리한다
+                if (pipelineSucceeded)
+                    throw ThrowError($"Build succeeded but failed to restore build settings: {restoreEx.Message}");
 
-        // 3. 사후 빌드 스텝들 순차 실행 (IPostBuildStep)
-        BuildStepRegistry.ExecutePostBuildSteps(context);
-
-        sw.Stop();
-        Log($"==========================================================================");
-        Log($"🎉 [Build Pipeline Completed Successfully in {sw.Elapsed.TotalSeconds:F1}s]");
-        Log($"==========================================================================");
-
-        return report;
+                LogWarning($"[Pipeline] Failed to restore build settings: {restoreEx.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -77,6 +115,7 @@ public static class AbsBuild
 
     /// <summary>
     /// 에셋 경로를 통해 HBBuildProfile을 로드하여 빌드 파이프라인을 실행합니다. (Jenkins -buildProfile CLI 지원)
+    /// 경로가 틀리면 다른 프로필로 대체하지 않고 실패합니다.
     /// </summary>
     public static BuildReport ExecuteFromProfilePath(string profilePath)
     {
@@ -89,18 +128,8 @@ public static class AbsBuild
         var profile = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(profilePath);
         if (profile == null)
         {
-            string fileNameWithoutExt = Path.GetFileNameWithoutExtension(profilePath);
-            string[] guids = AssetDatabase.FindAssets($"t:HBBuildProfile {fileNameWithoutExt}");
-            if (guids != null && guids.Length > 0)
-            {
-                string resolvedPath = AssetDatabase.GUIDToAssetPath(guids[0]);
-                profile = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(resolvedPath);
-            }
-        }
-
-        if (profile == null)
-        {
-            throw ThrowError($"Failed to load HBBuildProfile at path: '{profilePath}'");
+            string available = string.Join("\n  ", HBBuildProfile.FindAllProfiles().Select(AssetDatabase.GetAssetPath));
+            throw ThrowError($"Failed to load HBBuildProfile at path: '{profilePath}'\nAvailable profiles:\n  {available}");
         }
 
         var context = profile.ToBuildContext();
@@ -110,8 +139,7 @@ public static class AbsBuild
 
     private static void ApplyCommandLineOverrides(BuildContext context)
     {
-        var buildTypeStr = GetArg(BUILD_TYPE);
-        if (!string.IsNullOrEmpty(buildTypeStr) && Enum.TryParse<EBuildType>(buildTypeStr, true, out var bType))
+        if (TryGetBuildTypeArg(out var bType))
         {
             Log($"[CLI Override] BuildType: {context.BuildType} -> {bType}");
             context.BuildType = bType;
@@ -131,22 +159,31 @@ public static class AbsBuild
             context.VersionCode = vCode;
         }
 
-        var devBuildStr = GetArg(DEV_BUILD);
-        if (!string.IsNullOrEmpty(devBuildStr) && bool.TryParse(devBuildStr, out bool dev))
+        if (TryGetBoolArg(DEV_BUILD, out bool dev))
         {
             Log($"[CLI Override] DevBuild: {context.IsDevBuild} -> {dev}");
             context.IsDevBuild = dev;
         }
 
-        var isAabStr = GetArg(IS_AAB);
-        if (!string.IsNullOrEmpty(isAabStr) && bool.TryParse(isAabStr, out bool aab))
+        if (TryGetBoolArg(DEEP_PROF, out bool deep))
+        {
+            Log($"[CLI Override] DeepProfile: {context.IsDeepProfile} -> {deep}");
+            context.IsDeepProfile = deep;
+        }
+
+        if (TryGetBoolArg(CLEAN_BUILD, out bool clean))
+        {
+            Log($"[CLI Override] CleanBuild: {context.IsCleanBuild} -> {clean}");
+            context.IsCleanBuild = clean;
+        }
+
+        if (TryGetBoolArg(IS_AAB, out bool aab))
         {
             Log($"[CLI Override] IsAab: {context.IsAab} -> {aab}");
             context.IsAab = aab;
         }
 
-        var zipStr = GetArg(ZIP_PACKAGE);
-        if (!string.IsNullOrEmpty(zipStr) && bool.TryParse(zipStr, out bool zip))
+        if (TryGetBoolArg(ZIP_PACKAGE, out bool zip))
         {
             Log($"[CLI Override] ZipPackage: {context.ZipPackage} -> {zip}");
             context.ZipPackage = zip;
@@ -159,14 +196,22 @@ public static class AbsBuild
             context.OutputPath = customOut;
         }
 
-        string ext = context.Target switch
+        if (TryGetDisabledStepsArg(out var disabledSteps))
         {
-            BuildTarget.Android => context.IsAab ? ".aab" : ".apk",
-            BuildTarget.StandaloneWindows or BuildTarget.StandaloneWindows64 => ".exe",
-            _ => ""
-        };
-        string appName = $"{Application.productName}_v{context.Version}_{context.BuildType}{ext}";
-        context.PlayerOptions.locationPathName = Path.Combine(context.OutputPath, appName);
+            Log($"[CLI Override] DisabledSteps: {string.Join(";", disabledSteps)}");
+            context.DisabledStepIds.Clear();
+            context.DisabledStepIds.UnionWith(disabledSteps);
+        }
+
+        // 딥 프로파일은 개발 빌드에서만 유효하다 (-devBuild false만 넘겨도 스텝이 딥 프로파일을 켜지 않도록)
+        if (!context.IsDevBuild && context.IsDeepProfile)
+        {
+            Log("[CLI Override] DeepProfile disabled because DevBuild is false.");
+            context.IsDeepProfile = false;
+        }
+
+        // 덮어쓴 값(개발 빌드, 경로 등)을 실제 빌드 옵션에 반영
+        context.RebuildPlayerOptions();
     }
 
     /// <summary>
@@ -178,12 +223,8 @@ public static class AbsBuild
         context.Target = target;
         context.TargetGroup = GetTargetGroup(target);
 
-        // 인자 파싱
-        var buildTypeStr = GetArg(BUILD_TYPE);
-        EBuildType bType = EBuildType.DEV;
-        if (!string.IsNullOrEmpty(buildTypeStr))
-            Enum.TryParse(buildTypeStr, true, out bType);
-        context.BuildType = bType;
+        // 인자 파싱 (값이 있는데 잘못된 경우 기본값으로 대체하지 않고 실패)
+        context.BuildType = TryGetBuildTypeArg(out var bType) ? bType : EBuildType.DEV;
 
         var ver = GetArg(BUILD_VERSION);
         context.Version = !string.IsNullOrEmpty(ver) ? ver : Application.version;
@@ -191,17 +232,14 @@ public static class AbsBuild
         var vCode = GetArg(VERSION_CODE);
         context.VersionCode = !string.IsNullOrEmpty(vCode) ? vCode : "1";
 
-        context.IsDevBuild = IsDevBuild;
-        context.IsDeepProfile = IsDeepProfile;
-        context.IsCleanBuild = IsCleanBuild;
+        context.IsDevBuild = TryGetBoolArg(DEV_BUILD, out bool dev) && dev;
+        context.IsDeepProfile = context.IsDevBuild && TryGetBoolArg(DEEP_PROF, out bool deep) && deep;
+        context.IsCleanBuild = TryGetBoolArg(CLEAN_BUILD, out bool clean) && clean;
+        context.IsAab = TryGetBoolArg(IS_AAB, out bool isAab) && isAab;
+        context.ZipPackage = TryGetBoolArg(ZIP_PACKAGE, out bool zip) && zip;
 
-        var isAabStr = GetArg(IS_AAB);
-        if (bool.TryParse(isAabStr, out bool isAab))
-            context.IsAab = isAab;
-
-        var zipStr = GetArg(ZIP_PACKAGE);
-        if (bool.TryParse(zipStr, out bool zip))
-            context.ZipPackage = zip;
+        if (TryGetDisabledStepsArg(out var disabledSteps))
+            context.DisabledStepIds.UnionWith(disabledSteps);
 
         var customOut = GetArg(OUTPUT_PATH);
         context.OutputPath = !string.IsNullOrEmpty(customOut) ? customOut : GetDefaultOutputPath(target);
@@ -217,41 +255,72 @@ public static class AbsBuild
             context.Scenes = GetDefaultBuildScenes().ToList();
         }
 
-        // 출력 파일 경로 생성
-        string ext = target switch
-        {
-            BuildTarget.Android => context.IsAab ? ".aab" : ".apk",
-            BuildTarget.StandaloneWindows or BuildTarget.StandaloneWindows64 => ".exe",
-            _ => ""
-        };
-
-        if (!Directory.Exists(context.OutputPath))
-            Directory.CreateDirectory(context.OutputPath);
-
-        string appName = $"{Application.productName}_v{context.Version}_{context.BuildType}{ext}";
-        string locationPath = Path.Combine(context.OutputPath, appName);
-
-        // BuildPlayerOptions 구성
-        context.PlayerOptions = new BuildPlayerOptions
-        {
-            scenes = context.Scenes.ToArray(),
-            target = target,
-            targetGroup = context.TargetGroup,
-            locationPathName = locationPath,
-            options = BuildOptions.CompressWithLz4HC
-        };
-
-        if (context.IsDevBuild)
-        {
-            context.PlayerOptions.options |= BuildOptions.Development;
-            if (context.IsDeepProfile) context.PlayerOptions.options |= BuildOptions.EnableDeepProfilingSupport;
-        }
-        if (context.IsCleanBuild)
-        {
-            context.PlayerOptions.options |= BuildOptions.CleanBuildCache;
-        }
-
+        context.RebuildPlayerOptions();
         return Execute(context);
+    }
+
+    /// <summary>
+    /// OutputPath/&lt;이름&gt;/&lt;이름&gt;.exe 에서 &lt;이름&gt; 폴더가 이미 있으면 "&lt;이름&gt; (2)", "&lt;이름&gt; (3)" ... 중 비어 있는 폴더로 바꿉니다.
+    /// 실행 파일 이름은 그대로 둡니다.
+    /// </summary>
+    private static string GetUniqueBuildFolderLocation(string locationPathName)
+    {
+        string buildFolder = Path.GetDirectoryName(locationPathName);
+        if (string.IsNullOrEmpty(buildFolder) || !Directory.Exists(buildFolder))
+            return locationPathName;
+
+        string parent = Path.GetDirectoryName(buildFolder) ?? string.Empty;
+        string folderName = Path.GetFileName(buildFolder);
+        string exeName = Path.GetFileName(locationPathName);
+
+        for (int i = 2; ; i++)
+        {
+            string candidate = Path.Combine(parent, $"{folderName} ({i})");
+            if (!Directory.Exists(candidate) && !File.Exists(candidate + ".zip"))
+            {
+                Log($"[Pipeline] Build folder '{folderName}' already exists. Using '{Path.GetFileName(candidate)}' instead.");
+                return Path.Combine(candidate, exeName);
+            }
+        }
+    }
+
+    private static bool TryGetBuildTypeArg(out EBuildType buildType)
+    {
+        buildType = default;
+        string value = GetArg(BUILD_TYPE);
+        if (string.IsNullOrEmpty(value)) return false;
+
+        if (!Enum.TryParse(value, true, out buildType) || !Enum.IsDefined(typeof(EBuildType), buildType))
+        {
+            throw ThrowError($"Invalid -{BUILD_TYPE} argument: '{value}' (allowed: {string.Join(", ", Enum.GetNames(typeof(EBuildType)))})");
+        }
+        return true;
+    }
+
+    private static bool TryGetBoolArg(string argName, out bool result)
+    {
+        result = false;
+        string value = GetArg(argName);
+        if (string.IsNullOrEmpty(value)) return false;
+
+        if (!bool.TryParse(value, out result))
+        {
+            throw ThrowError($"Invalid -{argName} argument: '{value}' (expected true/false)");
+        }
+        return true;
+    }
+
+    private static bool TryGetDisabledStepsArg(out string[] stepIds)
+    {
+        string value = GetArg(DISABLED_STEPS);
+        if (string.IsNullOrEmpty(value))
+        {
+            stepIds = Array.Empty<string>();
+            return false;
+        }
+
+        stepIds = value.Split(';').Select(x => x.Trim()).Where(x => x.Length > 0 && x != NONE_SCENE_LIST).ToArray();
+        return true;
     }
 
     private static void EnsureActiveBuildTarget(BuildTargetGroup group, BuildTarget target)
@@ -259,6 +328,7 @@ public static class AbsBuild
         if (EditorUserBuildSettings.selectedBuildTargetGroup != group ||
             EditorUserBuildSettings.activeBuildTarget != target)
         {
+            // executeMethod 도중 전환하면 스크립트가 재컴파일되지 않으므로 CLI에서는 -buildTarget 지정을 권장
             Log($"Switching Active Target -> Group: {group}, Target: {target}");
             EditorUserBuildSettings.SwitchActiveBuildTarget(group, target);
         }

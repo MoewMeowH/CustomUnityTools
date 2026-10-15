@@ -19,8 +19,10 @@ public class PreBuildStep_FilterScenes : IPreBuildStep
 
     public virtual void OnPreBuild(BuildContext context)
     {
-        var sceneDefine = context.GetCustomData<SceneDefine>("SceneDefine", null) 
-                       ?? SceneDefine.LoadIfExists();
+        // UnityEngine.Object는 ?? 로 판정하지 않는다 (파괴/누락된 참조가 null로 취급되지 않음)
+        var sceneDefine = context.GetCustomData<SceneDefine>("SceneDefine", null);
+        if (sceneDefine == null)
+            sceneDefine = SceneDefine.LoadIfExists();
 
         if (sceneDefine == null) return;
 
@@ -78,8 +80,9 @@ public class PreBuildStep_ConfigDefines : IPreBuildStep
 
     public virtual void OnPreBuild(BuildContext context)
     {
-        var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null) 
-                     ?? ProjectDefine.LoadIfExists();
+        var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null);
+        if (container == null)
+            container = ProjectDefine.LoadIfExists();
 
         if (container == null)
         {
@@ -88,12 +91,19 @@ public class PreBuildStep_ConfigDefines : IPreBuildStep
         }
 
         var defines = container.GetDefineArray(context.BuildType, context.Target);
-        if (defines != null && defines.Length > 0)
+        if (defines == null)
         {
-            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(context.TargetGroup);
-            PlayerSettings.SetScriptingDefineSymbols(namedTarget, defines);
-            BuildHelper.Log($"[Defines] Applied {defines.Length} define(s) from DefineContainer: {string.Join(";", defines)}");
+            // 해당 빌드 타입/플랫폼 설정이 없으면 기존 심볼 유지
+            BuildHelper.Log($"[Defines] No define entry for {context.BuildType}/{context.Target}. Keeping existing symbols.");
+            return;
         }
+
+        // 설정은 있으나 리스트가 비어 있으면 심볼을 모두 제거한다
+        var namedTarget = NamedBuildTarget.FromBuildTargetGroup(context.TargetGroup);
+        PlayerSettings.SetScriptingDefineSymbols(namedTarget, defines);
+        BuildHelper.Log(defines.Length > 0
+            ? $"[Defines] Applied {defines.Length} define(s) from DefineContainer: {string.Join(";", defines)}"
+            : "[Defines] Define entry is empty. Cleared all scripting define symbols.");
     }
 }
 
@@ -112,8 +122,9 @@ public class PreBuildStep_AndroidSettings : IPreBuildStep
         var namedTarget = NamedBuildTarget.FromBuildTargetGroup(context.TargetGroup);
 
         PlayerSettings.bundleVersion = context.Version;
-        if (int.TryParse(context.VersionCode, out int vCode))
-            PlayerSettings.Android.bundleVersionCode = vCode;
+        if (!int.TryParse(context.VersionCode, out int vCode) || vCode <= 0)
+            throw BuildHelper.ThrowError($"Android versionCode must be a positive integer: '{context.VersionCode}'");
+        PlayerSettings.Android.bundleVersionCode = vCode;
 
         EditorUserBuildSettings.development = context.IsDevBuild;
         EditorUserBuildSettings.buildWithDeepProfilingSupport = context.IsDeepProfile;
@@ -198,14 +209,39 @@ public class PostBuildStep_ZipArchive : IPostBuildStep
         string exePath = context.PlayerOptions.locationPathName;
         if (!File.Exists(exePath)) return;
 
+        // 실행 파일은 버전별 하위 폴더(OutputPath/<이름>/<이름>.exe)에 있으므로 그 폴더만 압축하고,
+        // zip은 압축 대상 밖(상위 OutputPath)에 폴더 이름으로 생성한다 (중복 빌드 시 "<이름> (2).zip")
         string buildFolder = Path.GetDirectoryName(exePath);
-        string zipPath = Path.Combine(buildFolder, $"{Path.GetFileNameWithoutExtension(exePath)}.zip");
+        string zipPath = Path.Combine(Path.GetDirectoryName(buildFolder), $"{Path.GetFileName(buildFolder)}.zip");
 
         if (File.Exists(zipPath))
             File.Delete(zipPath);
 
         BuildHelper.Log($"[PostBuild] Creating ZIP package -> {zipPath}");
-        ZipFile.CreateFromDirectory(buildFolder, zipPath, CompressionLevel.Optimal, false);
-        BuildHelper.Log("[PostBuild] ZIP package created successfully!");
+        int skipped = 0;
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            foreach (string file in Directory.EnumerateFiles(buildFolder, "*", SearchOption.AllDirectories))
+            {
+                string relative = file.Substring(buildFolder.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (IsExcludedFromPackage(relative))
+                {
+                    skipped++;
+                    continue;
+                }
+                archive.CreateEntryFromFile(file, relative.Replace('\\', '/'), CompressionLevel.Optimal);
+            }
+        }
+        BuildHelper.Log($"[PostBuild] ZIP package created successfully! (excluded {skipped} debug/backup file(s))");
+    }
+
+    /// <summary>
+    /// Unity가 빌드 폴더에 함께 만드는 배포 금지 폴더(Burst 디버그 정보, IL2CPP 백업)는 압축에서 제외합니다.
+    /// </summary>
+    protected virtual bool IsExcludedFromPackage(string relativePath)
+    {
+        string topFolder = relativePath.Split('\\', '/')[0];
+        return topFolder.EndsWith("_DoNotShip", StringComparison.OrdinalIgnoreCase)
+            || topFolder.EndsWith("_ButDontShipItWithYourGame", StringComparison.OrdinalIgnoreCase);
     }
 }

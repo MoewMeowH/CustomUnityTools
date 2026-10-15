@@ -21,6 +21,11 @@ public class ProjectDefine : ScriptableObject
 
     [SerializeField] private List<Container> m_DefineContainer = new List<Container>();
 
+    /// <summary>
+    /// 빌드 타입/플랫폼에 해당하는 심볼 배열을 반환합니다.
+    /// - 해당 항목(설정)이 없으면 null → 기존 PlayerSettings 심볼 유지
+    /// - 항목은 있는데 리스트가 비어 있으면 빈 배열 → 심볼 없음으로 적용
+    /// </summary>
     public string[] GetDefineArray(EBuildType buildType, BuildTarget buildTarget)
     {
         var platformType = buildTarget switch
@@ -33,21 +38,21 @@ public class ProjectDefine : ScriptableObject
         if (platformType is EPlatformType.NONE)
         {
             Debug.LogError("[ProjectDefine] This Target Is Not Supported");
-            return Array.Empty<string>();
+            return null;
         }
 
         if (m_DefineContainer.IsNullOrEmptyCollection())
         {
-            return Array.Empty<string>();
+            return null;
         }
 
         var target = m_DefineContainer.Find(x => x != null && x.BuildType == buildType && x.PlatformType == platformType);
         if (target == null)
         {
-            return Array.Empty<string>();
+            return null;
         }
 
-        return target.DefineArr;
+        return target.DefineArr ?? Array.Empty<string>();
     }
 
     public bool SetDefineArray(EBuildType _buildType, EPlatformType _PlatformType, string[] defines)
