@@ -77,7 +77,8 @@ public static partial class InGameConsole
 
         var settings = InGameConsoleSettings.Instance;
         var go = new GameObject("[InGameConsole]");
-        
+
+#if UNITY_6000_0_OR_NEWER
         // Unity 6+ 권장 PanelRenderer 컴포넌트 생성 (UIDocument 대체)
         var panelRenderer = go.AddComponent<PanelRenderer>();
         panelRenderer.sortingOrder = 9999;
@@ -136,6 +137,66 @@ public static partial class InGameConsole
         }
 
         EnsureThemeStyleSheet(panelRenderer.panelSettings);
+#else
+        // Unity 2021 / 2022 호환: UIDocument 컴포넌트 생성
+        var uiDoc = go.AddComponent<UIDocument>();
+        uiDoc.sortingOrder = 9999;
+
+        if (settings != null)
+        {
+            uiDoc.panelSettings = settings.PanelSettings != null 
+                ? settings.PanelSettings 
+                : Resources.Load<PanelSettings>("HB_PanelSettings");
+
+            uiDoc.visualTreeAsset = settings.ConsoleVisualTree != null 
+                ? settings.ConsoleVisualTree 
+                : Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+        }
+
+        if (uiDoc.panelSettings == null)
+        {
+            uiDoc.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
+        }
+        if (uiDoc.visualTreeAsset == null)
+        {
+            uiDoc.visualTreeAsset = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
+        }
+
+#if UNITY_EDITOR
+        if (uiDoc.panelSettings == null)
+        {
+            string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
+            if (pGuids != null && pGuids.Length > 0)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
+                uiDoc.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
+            }
+        }
+
+        if (uiDoc.visualTreeAsset == null)
+        {
+            string[] vGuids = UnityEditor.AssetDatabase.FindAssets("HB_InGameConsole t:VisualTreeAsset");
+            if (vGuids != null && vGuids.Length > 0)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(vGuids[0]);
+                uiDoc.visualTreeAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
+            }
+        }
+#endif
+
+        if (uiDoc.panelSettings == null)
+        {
+            var fallback = ScriptableObject.CreateInstance<PanelSettings>();
+            fallback.name = "HB_RuntimePanelSettings";
+            fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+            fallback.referenceResolution = new Vector2Int(1200, 800);
+            fallback.match = 0.5f;
+            fallback.sortingOrder = 1000;
+            uiDoc.panelSettings = fallback;
+        }
+
+        EnsureThemeStyleSheet(uiDoc.panelSettings);
+#endif
 
         s_UIInstance = go.AddComponent<HB_InGameConsoleUI>();
 

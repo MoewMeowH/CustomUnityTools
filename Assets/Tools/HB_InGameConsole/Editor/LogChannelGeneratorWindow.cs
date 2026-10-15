@@ -1,4 +1,4 @@
-﻿﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,7 +15,7 @@ namespace InGameConsoleSystem.Editor
         private Vector2 scrollPosition;
         private Vector2 codePreviewScroll;
 
-        [MenuItem("Tools/InGameConsole/Log Channel Generator", priority = 101)]
+        [MenuItem("Tools/HB/In-Game Console/Log Channel Generator", priority = 12)]
         public static void OpenWindow()
         {
             var window = GetWindow<LogChannelGeneratorWindow>("Log Channel Generator");
@@ -26,7 +26,7 @@ namespace InGameConsoleSystem.Editor
         [InitializeOnLoadMethod]
         private static void CheckAndBootstrapChannels()
         {
-            // UPM 설치 직후 또는 에디터 로드 시, 프로젝트 내에 LogChannels.cs 가 없으면 기본 파일 자동 1회 생성
+            // UPM 패키지 임포트 직후 신규 프로젝트일 때, 프로젝트 폴더에 LogChannels.cs 가 없으면 기본 채널 파일 1회 자동 생성
             EditorApplication.delayCall += () =>
             {
                 EnsureLogChannelsExists();
@@ -34,7 +34,7 @@ namespace InGameConsoleSystem.Editor
         }
 
         /// <summary>
-        /// 프로젝트 내에 LogChannels.cs가 없는 경우(예: UPM 최초 설치 시) 기본 HLog 클래스 파일을 자동 생성합니다.
+        /// 프로젝트 폴더에 LogChannels.cs가 없을 경우(예: UPM 패키지 신규 설치 시) 기본 HLog 확장 클래스 파일을 자동 생성합니다.
         /// </summary>
         public static void EnsureLogChannelsExists()
         {
@@ -123,18 +123,18 @@ namespace InGameConsoleSystem.Editor
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.LabelField("HLog Channel Generator (Class Extension)", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("정적 partial 클래스 HLog를 확장하여 HLog.[Channel].Log 호출 클래스를 생성합니다.\n네임스페이스가 아닌 정적 클래스이므로 using HLog; 시의 UnityEngine.UI 등과의 이름 충돌을 원천 방지합니다.\nUPM 환경에서는 사용자의 Assets 경로에 자동 생성되어 원활히 컴파일됩니다.", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("정적 partial 클래스 HLog를 확장하여 HLog.[Channel].Log 형태의 인텔리센스 호출을 지원합니다.\n네임스페이스 없이 전역 클래스이므로 using HLog; 없이도 UnityEngine.UI 처럼 즉시 사용 가능합니다.\nUPM 패키지 환경에서도 생성 코드는 Assets 폴더에 안전하게 생성/관리됩니다.", EditorStyles.miniLabel);
             EditorGUILayout.EndVertical();
         }
 
         private void DrawSettingsSection()
         {
-            EditorGUILayout.LabelField("설정 관리 (Settings)", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("환경 설정 (Settings)", EditorStyles.boldLabel);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             EditorGUILayout.BeginHorizontal();
             EditorGUI.BeginChangeCheck();
-            var newSettings = (LogChannelGeneratorSettings)EditorGUILayout.ObjectField("설정 파일", settings, typeof(LogChannelGeneratorSettings), false);
+            var newSettings = (LogChannelGeneratorSettings)EditorGUILayout.ObjectField("설정 에셋", settings, typeof(LogChannelGeneratorSettings), false);
             if (EditorGUI.EndChangeCheck())
             {
                 settings = newSettings;
@@ -168,10 +168,10 @@ namespace InGameConsoleSystem.Editor
 
                 EditorGUI.BeginChangeCheck();
                 string newDir = EditorGUILayout.TextField("생성 경로", settings.OutputDirectory);
-                string newFile = EditorGUILayout.TextField("파일 이름", settings.OutputFileName);
+                string newFile = EditorGUILayout.TextField("파일명", settings.OutputFileName);
                 string newCond = EditorGUILayout.TextField("Conditional 심볼", settings.ConditionalSymbol);
-                bool newUseSame = EditorGUILayout.Toggle("변수명과 태그명 동일하게 사용", settings.UseSameName);
-                bool newAutoSave = EditorGUILayout.Toggle("설정 저장 시 자동 코드 갱신", settings.AutoGenerateOnSave);
+                bool newUseSame = EditorGUILayout.Toggle("변수명과 태그명을 동일하게 사용", settings.UseSameName);
+                bool newAutoSave = EditorGUILayout.Toggle("에디터 변경 시 자동 코드 갱신", settings.AutoGenerateOnSave);
 
                 if (EditorGUI.EndChangeCheck())
                 {
@@ -199,10 +199,10 @@ namespace InGameConsoleSystem.Editor
         private void DrawNoSettingsHelpBox()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.HelpBox("연결된 설정 파일(LogChannelGeneratorSettings.asset)이 없습니다.\n아래 [설정 파일 생성] 버튼을 누르면 새로운 세팅 에셋이 생성되어 채널 목록을 구성할 수 있습니다.", MessageType.Warning);
+            EditorGUILayout.HelpBox("프로젝트 설정 에셋(LogChannelGeneratorSettings.asset)이 필요합니다.\n아래 [설정 에셋 생성] 버튼을 클릭해 폴더에 설정 파일을 생성하면 채널 목록을 편집할 수 있습니다.", MessageType.Warning);
 
             EditorGUILayout.Space(6);
-            if (GUILayout.Button("설정 파일 생성 (Create Settings Asset)", GUILayout.Height(30)))
+            if (GUILayout.Button("설정 에셋 생성 (Create Settings Asset)", GUILayout.Height(30)))
             {
                 settings = LogChannelGeneratorSettings.CreateSettingsAsset();
                 if (settings != null)
@@ -216,7 +216,7 @@ namespace InGameConsoleSystem.Editor
 
         private void CreateNewSettingsAsset()
         {
-            string path = EditorUtility.SaveFilePanelInProject("새 설정 파일 저장", "LogChannelGeneratorSettings", "asset", "생성할 설정 파일 경로를 선택하세요.");
+            string path = EditorUtility.SaveFilePanelInProject("새 설정 에셋 저장", "LogChannelGeneratorSettings", "asset", "생성할 설정 파일 이름을 지정하세요.");
             if (!string.IsNullOrEmpty(path))
             {
                 settings = LogChannelGeneratorSettings.CreateSettingsAsset(path);
@@ -246,9 +246,9 @@ namespace InGameConsoleSystem.Editor
                     SaveCodeToFile(settings, silent: true);
                 }
             }
-            if (GUILayout.Button("목록 비우기", GUILayout.Width(75)))
+            if (GUILayout.Button("전체 비우기", GUILayout.Width(75)))
             {
-                if (EditorUtility.DisplayDialog("채널 목록 비우기", "등록된 모든 채널을 비우시겠습니까?", "예", "아니오"))
+                if (EditorUtility.DisplayDialog("채널 전체 비우기", "등록된 모든 채널을 비우시겠습니까?", "예", "아니오"))
                 {
                     Undo.RecordObject(settings, "Clear Channels");
                     channels.Clear();
@@ -283,7 +283,7 @@ namespace InGameConsoleSystem.Editor
                 {
                     using (new EditorGUI.DisabledScope(true))
                     {
-                        EditorGUILayout.TextField("태그명 (동기화됨)", item.varName);
+                        EditorGUILayout.TextField("태그명 (자동동기화)", item.varName);
                     }
                 }
                 else
@@ -331,14 +331,14 @@ namespace InGameConsoleSystem.Editor
         {
             EditorGUILayout.BeginHorizontal();
 
-            if (GUILayout.Button("클립보드에 복사", GUILayout.Height(32)))
+            if (GUILayout.Button("클립보드 복사", GUILayout.Height(32)))
             {
                 string code = GenerateCode(settings);
                 GUIUtility.systemCopyBuffer = code;
                 EditorUtility.DisplayDialog("복사 완료", "생성된 코드가 클립보드에 복사되었습니다.", "확인");
             }
 
-            if (GUILayout.Button("스크립트 파일 생성 (Save File)", GUILayout.Height(32)))
+            if (GUILayout.Button("스크립트 파일 갱신 (Save File)", GUILayout.Height(32)))
             {
                 SaveCodeToFile(settings, silent: false);
             }
@@ -369,7 +369,16 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("    public static void Clear() => HLogCore.Clear();");
             sb.AppendLine();
             sb.AppendLine("    /// <summary>");
-            sb.AppendLine("    /// 코드 생성 없이 동적으로 임의의 태그 채널을 가져와 로깅합니다.");
+            sb.AppendLine("    /// 전역 로그 활성화/비활성화 (에디터 및 런타임)");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    public static bool IsLogEnabled");
+            sb.AppendLine("    {");
+            sb.AppendLine("        get => HLogCore.IsLogEnabled;");
+            sb.AppendLine("        set => HLogCore.IsLogEnabled = value;");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// 동적 채널 호출 (코드 생성 없이도 원하는 태그 채널을 즉시 사용합니다.)");
             sb.AppendLine("    /// </summary>");
             sb.AppendLine("    public static LogChannel Get(string channelName) => HLogCore.GetChannel(channelName);");
             sb.AppendLine("    public static LogChannel Channel(string channelName) => HLogCore.GetChannel(channelName);");
@@ -385,7 +394,9 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("    }");
             sb.AppendLine();
 
-            string cond = settings != null ? settings.ConditionalSymbol : "USE_HLOG";
+            string cond = settings != null && !string.IsNullOrWhiteSpace(settings.ConditionalSymbol) 
+                ? settings.ConditionalSymbol.Trim() 
+                : "USE_HLOG";
 
             AppendChannelClass(sb, "Common", "Common", cond);
             sb.AppendLine();
@@ -418,20 +429,13 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("    {");
             sb.AppendLine($"        public static readonly LogChannel Channel = new LogChannel(\"{tagName}\");");
             sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"{cond}\")]");
+            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);");
             sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"{cond}\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void LogWarning(object message, UnityEngine.Object context = null) => Channel.LogWarning(message, context);");
-            sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"{cond}\")]");
+            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);");
-            sb.AppendLine();
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void LogError(object message, UnityEngine.Object context = null) => Channel.LogError(message, context);");
             sb.AppendLine();
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Error(object message, UnityEngine.Object context = null) => Channel.Error(message, context);");
@@ -442,12 +446,15 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Exception(Exception exception, UnityEngine.Object context = null) => Channel.Exception(exception, context);");
             sb.AppendLine();
+            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Watch(string key, object value) => Channel.Watch(key, value);");
             sb.AppendLine();
+            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Watch(string key, Func<object> getter) => Channel.Watch(key, getter);");
             sb.AppendLine();
+            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
             sb.AppendLine("        [HideInCallstack]");
             sb.AppendLine("        public static void Watch<T>(string key, Func<T> getter) => Channel.Watch<T>(key, getter);");
             sb.AppendLine();
@@ -501,7 +508,7 @@ namespace InGameConsoleSystem.Editor
                     Selection.activeObject = asset;
                 }
 
-                EditorUtility.DisplayDialog("생성 완료", $"성공적으로 파일을 생성했습니다:\n{filePath}", "확인");
+                EditorUtility.DisplayDialog("저장 완료", $"스크립트 파일이 갱신되었습니다:\n{filePath}", "확인");
             }
         }
 

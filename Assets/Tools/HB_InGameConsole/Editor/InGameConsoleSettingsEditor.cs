@@ -11,7 +11,7 @@ namespace InGameConsoleSystem.Editor
     {
         private const string SettingsAssetPath = "Assets/Tools/HB_InGameConsole/Resources/InGameConsoleSettings.asset";
 
-        [MenuItem("Tools/InGameConsole/Settings", priority = 100)]
+        [MenuItem("Tools/HB/In-Game Console/Settings", priority = 11)]
         public static void OpenSettings()
         {
             var settings = Resources.Load<InGameConsoleSettings>("InGameConsoleSettings");

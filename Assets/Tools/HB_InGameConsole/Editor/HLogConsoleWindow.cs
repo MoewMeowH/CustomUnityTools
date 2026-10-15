@@ -149,7 +149,7 @@ namespace InGameConsoleSystem.Editor
 
         #endregion
 
-        [MenuItem("Tools/InGameConsole/Console Window", priority = 90)]
+        [MenuItem("Tools/HB/In-Game Console/Console Window", priority = 90)]
         [MenuItem("Window/General/HLog Console", priority = 200)]
         public static void OpenWindow()
         {
@@ -1388,3 +1388,4 @@ namespace InGameConsoleSystem.Editor
     }
 }
 #endif
+

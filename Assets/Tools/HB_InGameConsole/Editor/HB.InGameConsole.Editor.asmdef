@@ -1,0 +1,18 @@
+﻿{
+    "name": "HB.InGameConsole.Editor",
+    "rootNamespace": "InGameConsoleSystem.Editor",
+    "references": [
+        "HB.InGameConsole"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

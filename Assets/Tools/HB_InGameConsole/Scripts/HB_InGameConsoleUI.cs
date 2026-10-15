@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using InGameConsoleSystem;
 using UnityEngine;
@@ -37,7 +37,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private const int MaxUiLogCount = 1000;
     private const int GraphSampleCount = 80;
 
+#if UNITY_6000_0_OR_NEWER
     private PanelRenderer panelRenderer;
+#endif
     private UIDocument uiDocument;
     private VisualElement rootElement;
     private int handledUIVersion = -1;
@@ -124,13 +126,17 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private bool isGraphCollapsed = false;
 
     public bool IsConsoleOpen => consoleWindow != null && !consoleWindow.ClassListContains("hb-hidden");
+#if UNITY_6000_0_OR_NEWER
     public PanelRenderer PanelRendererComponent => panelRenderer != null ? panelRenderer : (panelRenderer = GetComponent<PanelRenderer>());
+#endif
     public UIDocument Document => uiDocument != null ? uiDocument : (uiDocument = GetComponent<UIDocument>());
     public VisualElement RootElement => rootElement;
 
     private void Awake()
     {
+#if UNITY_6000_0_OR_NEWER
         panelRenderer = GetComponent<PanelRenderer>();
+#endif
         uiDocument = GetComponent<UIDocument>();
 
         var settings = InGameConsoleSettings.Instance;
@@ -149,12 +155,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void OnEnable()
     {
+#if UNITY_6000_0_OR_NEWER
         if (panelRenderer == null)
             panelRenderer = GetComponent<PanelRenderer>();
         if (uiDocument == null)
             uiDocument = GetComponent<UIDocument>();
 
-        // 둘 다 없으면 기본적으로 PanelRenderer 추가 (Unity 6+)
         if (panelRenderer == null && uiDocument == null)
         {
             panelRenderer = gameObject.AddComponent<PanelRenderer>();
@@ -170,6 +176,22 @@ public class HB_InGameConsoleUI : MonoBehaviour
         {
             InitializeWithRoot(uiDocument.rootVisualElement);
         }
+#else
+        if (uiDocument == null)
+            uiDocument = GetComponent<UIDocument>();
+
+        if (uiDocument == null)
+        {
+            uiDocument = gameObject.AddComponent<UIDocument>();
+        }
+
+        InitializePanelHost();
+
+        if (uiDocument != null)
+        {
+            InitializeWithRoot(uiDocument.rootVisualElement);
+        }
+#endif
 
         HLogCore.OnLogAdded += HandleLogAdded;
         HLogCore.OnLogsCleared += HandleLogsCleared;
@@ -177,6 +199,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         HLogCore.OnTagDiscovered += HandleTagDiscovered;
     }
 
+#if UNITY_6000_0_OR_NEWER
     private void OnPanelReloaded(PanelRenderer renderer, VisualElement root, int version)
     {
         if (version == handledUIVersion) return;
@@ -184,6 +207,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
         InitializeWithRoot(root);
     }
+#endif
 
     private void InitializeWithRoot(VisualElement root)
     {
@@ -211,6 +235,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
     {
         var settings = InGameConsoleSettings.Instance;
 
+#if UNITY_6000_0_OR_NEWER
         if (panelRenderer != null)
         {
             if (panelRenderer.visualTreeAsset == null)
@@ -273,7 +298,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
                 panelRenderer.sortingOrder = 9999;
             }
         }
-        else if (uiDocument != null)
+        else
+#endif
+        if (uiDocument != null)
         {
             if (uiDocument.visualTreeAsset == null)
             {
@@ -342,8 +369,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (rootElement == null) return;
 
         VisualTreeAsset vta = null;
+#if UNITY_6000_0_OR_NEWER
         if (panelRenderer != null) vta = panelRenderer.visualTreeAsset;
-        else if (uiDocument != null) vta = uiDocument.visualTreeAsset;
+        else
+#endif
+        if (uiDocument != null) vta = uiDocument.visualTreeAsset;
         if (vta == null) vta = consoleVisualTree;
 
         // VisualTree가 자동 클론되지 않은 경우 직접 복제
@@ -387,10 +417,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
             fpsGraphCanvas.generateVisualContent -= DrawFrameTimeGraph;
         }
 
+#if UNITY_6000_0_OR_NEWER
         if (panelRenderer != null)
         {
             panelRenderer.UnregisterUIReloadCallback(OnPanelReloaded);
         }
+#endif
 
         UnregisterCallbacks();
     }
