@@ -34,6 +34,16 @@ public class HB_InGameConsoleUI : MonoBehaviour
     [Header("Performance Monitor")]
     [SerializeField] private bool showFpsGraph = true;
 
+    [Header("Log List")]
+    [Tooltip("맨 아래를 보고 있을 때 새 로그를 따라 자동으로 스크롤합니다.")]
+    [SerializeField] private bool autoScroll = true;
+
+    // 사용자가 맨 아래를 보고 있는지 여부. 위로 스크롤하면 false가 되어 새 로그를 따라가지 않는다
+    private bool isStickToBottom = true;
+    // 코드에서 스크롤 값을 바꾸는 중에는 사용자 스크롤로 판단하지 않는다
+    private bool isProgrammaticScroll;
+    private const float BottomTolerance = 2f;
+
     private const int MaxUiLogCount = 1000;
     private const int GraphSampleCount = 80;
 
@@ -85,6 +95,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
     // Settings elements
     private Button toggleLogEnableBtn;
     private Button toggleFpsWidgetBtn;
+    private Button toggleAutoScrollBtn;
     private VisualElement channelTogglesContainer;
     private Button clearAllLogsSettingBtn;
 
@@ -144,9 +155,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
         {
             dontDestroyOnLoad = settings.DontDestroyOnLoad;
             showFpsGraph = settings.ShowFpsGraph;
+            autoScroll = settings.AutoScroll;
         }
 
-        Application.targetFrameRate = 60;
         if (dontDestroyOnLoad && transform.parent == null)
         {
             DontDestroyOnLoad(gameObject);
@@ -410,6 +421,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
         toggleLogEnableBtn = rootElement.Q<Button>("toggleLogEnableBtn");
         toggleFpsWidgetBtn = rootElement.Q<Button>("toggleFpsWidgetBtn");
+        toggleAutoScrollBtn = rootElement.Q<Button>("toggleAutoScrollBtn");
         channelTogglesContainer = rootElement.Q<VisualElement>("channelTogglesContainer");
         clearAllLogsSettingBtn = rootElement.Q<Button>("clearAllLogsSettingBtn");
 
@@ -481,6 +493,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
         if (toggleLogEnableBtn != null) toggleLogEnableBtn.clicked += ToggleMasterLogEnable;
         if (toggleFpsWidgetBtn != null) toggleFpsWidgetBtn.clicked += ToggleFpsWidget;
+        if (toggleAutoScrollBtn != null) toggleAutoScrollBtn.clicked += ToggleAutoScroll;
         if (clearAllLogsSettingBtn != null) clearAllLogsSettingBtn.clicked += ClearConsole;
 
         if (filterAllButton != null) filterAllButton.clicked += onFilterAllClicked;
@@ -488,6 +501,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (filterWarnButton != null) filterWarnButton.clicked += onFilterWarnClicked;
         if (filterErrorButton != null) filterErrorButton.clicked += onFilterErrorClicked;
         if (bottomBtn != null) bottomBtn.clicked += ScrollToBottom;
+
+        if (logScrollView != null)
+        {
+            logScrollView.verticalScroller.valueChanged += OnLogScrollValueChanged;
+            logScrollView.contentContainer.RegisterCallback<GeometryChangedEvent>(OnLogContentGeometryChanged);
+        }
 
         if (searchField != null)
         {
@@ -529,6 +548,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
         if (toggleLogEnableBtn != null) toggleLogEnableBtn.clicked -= ToggleMasterLogEnable;
         if (toggleFpsWidgetBtn != null) toggleFpsWidgetBtn.clicked -= ToggleFpsWidget;
+        if (toggleAutoScrollBtn != null) toggleAutoScrollBtn.clicked -= ToggleAutoScroll;
         if (clearAllLogsSettingBtn != null) clearAllLogsSettingBtn.clicked -= ClearConsole;
 
         if (filterAllButton != null && onFilterAllClicked != null) filterAllButton.clicked -= onFilterAllClicked;
@@ -536,6 +556,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (filterWarnButton != null && onFilterWarnClicked != null) filterWarnButton.clicked -= onFilterWarnClicked;
         if (filterErrorButton != null && onFilterErrorClicked != null) filterErrorButton.clicked -= onFilterErrorClicked;
         if (bottomBtn != null) bottomBtn.clicked -= ScrollToBottom;
+
+        if (logScrollView != null)
+        {
+            logScrollView.verticalScroller.valueChanged -= OnLogScrollValueChanged;
+            logScrollView.contentContainer.UnregisterCallback<GeometryChangedEvent>(OnLogContentGeometryChanged);
+        }
 
         if (searchField != null && onSearchChangedCallback != null)
         {
@@ -778,6 +804,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
     {
         UpdateLogEnableButtonUI();
         UpdateFpsWidgetButtonUI();
+        UpdateAutoScrollButtonUI();
         RefreshChannelToggles();
     }
 
@@ -819,6 +846,27 @@ public class HB_InGameConsoleUI : MonoBehaviour
             toggleFpsWidgetBtn.AddToClassList("hb-toggle-off");
             toggleFpsWidgetBtn.RemoveFromClassList("hb-toggle-on");
         }
+    }
+
+    private void UpdateAutoScrollButtonUI()
+    {
+        if (toggleAutoScrollBtn == null) return;
+        toggleAutoScrollBtn.text = autoScroll ? "Scroll: ON" : "Scroll: OFF";
+        if (autoScroll)
+        {
+            toggleAutoScrollBtn.AddToClassList("hb-toggle-on");
+            toggleAutoScrollBtn.RemoveFromClassList("hb-toggle-off");
+        }
+        else
+        {
+            toggleAutoScrollBtn.AddToClassList("hb-toggle-off");
+            toggleAutoScrollBtn.RemoveFromClassList("hb-toggle-on");
+        }
+    }
+
+    private void ToggleAutoScroll()
+    {
+        AutoScroll = !AutoScroll;
     }
 
     private void ToggleFpsWidget()
@@ -1062,30 +1110,67 @@ public class HB_InGameConsoleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 로그 목록의 가장 최신(맨 아래) 위치로 스크롤합니다.
+    /// 새 로그 자동 스크롤 사용 여부. 켜져 있어도 사용자가 위로 스크롤한 동안은 따라가지 않습니다.
+    /// </summary>
+    public bool AutoScroll
+    {
+        get => autoScroll;
+        set
+        {
+            autoScroll = value;
+            UpdateAutoScrollButtonUI();
+            if (value) ScrollToBottom();
+        }
+    }
+
+    /// <summary>
+    /// 로그 목록의 가장 최신(맨 아래) 위치로 스크롤하고, 다시 새 로그를 따라가도록 합니다.
     /// </summary>
     public void ScrollToBottom()
     {
+        isStickToBottom = true;
         if (logScrollView == null) return;
 
-        logScrollView.schedule.Execute(() =>
+        // 레이아웃이 끝난 뒤에야 highValue가 갱신되므로 다음 틱에 이동
+        logScrollView.schedule.Execute(SetLogScrollToBottom);
+    }
+
+    private void SetLogScrollToBottom()
+    {
+        if (logScrollView == null || logScrollView.verticalScroller == null) return;
+
+        // 예약된 뒤 실행되기 전에 사용자가 위로 스크롤했으면 끌어내리지 않는다
+        if (!isStickToBottom) return;
+
+        isProgrammaticScroll = true;
+        logScrollView.verticalScroller.value = logScrollView.verticalScroller.highValue;
+        isProgrammaticScroll = false;
+    }
+
+    private bool IsLogScrollAtBottom()
+    {
+        var scroller = logScrollView.verticalScroller;
+        return scroller.highValue <= scroller.lowValue || scroller.value >= scroller.highValue - BottomTolerance;
+    }
+
+    private void OnLogScrollValueChanged(float value)
+    {
+        if (isProgrammaticScroll || logScrollView == null) return;
+
+        // 사용자가 위로 올리면 따라가기를 멈추고, 다시 맨 아래로 내리면 재개
+        isStickToBottom = IsLogScrollAtBottom();
+    }
+
+    private void OnLogContentGeometryChanged(GeometryChangedEvent evt)
+    {
+        // 로그가 추가되어 내용 높이가 바뀌었을 때, 맨 아래를 보고 있었다면 따라 내려간다
+        if (autoScroll && isStickToBottom && evt.oldRect.height != evt.newRect.height)
         {
-            if (logScrollView == null) return;
-
-            if (createdLogRows.Count > 0)
-            {
-                var latest = createdLogRows[createdLogRows.Count - 1];
-                if (latest != null)
-                {
-                    logScrollView.ScrollTo(latest);
-                }
-            }
-
-            if (logScrollView.verticalScroller != null)
-            {
-                logScrollView.verticalScroller.value = logScrollView.verticalScroller.highValue;
-            }
-        });
+            // ScrollView가 같은 이벤트에서 스크롤 범위를 먼저 갱신하므로 바로 이동하고,
+            // 범위 갱신이 늦어지는 경우를 대비해 다음 틱에 한 번 더 맞춘다
+            SetLogScrollToBottom();
+            logScrollView.schedule.Execute(SetLogScrollToBottom);
+        }
     }
 
     public void SetFilter(int filterIndex)
@@ -1156,6 +1241,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         }
         createdLogRows.Clear();
         selectedRow = null;
+        isStickToBottom = true;
         RefreshAllWatches();
         UpdateOpenButtonText(0);
     }
@@ -1166,8 +1252,20 @@ public class HB_InGameConsoleUI : MonoBehaviour
         {
             var oldest = createdLogRows[0];
             if (oldest == selectedRow) selectedRow = null;
+
+            float removedHeight = oldest.resolvedStyle.display == DisplayStyle.None
+                ? 0f
+                : oldest.layout.height + oldest.resolvedStyle.marginTop + oldest.resolvedStyle.marginBottom;
+
             logScrollView.Remove(oldest);
             createdLogRows.RemoveAt(0);
+
+            if (!isStickToBottom && removedHeight > 0f && !float.IsNaN(removedHeight))
+            {
+                isProgrammaticScroll = true;
+                logScrollView.verticalScroller.value = Mathf.Max(0f, logScrollView.verticalScroller.value - removedHeight);
+                isProgrammaticScroll = false;
+            }
         }
 
         var row = new VisualElement();

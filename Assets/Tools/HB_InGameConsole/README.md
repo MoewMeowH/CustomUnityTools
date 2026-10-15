@@ -108,7 +108,8 @@ HLog.Common.ReportIf(currentHp <= 0 && isInvincible, "무적 상태 사망 버�
    - `Log: ON / OFF`: 에디터 및 런타임 마스터 로깅 On/Off 즉시 제어.
    - `USE_HLOG: ON / OFF`: Scripting Define Symbol 원클릭 추가/제거 스위치.
    - `Clear`: 로그 히스토리 비우기.
-   - `Auto Scroll`, `Pause on Error`: 에러 발생 시 자동 일시정지.
+   - `Auto Scroll`: 맨 아래를 보고 있을 때 새 로그를 따라 내려갑니다. 위로 스크롤하면 따라가기를 멈추고, 다시 맨 아래로 내리면 이어서 따라갑니다. 끄면 새 로그가 와도 스크롤 위치가 바뀌지 않습니다.
+   - `Pause on Error`: 에러 발생 시 자동 일시정지.
 2. **Logs 탭**:
    - 상단 채널 바: 다중 채널 구독/해제 (`✓ Common`, `✓ UI` 등), 마우스 휠 가로 스크롤.
    - 우클릭 메뉴: `Only '[채널명]'` (단독 표시), `Subscribe All` (전체 구독), `Toggle Mute` (채널 음소거).
@@ -129,7 +130,7 @@ HLog.Common.ReportIf(currentHp <= 0 && isInvincible, "무적 상태 사망 버�
 - **`Settings` 탭 (분리된 전용 설정 뷰)**:
   - **Master Log Enable**: 런타임 전체 로깅 On/Off 토글 버튼.
   - **Show FPS Widget**: 좌상단 FPS 및 프레임타임 그래프 위젯 표시 On/Off.
-  - **Auto Scroll**: 새 로그 추가 시 자동 최하단 스크롤 On/Off.
+  - **Auto Scroll**: 맨 아래를 보고 있을 때 새 로그를 따라 내려갑니다. 위로 스크롤하면 멈추고, 다시 맨 아래로 내리거나 `▼ Bottom`을 누르면 이어서 따라갑니다. 기본값은 `InGameConsoleSettings`의 `Auto Scroll`, 코드에서는 `InGameConsole.Instance.AutoScroll`로 바꿀 수 있습니다.
   - **Channel Log Enable (Per Channel)**: 프로젝트의 모든 채널(`Common`, `UI`, `System` 등)을 칩(Chip) 버튼으로 나열하여 **각 채널별로 로그 On/Off**를 독립 제어.
   - **Clear All Log History**: 런타임 로그 히스토리 전체 비우기.
 
