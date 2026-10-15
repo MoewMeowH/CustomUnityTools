@@ -190,4 +190,33 @@ public static partial class InGameConsole
     public static void Close() => Instance?.CloseConsole();
     public static void Toggle() => Instance?.ToggleConsole();
     public static void ClearLogs() => HLogCore.Clear();
+
+    /// <summary>
+    /// 콘솔 상단 탭에 외부 뷰를 붙입니다 (예: HB_Cheat). 콘솔 UI가 없으면 false.
+    /// </summary>
+    public static bool AddExternalView(string viewName, VisualElement content)
+    {
+        var ui = Instance;
+        if (ui == null) return false;
+        ui.AddExternalView(viewName, content);
+        return true;
+    }
+
+    public static void RemoveExternalView(string viewName)
+    {
+        var ui = Instance;
+        if (ui != null) ui.RemoveExternalView(viewName);
+    }
+
+    public static void ShowExternalView(string viewName)
+    {
+        var ui = Instance;
+        if (ui != null) ui.ShowExternalView(viewName);
+    }
+
+    public static bool IsExternalViewActive(string viewName)
+    {
+        var ui = Instance;
+        return ui != null && ui.IsExternalViewActive(viewName);
+    }
 }

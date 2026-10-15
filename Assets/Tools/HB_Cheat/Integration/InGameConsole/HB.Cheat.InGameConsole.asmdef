@@ -1,0 +1,26 @@
+{
+    "name": "HB.Cheat.InGameConsole",
+    "rootNamespace": "HB.Cheat.Integration",
+    "references": [
+        "HB.Cheat",
+        "HB.InGameConsole"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "HB_CHEAT",
+        "HB_CHEAT_HAS_CONSOLE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.hb.ingameconsole",
+            "expression": "1.0.0",
+            "define": "HB_CHEAT_HAS_CONSOLE"
+        }
+    ],
+    "noEngineReferences": false
+}

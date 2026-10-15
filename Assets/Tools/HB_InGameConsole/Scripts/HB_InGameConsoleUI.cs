@@ -23,7 +23,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
     {
         Logs,
         Watch,
-        Settings
+        Settings,
+        External
     }
 
     [Header("UI Toolkit")]
@@ -59,6 +60,17 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private Button viewWatchBtn;
     private Button viewSettingsBtn;
     private ConsoleViewMode currentViewMode = ConsoleViewMode.Logs;
+
+    // 다른 패키지가 붙이는 탭 (예: HB_Cheat). 패널 재로드 시 다시 붙인다.
+    private sealed class ExternalView
+    {
+        public string Name;
+        public VisualElement Content;
+        public Button Button;
+        public Action OnClicked;
+    }
+    private readonly List<ExternalView> externalViews = new List<ExternalView>();
+    private ExternalView currentExternalView;
 
     // Header Toolbar elements
     private Button openButton;
@@ -231,6 +243,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
         BindUIElements();
         RegisterCallbacks();
+        AttachAllExternalViews();
 
         RefreshAllLogs();
         RefreshAllWatches();
@@ -775,6 +788,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
         settingsScrollView?.AddToClassList("hb-hidden");
         subToolBar?.AddToClassList("hb-hidden");
         detailPanel?.AddToClassList("hb-hidden");
+        foreach (var view in externalViews)
+        {
+            view.Button?.RemoveFromClassList("hb-filter-active");
+            view.Content?.AddToClassList("hb-hidden");
+        }
 
         if (mode == ConsoleViewMode.Logs)
         {
@@ -796,7 +814,139 @@ public class HB_InGameConsoleUI : MonoBehaviour
             settingsScrollView?.RemoveFromClassList("hb-hidden");
             RefreshSettingsView();
         }
+        else if (mode == ConsoleViewMode.External && currentExternalView != null)
+        {
+            currentExternalView.Button?.AddToClassList("hb-filter-active");
+            currentExternalView.Content?.RemoveFromClassList("hb-hidden");
+        }
     }
+
+    #region External Views
+
+    /// <summary>
+    /// 콘솔 상단 탭(Logs / Watch / Settings 옆)에 외부 뷰를 추가합니다. 같은 이름이면 내용을 교체합니다.
+    /// </summary>
+    public void AddExternalView(string viewName, VisualElement content)
+    {
+        if (string.IsNullOrEmpty(viewName) || content == null) return;
+
+        var view = externalViews.Find(v => v.Name == viewName);
+        if (view == null)
+        {
+            view = new ExternalView { Name = viewName };
+            externalViews.Add(view);
+        }
+        else
+        {
+            DetachExternalView(view);
+        }
+
+        view.Content = content;
+        if (rootElement != null) AttachExternalView(view);
+    }
+
+    public void RemoveExternalView(string viewName)
+    {
+        var view = externalViews.Find(v => v.Name == viewName);
+        if (view == null) return;
+
+        DetachExternalView(view);
+        externalViews.Remove(view);
+        if (currentExternalView == view)
+        {
+            currentExternalView = null;
+            if (currentViewMode == ConsoleViewMode.External) SwitchViewMode(ConsoleViewMode.Logs);
+        }
+    }
+
+    /// <summary>콘솔을 열고 해당 외부 뷰로 전환합니다.</summary>
+    public void ShowExternalView(string viewName)
+    {
+        var view = externalViews.Find(v => v.Name == viewName);
+        if (view == null) return;
+
+        OpenConsole();
+        currentExternalView = view;
+        SwitchViewMode(ConsoleViewMode.External);
+    }
+
+    public bool IsExternalViewActive(string viewName)
+    {
+        return IsConsoleOpen && currentViewMode == ConsoleViewMode.External
+            && currentExternalView != null && currentExternalView.Name == viewName;
+    }
+
+    private void AttachAllExternalViews()
+    {
+        foreach (var view in externalViews)
+        {
+            DetachExternalView(view);
+            AttachExternalView(view);
+        }
+    }
+
+    private void AttachExternalView(ExternalView view)
+    {
+        if (consoleWindow == null) return;
+
+        var button = new Button { text = view.Name };
+        button.AddToClassList("hb-filter-btn");
+        view.OnClicked = () =>
+        {
+            currentExternalView = view;
+            SwitchViewMode(ConsoleViewMode.External);
+        };
+        button.clicked += view.OnClicked;
+        view.Button = button;
+
+        // 마지막 뷰 탭(Settings 또는 앞서 붙은 외부 탭) 뒤에 넣는다
+        var anchor = (VisualElement)viewSettingsBtn;
+        int index = externalViews.IndexOf(view);
+        for (int i = index - 1; i >= 0; i--)
+        {
+            if (externalViews[i].Button != null && externalViews[i].Button.parent != null)
+            {
+                anchor = externalViews[i].Button;
+                break;
+            }
+        }
+        if (anchor != null && anchor.parent != null)
+            anchor.parent.Insert(anchor.parent.IndexOf(anchor) + 1, button);
+
+        var content = view.Content;
+        content.style.flexGrow = 1;
+        content.style.flexShrink = 1;
+        content.style.flexBasis = 0;
+        content.style.minHeight = 0;
+        int contentIndex = settingsScrollView != null && settingsScrollView.parent == consoleWindow
+            ? consoleWindow.IndexOf(settingsScrollView) + 1
+            : consoleWindow.childCount;
+        consoleWindow.Insert(Mathf.Min(contentIndex + index, consoleWindow.childCount), content);
+
+        bool active = currentViewMode == ConsoleViewMode.External && currentExternalView == view;
+        if (active)
+        {
+            button.AddToClassList("hb-filter-active");
+            content.RemoveFromClassList("hb-hidden");
+        }
+        else
+        {
+            content.AddToClassList("hb-hidden");
+        }
+    }
+
+    private static void DetachExternalView(ExternalView view)
+    {
+        if (view.Button != null)
+        {
+            if (view.OnClicked != null) view.Button.clicked -= view.OnClicked;
+            view.Button.RemoveFromHierarchy();
+            view.Button = null;
+        }
+        view.Content?.RemoveFromHierarchy();
+    }
+
+    #endregion
 
     #region Settings View Handlers
 
