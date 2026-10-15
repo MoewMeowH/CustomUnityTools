@@ -7,7 +7,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine;
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 
@@ -77,7 +77,7 @@ public enum EPlatformType
     MOBILE,
 }
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [NoAutoStaticsCleanup]
 #endif
 public static class BuildHelper
@@ -144,21 +144,11 @@ public static class BuildHelper
 
     public static void ReadDevBuildState()
     {
-        var isDevBuildStr = GetArg(DEV_BUILD);
-        if (!string.IsNullOrEmpty(isDevBuildStr))
-            bool.TryParse(isDevBuildStr, out IsDevBuild);
-
-        var isProfStr = GetArg(AUTO_PROF);
-        if (!string.IsNullOrEmpty(isProfStr))
-            bool.TryParse(isProfStr, out IsAutoProfile);
-
-        var isDeepStr = GetArg(DEEP_PROF);
-        if (!string.IsNullOrEmpty(isDeepStr))
-            bool.TryParse(isDeepStr, out IsDeepProfile);
-
-        var isCleanBuildStr = GetArg(CLEAN_BUILD);
-        if (!string.IsNullOrEmpty(isCleanBuildStr))
-            bool.TryParse(isCleanBuildStr, out IsCleanBuild);
+        // 잘못된 값은 조용히 무시하지 않고 실패시킨다 (TryGetBoolArg가 예외를 던짐)
+        if (TryGetBoolArg(DEV_BUILD, out bool dev)) IsDevBuild = dev;
+        if (TryGetBoolArg(AUTO_PROF, out bool autoProf)) IsAutoProfile = autoProf;
+        if (TryGetBoolArg(DEEP_PROF, out bool deep)) IsDeepProfile = deep;
+        if (TryGetBoolArg(CLEAN_BUILD, out bool clean)) IsCleanBuild = clean;
 
         if (!IsDevBuild && IsDeepProfile)
             IsDeepProfile = false;
@@ -177,6 +167,38 @@ public static class BuildHelper
         }
 
         Log($"Project Root: {ProjectPath}");
+    }
+
+    /// <summary>
+    /// 명령줄에 해당 옵션(-name)이 있는지 여부. 값이 비어 있어도 true입니다.
+    /// </summary>
+    public static bool HasArg(string argName)
+    {
+        if (string.IsNullOrEmpty(argName) || s_Args == null) return false;
+
+        string name = argName.TrimStart('-');
+        return s_Args.Any(a => a.StartsWith("-") && a.TrimStart('-').Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// true/false 옵션을 읽습니다. 옵션이 없으면 false를 반환하고, 값이 비었거나 true/false가 아니면 예외를 던집니다.
+    /// </summary>
+    public static bool TryGetBoolArg(string argName, out bool result)
+    {
+        result = false;
+        string value = GetArg(argName);
+        if (string.IsNullOrEmpty(value))
+        {
+            if (HasArg(argName))
+                throw ThrowError($"-{argName} requires a value (true/false)");
+            return false;
+        }
+
+        if (!bool.TryParse(value, out result))
+        {
+            throw ThrowError($"Invalid -{argName} argument: '{value}' (expected true/false)");
+        }
+        return true;
     }
 
     public static string GetArg(string argName)

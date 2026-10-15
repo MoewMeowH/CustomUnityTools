@@ -75,22 +75,22 @@ namespace HB.TestFrameworkHelper.Editor
                 if (prefab == null) continue;
 
                 // 2-1. Missing Component 스크립트 검사
-                var components = prefab.GetComponentsInChildren<Component>(true);
-                foreach (var comp in components)
+                // GetComponentsInChildren의 null 항목은 소속 오브젝트를 알 수 없으므로, 오브젝트 단위로 Missing 개수를 센다
+                foreach (var transform in prefab.GetComponentsInChildren<Transform>(true))
                 {
-                    if (comp == null)
+                    int missingCount = GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(transform.gameObject);
+                    if (missingCount == 0) continue;
+
+                    issues.Add(new SlotValidationIssue
                     {
-                        issues.Add(new SlotValidationIssue
-                        {
-                            AssetPath = path,
-                            PrefabAsset = prefab,
-                            GameObjectPath = GetHierarchyPath(prefab.transform),
-                            ComponentName = "Missing (MonoBehaviour)",
-                            FieldName = string.Empty,
-                            Description = "스크립트 연결이 끊어진 컴포넌트가 존재합니다.",
-                            IssueType = EValidationIssueType.MissingComponent
-                        });
-                    }
+                        AssetPath = path,
+                        PrefabAsset = prefab,
+                        GameObjectPath = GetHierarchyPath(transform),
+                        ComponentName = "Missing (MonoBehaviour)",
+                        FieldName = string.Empty,
+                        Description = $"스크립트 연결이 끊어진 컴포넌트가 {missingCount}개 존재합니다.",
+                        IssueType = EValidationIssueType.MissingComponent
+                    });
                 }
 
                 // 2-2. [NeedSlotNullCheck] 필드 누락 검사

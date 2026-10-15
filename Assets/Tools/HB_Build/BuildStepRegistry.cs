@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 
@@ -12,7 +12,7 @@ using Unity.Scripting.LifecycleManagement;
 /// 프로젝트 내 모든 IPreBuildStep 및 IPostBuildStep을 TypeCache를 통해 자동 감지하고 관리하는 레지스트리입니다.
 /// 상속 오버라이드(자식 클래스 우선)를 지원하며, 스텝 On/Off는 빌드 프로필(BuildContext.DisabledStepIds)로 결정됩니다.
 /// </summary>
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [NoAutoStaticsCleanup]
 #endif
 public static class BuildStepRegistry

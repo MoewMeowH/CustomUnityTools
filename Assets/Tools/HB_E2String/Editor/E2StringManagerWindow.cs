@@ -39,8 +39,10 @@ namespace HB.E2String.Editor
     /// </summary>
     public class E2StringManagerWindow : EditorWindow
     {
-        private const string PREFS_TARGET_FOLDER_KEY = "HB_E2String_TargetFolder";
-        private const string DEFAULT_TARGET_FOLDER = "Assets/Tools/HB_E2String/Runtime";
+        // EditorPrefs는 PC의 모든 프로젝트가 공유하므로 프로젝트별로 키를 분리한다
+        private static string PREFS_TARGET_FOLDER_KEY => $"HB_E2String_TargetFolder_{PlayerSettings.productGUID}";
+        // 패키지(UPM) 폴더는 읽기 전용이므로 기본 생성 위치는 프로젝트의 Assets 아래로 둔다
+        private const string DEFAULT_TARGET_FOLDER = "Assets/Scripts/E2String";
         private const string COMPAT_NAMESPACE = "EString.Script";
         private const string ATTRIBUTE_FILE_NAME = "E2StringAttribute.cs";
 

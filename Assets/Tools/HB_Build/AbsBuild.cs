@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -39,6 +40,9 @@ public static class AbsBuild
 
         try
         {
+            ValidateOutputName(context);
+            WarnUnknownDisabledSteps(context);
+
             // 1. 사전 빌드 스텝들 순차 실행 (IPreBuildStep)
             BuildStepRegistry.ExecutePreBuildSteps(context);
 
@@ -284,28 +288,58 @@ public static class AbsBuild
         }
     }
 
+    /// <summary>
+    /// 출력 파일/폴더 이름에 쓰이는 제품명·버전에 파일명 금지 문자나 경로 구분자가 있으면 실패시킵니다.
+    /// (CLI -buildVersion 에 "../" 등이 들어가 OutputPath 밖으로 벗어나는 것도 막음)
+    /// </summary>
+    private static void ValidateOutputName(BuildContext context)
+    {
+        CheckNamePart("productName", Application.productName);
+        CheckNamePart("version", context.Version);
+
+        static void CheckNamePart(string label, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw ThrowError($"Build {label} is empty.");
+
+            char invalid = value.FirstOrDefault(c => Path.GetInvalidFileNameChars().Contains(c) || c == '/' || c == '\\');
+            if (invalid != default(char) || value.Contains(".."))
+                throw ThrowError($"Build {label} '{value}' contains characters not allowed in file names.");
+        }
+    }
+
+    /// <summary>
+    /// 비활성 목록에 등록되지 않은 스텝 ID가 있으면 경고합니다. (오타로 끄려던 스텝이 실행되는 것을 알아차리도록)
+    /// </summary>
+    private static void WarnUnknownDisabledSteps(BuildContext context)
+    {
+        if (context.DisabledStepIds.Count == 0) return;
+
+        var knownIds = new HashSet<string>(
+            BuildStepRegistry.GetAllPreBuildSteps().Select(s => s.StepId)
+                .Concat(BuildStepRegistry.GetAllPostBuildSteps().Select(s => s.StepId)));
+
+        foreach (string id in context.DisabledStepIds)
+        {
+            if (!knownIds.Contains(id))
+                LogWarning($"[Pipeline] Unknown disabled step id '{id}' (no registered step has this id).");
+        }
+    }
+
     private static bool TryGetBuildTypeArg(out EBuildType buildType)
     {
         buildType = default;
         string value = GetArg(BUILD_TYPE);
-        if (string.IsNullOrEmpty(value)) return false;
+        if (string.IsNullOrEmpty(value))
+        {
+            if (HasArg(BUILD_TYPE))
+                throw ThrowError($"-{BUILD_TYPE} requires a value (allowed: {string.Join(", ", Enum.GetNames(typeof(EBuildType)))})");
+            return false;
+        }
 
         if (!Enum.TryParse(value, true, out buildType) || !Enum.IsDefined(typeof(EBuildType), buildType))
         {
             throw ThrowError($"Invalid -{BUILD_TYPE} argument: '{value}' (allowed: {string.Join(", ", Enum.GetNames(typeof(EBuildType)))})");
-        }
-        return true;
-    }
-
-    private static bool TryGetBoolArg(string argName, out bool result)
-    {
-        result = false;
-        string value = GetArg(argName);
-        if (string.IsNullOrEmpty(value)) return false;
-
-        if (!bool.TryParse(value, out result))
-        {
-            throw ThrowError($"Invalid -{argName} argument: '{value}' (expected true/false)");
         }
         return true;
     }
@@ -315,8 +349,9 @@ public static class AbsBuild
         string value = GetArg(DISABLED_STEPS);
         if (string.IsNullOrEmpty(value))
         {
+            // -disabledSteps "" 는 "NONE"과 같이 비활성 목록을 비우는 것으로 처리
             stepIds = Array.Empty<string>();
-            return false;
+            return HasArg(DISABLED_STEPS);
         }
 
         stepIds = value.Split(';').Select(x => x.Trim()).Where(x => x.Length > 0 && x != NONE_SCENE_LIST).ToArray();

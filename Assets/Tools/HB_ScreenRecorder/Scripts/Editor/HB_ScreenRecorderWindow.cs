@@ -5,11 +5,11 @@ using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [NoAutoStaticsCleanup]
 #endif
 public class HB_ScreenRecorderWindow : EditorWindow
@@ -184,7 +184,14 @@ public class HB_ScreenRecorderWindow : EditorWindow
 
         if (!isRec)
         {
+            bool canRecord = EditorApplication.isPlaying;
+            if (!canRecord)
+            {
+                EditorGUILayout.HelpBox("Unity Recorder는 Play Mode에서만 녹화됩니다. Play Mode에 들어간 뒤 시작하세요.", MessageType.Info);
+            }
+
             GUI.backgroundColor = new Color(0.4f, 0.85f, 0.4f);
+            using (new EditorGUI.DisabledScope(!canRecord))
             if (GUILayout.Button("Start MP4 Recording", GUILayout.Height(38)))
             {
                 if (!HB_ScreenRecorder.IsRecorderAvailable())

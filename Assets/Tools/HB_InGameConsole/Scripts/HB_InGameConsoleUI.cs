@@ -37,7 +37,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private const int MaxUiLogCount = 1000;
     private const int GraphSampleCount = 80;
 
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
     private PanelRenderer panelRenderer;
 #endif
     private UIDocument uiDocument;
@@ -126,7 +126,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private bool isGraphCollapsed = false;
 
     public bool IsConsoleOpen => consoleWindow != null && !consoleWindow.ClassListContains("hb-hidden");
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
     public PanelRenderer PanelRendererComponent => panelRenderer != null ? panelRenderer : (panelRenderer = GetComponent<PanelRenderer>());
 #endif
     public UIDocument Document => uiDocument != null ? uiDocument : (uiDocument = GetComponent<UIDocument>());
@@ -134,7 +134,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void Awake()
     {
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
         panelRenderer = GetComponent<PanelRenderer>();
 #endif
         uiDocument = GetComponent<UIDocument>();
@@ -155,7 +155,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void OnEnable()
     {
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
         if (panelRenderer == null)
             panelRenderer = GetComponent<PanelRenderer>();
         if (uiDocument == null)
@@ -196,10 +196,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
         HLogCore.OnLogAdded += HandleLogAdded;
         HLogCore.OnLogsCleared += HandleLogsCleared;
         HLogCore.OnWatchUpdated += HandleWatchUpdated;
+        HLogCore.OnWatchRemoved += HandleWatchRemoved;
         HLogCore.OnTagDiscovered += HandleTagDiscovered;
     }
 
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
     private void OnPanelReloaded(PanelRenderer renderer, VisualElement root, int version)
     {
         if (version == handledUIVersion) return;
@@ -235,7 +236,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
     {
         var settings = InGameConsoleSettings.Instance;
 
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
         if (panelRenderer != null)
         {
             if (panelRenderer.visualTreeAsset == null)
@@ -369,7 +370,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (rootElement == null) return;
 
         VisualTreeAsset vta = null;
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
         if (panelRenderer != null) vta = panelRenderer.visualTreeAsset;
         else
 #endif
@@ -410,6 +411,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         HLogCore.OnLogAdded -= HandleLogAdded;
         HLogCore.OnLogsCleared -= HandleLogsCleared;
         HLogCore.OnWatchUpdated -= HandleWatchUpdated;
+        HLogCore.OnWatchRemoved -= HandleWatchRemoved;
         HLogCore.OnTagDiscovered -= HandleTagDiscovered;
 
         if (fpsGraphCanvas != null)
@@ -417,7 +419,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
             fpsGraphCanvas.generateVisualContent -= DrawFrameTimeGraph;
         }
 
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
         if (panelRenderer != null)
         {
             panelRenderer.UnregisterUIReloadCallback(OnPanelReloaded);
@@ -429,6 +431,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void Update()
     {
+        // PlayerLoop에 넣은 처리 시스템이 다른 코드의 SetPlayerLoop로 빠져도 콘솔이 떠 있는 동안은 처리되도록
+        HLogCore.FlushPendingLogs();
         HLogCore.PollWatchGetters();
         UpdatePerformanceMetrics();
     }
@@ -944,6 +948,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
         }
     }
 
+    private void HandleWatchRemoved(string key)
+    {
+        RefreshAllWatches();
+    }
+
     private void RefreshAllWatches()
     {
         if (watchScrollView == null) return;
@@ -1192,7 +1201,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (logScrollView == null) return;
 
         AddLogElement(entry);
-        UpdateOpenButtonText(HLogCore.History.Count);
+        UpdateOpenButtonText(HLogCore.HistoryCount);
     }
 
     private void HandleLogsCleared()

@@ -7,7 +7,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 
@@ -16,7 +16,7 @@ using Unity.Scripting.LifecycleManagement;
 /// BuildProfile(.asset) 기반의 프로필 관리 및 저장, 다중 버전 Jenkins/Unity Hub CLI 명령어 자동 생성,
 /// 체크박스 On/Off, 인라인 C# 소스 코드 미리보기, Groovy Declarative Jenkinsfile 생성을 지원합니다.
 /// </summary>
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [NoAutoStaticsCleanup]
 #endif
 public class ProjectBuild : EditorWindow
@@ -898,6 +898,8 @@ public class ProjectBuild : EditorWindow
         string root = Path.GetFullPath(Path.Combine(Application.dataPath, "..")).Replace('\\', '/').TrimEnd('/');
         string full = Path.GetFullPath(absolutePath).Replace('\\', '/').TrimEnd('/');
 
+        if (full.Equals(root, StringComparison.OrdinalIgnoreCase))
+            return ".";
         if (full.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase))
             return full.Substring(root.Length + 1);
         return full;
