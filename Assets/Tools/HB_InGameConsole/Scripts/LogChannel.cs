@@ -36,7 +36,7 @@ public class LogChannel
         set => _logger.filterLogType = value;
     }
 
-    [Conditional("USE_HLOG")]
+    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Log(object message, UnityEngine.Object context = null)
     {
@@ -44,17 +44,9 @@ public class LogChannel
         _logger.Log(LogType.Log, Tag, message, context);
     }
 
-    [Conditional("USE_HLOG")]
+    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Warning(object message, UnityEngine.Object context = null)
-    {
-        if (!HLogCore.IsLogEnabled || !Enabled) return;
-        _logger.Log(LogType.Warning, Tag, message, context);
-    }
-
-    [Conditional("USE_HLOG")]
-    [HideInCallstack]
-    public void LogWarning(object message, UnityEngine.Object context = null)
     {
         if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Warning, Tag, message, context);
@@ -88,18 +80,21 @@ public class LogChannel
         _logger.LogException(exception, context);
     }
 
+    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Watch(string key, object value)
     {
         HLogCore.Watch($"{Tag}/{key}", value);
     }
 
+    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Watch(string key, Func<object> getter)
     {
         HLogCore.Watch($"{Tag}/{key}", getter);
     }
 
+    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Watch<T>(string key, Func<T> getter)
     {

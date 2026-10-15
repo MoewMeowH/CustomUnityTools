@@ -1,4 +1,4 @@
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+﻿#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 using System;
@@ -135,9 +135,6 @@ public static class HLogCore
 
 #if UNITY_EDITOR
     [UnityEditor.InitializeOnLoadMethod]
-#endif
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-#if UNITY_EDITOR
     private static void InitEditorPolling()
     {
         UnityEditor.EditorApplication.update -= PollWatchGettersInEditor;
@@ -162,6 +159,8 @@ public static class HLogCore
         }
     }
 #endif
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     public static void AutoInitialize()
     {
         Initialize();
@@ -262,10 +261,41 @@ public static class HLogCore
         RegisterTag("Common");
         RegisterTag("System");
 
-        // 1. Reflection을 통한 HLog 중첩 클래스 스캔
+        // 1. Reflection을 통한 HLog 중첩 클래스 스캔 (모든 어셈블리 순회 지원)
         try
         {
-            var hlogType = Type.GetType("HLog, Assembly-CSharp") ?? Type.GetType("HLog");
+            Type hlogType = Type.GetType("HLog, Assembly-CSharp") ?? Type.GetType("HLog");
+            if (hlogType == null)
+            {
+#if UNITY_6000_0_OR_NEWER
+                var assemblies = UnityEngine.Assemblies.CurrentAssemblies.GetLoadedAssemblies();
+                for (int i = 0; i < assemblies.Count; i++)
+                {
+                    var a = assemblies[i];
+                    var t = a.GetType("HLog");
+                    if (t != null)
+                    {
+                        hlogType = t;
+                        break;
+                    }
+                }
+#else
+#pragma warning disable UAC0005
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblies.Length; i++)
+                {
+                    var a = assemblies[i];
+                    var t = a.GetType("HLog");
+                    if (t != null)
+                    {
+                        hlogType = t;
+                        break;
+                    }
+                }
+#pragma warning restore UAC0005
+#endif
+            }
+
             if (hlogType != null)
             {
                 var nestedTypes = hlogType.GetNestedTypes(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
@@ -383,6 +413,7 @@ public static class HLogCore
 
         try
         {
+            
             Watch(key, getter());
         }
         catch (Exception ex)
