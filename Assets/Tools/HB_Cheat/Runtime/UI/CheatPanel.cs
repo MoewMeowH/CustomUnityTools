@@ -231,12 +231,7 @@ namespace HB.Cheat.UI
             if (definition == null) return;
 
             m_Search.SetValueWithoutNotify(string.Empty);
-            m_TabChain.Clear();
-            var segments = definition.PathSegments;
-            for (int i = 0; i < segments.Length - 1; i++)
-                m_TabChain.Add(segments[i]);
-
-            SetMode(Mode.Browse);
+            SetMode(Mode.Browse);   // 탭 경로는 SelectCheat가 치트 위치로 맞춘다
             SelectCheat(definition, values);
         }
 
@@ -570,6 +565,13 @@ namespace HB.Cheat.UI
         private void SelectCheat(CheatDefinition def, object[] values)
         {
             m_Selected = def;
+
+            // 열린 탭을 이 치트의 부모 경로로 맞춘다 (더 깊이 열려 있던 하위 탭이 선택된 채 남지 않도록)
+            m_TabChain.Clear();
+            var segments = def.PathSegments;
+            for (int i = 0; i < segments.Length - 1; i++)
+                m_TabChain.Add(segments[i]);
+
             m_Values = values ?? CheatSystem.GetLastValues(def.Id) ?? def.CreateDefaultValues();
             if (m_Values.Length != def.Args.Length) m_Values = def.CreateDefaultValues();
             m_LastExecution = null;

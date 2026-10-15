@@ -92,6 +92,12 @@ CheatSystem.ReportServerResult(packet.Result == Result.Success, packet.Result.To
 
 ---
 
+## 📚 샘플
+
+`Window > Package Manager > HB_Cheat > Samples > Cheat Examples > Import`로 가져옵니다. 클라 치트·서버 치트를 종류별로 모은 예제와, 가짜 네트워크에 연결한 전송 예제가 들어 있습니다. 가져온 위치는 `Assets/Samples/HB_Cheat/<버전>/Cheat Examples`입니다.
+
+---
+
 ## 🧩 정의 규칙
 
 | 항목 | 내용 |
