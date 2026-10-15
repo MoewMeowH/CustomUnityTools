@@ -13,8 +13,8 @@ using Unity.Scripting.LifecycleManagement;
 
 /// <summary>
 /// Unity 커스텀 빌드 매니저 및 Jenkins CI/CD 연동 에디터 윈도우입니다.
-/// 조건부 파이프라인 스텝 필터링, 체크박스 On/Off, 스텝 행 클릭 시 인라인 C# 소스 코드 미리보기,
-/// 선택적 SceneDefine/ProjectDefine 에셋 관리 및 Jenkinsfile 생성을 지원합니다.
+/// BuildProfile(.asset) 기반의 프로필 관리 및 저장, 다중 버전 Jenkins/Unity Hub CLI 명령어 자동 생성,
+/// 체크박스 On/Off, 인라인 C# 소스 코드 미리보기, Groovy Declarative Jenkinsfile 생성을 지원합니다.
 /// </summary>
 #if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
 [NoAutoStaticsCleanup]
@@ -28,6 +28,23 @@ public class ProjectBuild : EditorWindow
         iOS = 2,
     }
 
+    public enum ECliRunnerType
+    {
+        DirectUnityExe = 0,   // Direct Unity.exe 실행
+        UnityHubHeadless = 1  // Unity Hub CLI 헤드리스 실행 (--headless run --project-path)
+    }
+
+    public enum ECliCommandMode
+    {
+        ProfileOnly = 0,      // 1) 순수 프로필 기반 (-buildProfile)
+        FullUnpack = 1,       // 2) 전체 파라미터 풀기 (-buildTarget, -buildType, ...)
+        ProfileOverride = 2   // 3) 프로필 + 파라미터 오버라이드 (-buildProfile + -buildVersion 등)
+    }
+
+    [Header("=== 빌드 프로필 (ScriptableObject) ===")]
+    [SerializeField] private HBBuildProfile m_SelectedProfile;
+
+    [Header("=== 빌드 타겟 및 환경 ===")]
     [SerializeField] private ESelfBuildPlatform m_Platform = ESelfBuildPlatform.PC;
     [SerializeField] private EBuildType m_BuildType = EBuildType.DEV;
     [SerializeField] private string m_Version = "1.0.0";
@@ -44,6 +61,11 @@ public class ProjectBuild : EditorWindow
     // 선택적 설정 에셋 (미할당 시 자동 건너뜀)
     [SerializeField] private SceneDefine m_SceneDefine;
     [SerializeField] private ProjectDefine m_ProjectDefine;
+
+    // CLI 생성 옵션 상태
+    private ECliRunnerType m_CliRunner = ECliRunnerType.DirectUnityExe;
+    private ECliCommandMode m_CliMode = ECliCommandMode.ProfileOnly;
+    private bool m_ShowCliSection = true;
 
     private Vector2 m_ScrollPosition;
     private bool m_ShowPipelineSteps = true;
@@ -89,12 +111,22 @@ public class ProjectBuild : EditorWindow
     public static void ShowWindow()
     {
         var window = GetWindow<ProjectBuild>("HB Build Manager");
-        window.minSize = new Vector2(480, 750);
+        window.minSize = new Vector2(490, 800);
         window.Show();
     }
 
     private void OnEnable()
     {
+        if (m_SelectedProfile == null)
+        {
+            var profiles = HBBuildProfile.FindAllProfiles();
+            if (profiles.Count > 0)
+            {
+                m_SelectedProfile = profiles[0];
+                LoadFromProfile(m_SelectedProfile);
+            }
+        }
+
         if (string.IsNullOrEmpty(m_Version))
             m_Version = Application.version;
 
@@ -123,6 +155,9 @@ public class ProjectBuild : EditorWindow
         DrawHeader();
         EditorGUILayout.Space(8);
 
+        DrawProfileSection();
+        EditorGUILayout.Space(8);
+
         DrawPlatformSection();
         EditorGUILayout.Space(8);
 
@@ -142,6 +177,9 @@ public class ProjectBuild : EditorWindow
         EditorGUILayout.Space(8);
 
         DrawSceneSection();
+        EditorGUILayout.Space(10);
+
+        DrawCommandLineGeneratorSection();
         EditorGUILayout.Space(14);
 
         DrawActionButtons();
@@ -153,8 +191,175 @@ public class ProjectBuild : EditorWindow
     {
         EditorGUILayout.BeginVertical(EditorStyles.helpBox);
         GUILayout.Label("HB Custom Build Manager", EditorStyles.boldLabel);
-        GUILayout.Label("모듈형 파이프라인(IPreBuildStep/IPostBuildStep) 및 Jenkins Groovy 지원 도구", EditorStyles.miniLabel);
+        GUILayout.Label("모듈형 파이프라인(IPreBuildStep/IPostBuildStep), BuildProfile(.asset) 및 다중 Jenkins/Unity CLI 생성기", EditorStyles.miniLabel);
         EditorGUILayout.EndVertical();
+    }
+
+    private void DrawProfileSection()
+    {
+        EditorGUILayout.BeginVertical("box");
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label("빌드 프로필 (Build Profile .asset)", EditorStyles.boldLabel);
+        GUILayout.FlexibleSpace();
+
+        if (GUILayout.Button("+ 새 프로필", EditorStyles.miniButton, GUILayout.Width(75)))
+        {
+            CreateNewProfileDialog();
+        }
+
+        if (m_SelectedProfile != null)
+        {
+            if (GUILayout.Button("프로필 저장", EditorStyles.miniButton, GUILayout.Width(75)))
+            {
+                SaveToCurrentProfile();
+            }
+            if (GUILayout.Button("복제", EditorStyles.miniButton, GUILayout.Width(45)))
+            {
+                DuplicateCurrentProfile();
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(4);
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUI.BeginChangeCheck();
+        var newProfile = (HBBuildProfile)EditorGUILayout.ObjectField("선택된 프로필", m_SelectedProfile, typeof(HBBuildProfile), false);
+        if (EditorGUI.EndChangeCheck())
+        {
+            m_SelectedProfile = newProfile;
+            if (m_SelectedProfile != null)
+            {
+                LoadFromProfile(m_SelectedProfile);
+            }
+        }
+
+        // 전체 프로필 팝업 메뉴
+        var allProfiles = HBBuildProfile.FindAllProfiles();
+        if (allProfiles.Count > 0)
+        {
+            var profileNames = allProfiles.Select(p => p.name).ToArray();
+            int currentIndex = allProfiles.IndexOf(m_SelectedProfile);
+
+            int selectedIndex = EditorGUILayout.Popup(currentIndex, profileNames, GUILayout.Width(130));
+            if (selectedIndex >= 0 && selectedIndex < allProfiles.Count && selectedIndex != currentIndex)
+            {
+                m_SelectedProfile = allProfiles[selectedIndex];
+                LoadFromProfile(m_SelectedProfile);
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+
+        if (m_SelectedProfile != null)
+        {
+            string profilePath = AssetDatabase.GetAssetPath(m_SelectedProfile);
+            EditorGUILayout.LabelField($"  ↳ 에셋 경로: {profilePath}", EditorStyles.miniLabel);
+        }
+        else
+        {
+            EditorGUILayout.HelpBox("선택된 프로필이 없습니다. [+ 새 프로필] 버튼을 눌러 프로젝트별 빌드 프로필(.asset)을 생성하거나 할당하세요.", MessageType.Info);
+        }
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private void CreateNewProfileDialog()
+    {
+        string defaultName = $"BuildProfile_{m_Platform}_{m_BuildType}";
+        var newProfile = HBBuildProfile.CreateNewProfileAsset(defaultName);
+        if (newProfile != null)
+        {
+            SaveToProfileInstance(newProfile);
+            m_SelectedProfile = newProfile;
+            EditorUtility.SetDirty(m_SelectedProfile);
+            AssetDatabase.SaveAssets();
+            EditorGUIUtility.PingObject(m_SelectedProfile);
+            ShowNotification(new GUIContent($"새 프로필 생성됨: {newProfile.name}"));
+        }
+    }
+
+    private void DuplicateCurrentProfile()
+    {
+        if (m_SelectedProfile == null) return;
+
+        string currentPath = AssetDatabase.GetAssetPath(m_SelectedProfile);
+        string newPath = AssetDatabase.GenerateUniqueAssetPath(currentPath);
+        if (AssetDatabase.CopyAsset(currentPath, newPath))
+        {
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            var duplicated = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(newPath);
+            if (duplicated != null)
+            {
+                m_SelectedProfile = duplicated;
+                EditorGUIUtility.PingObject(m_SelectedProfile);
+                ShowNotification(new GUIContent($"프로필 복제 완료: {duplicated.name}"));
+            }
+        }
+    }
+
+    private void LoadFromProfile(HBBuildProfile profile)
+    {
+        if (profile == null) return;
+
+        m_Platform = profile.TargetPlatform;
+        m_BuildType = profile.BuildType;
+        m_Version = profile.Version;
+        m_VersionCode = profile.VersionCode;
+        m_DevBuild = profile.DevBuild;
+        m_DeepProfile = profile.DeepProfile;
+        m_CleanBuild = profile.CleanBuild;
+        m_IsAab = profile.IsAab;
+        m_ZipPackage = profile.ZipPackage;
+        m_ProvisionUUID = profile.ProvisionUUID;
+        m_OutputPath = profile.OutputPath;
+
+        if (profile.Scenes != null && profile.Scenes.Count > 0)
+        {
+            m_ScenePath = profile.Scenes.ToList();
+        }
+        else
+        {
+            LoadScenesFromBuildSettings();
+        }
+
+        m_SceneDefine = profile.SceneDefineAsset;
+        m_ProjectDefine = profile.ProjectDefineAsset;
+
+        Repaint();
+    }
+
+    private void SaveToCurrentProfile()
+    {
+        if (m_SelectedProfile == null)
+        {
+            CreateNewProfileDialog();
+            return;
+        }
+
+        Undo.RecordObject(m_SelectedProfile, "Save Build Profile Settings");
+        SaveToProfileInstance(m_SelectedProfile);
+        EditorUtility.SetDirty(m_SelectedProfile);
+        AssetDatabase.SaveAssets();
+        ShowNotification(new GUIContent($"프로필 저장 완료: '{m_SelectedProfile.name}'"));
+    }
+
+    private void SaveToProfileInstance(HBBuildProfile profile)
+    {
+        profile.TargetPlatform = m_Platform;
+        profile.BuildType = m_BuildType;
+        profile.Version = m_Version;
+        profile.VersionCode = m_VersionCode;
+        profile.DevBuild = m_DevBuild;
+        profile.DeepProfile = m_DeepProfile;
+        profile.CleanBuild = m_CleanBuild;
+        profile.IsAab = m_IsAab;
+        profile.ZipPackage = m_ZipPackage;
+        profile.ProvisionUUID = m_ProvisionUUID;
+        profile.OutputPath = m_OutputPath;
+        profile.Scenes = m_ScenePath.ToList();
+        profile.SceneDefineAsset = m_SceneDefine;
+        profile.ProjectDefineAsset = m_ProjectDefine;
     }
 
     private void DrawPlatformSection()
@@ -211,6 +416,11 @@ public class ProjectBuild : EditorWindow
 
     private BuildContext CreatePreviewContext()
     {
+        if (m_SelectedProfile != null)
+        {
+            return m_SelectedProfile.ToBuildContext();
+        }
+
         var target = GetBuildTarget(m_Platform);
         var ctx = new BuildContext
         {
@@ -224,7 +434,8 @@ public class ProjectBuild : EditorWindow
             IsCleanBuild = m_CleanBuild,
             IsAab = m_IsAab,
             ZipPackage = m_ZipPackage,
-            OutputPath = m_OutputPath
+            OutputPath = m_OutputPath,
+            Scenes = m_ScenePath.ToList()
         };
 
         if (m_SceneDefine != null) ctx.SetCustomData("SceneDefine", m_SceneDefine);
@@ -471,17 +682,21 @@ public class ProjectBuild : EditorWindow
             }
         }
 
-        // 2. DefaultBuildSteps.cs 확인
+        // 2. DefaultBuildSteps.cs 확인 (Assets 및 Packages 모두 포괄)
         if (string.IsNullOrEmpty(targetPath))
         {
-            string defaultPath = "Assets/Tools/HB_Build/DefaultBuildSteps.cs";
-            if (File.Exists(defaultPath))
+            string[] defaultGuids = AssetDatabase.FindAssets("DefaultBuildSteps t:MonoScript");
+            if (defaultGuids != null && defaultGuids.Length > 0)
             {
-                string text = File.ReadAllText(defaultPath, Encoding.UTF8);
-                if (text.Contains($"class {type.Name}"))
+                string path = AssetDatabase.GUIDToAssetPath(defaultGuids[0]);
+                if (File.Exists(path))
                 {
-                    targetPath = defaultPath;
-                    fullCode = text;
+                    string text = File.ReadAllText(path, Encoding.UTF8);
+                    if (text.Contains($"class {type.Name}"))
+                    {
+                        targetPath = path;
+                        fullCode = text;
+                    }
                 }
             }
         }
@@ -664,6 +879,197 @@ public class ProjectBuild : EditorWindow
         EditorGUILayout.EndVertical();
     }
 
+    #region CLI & Jenkins Command Generator Section
+
+    private void DrawCommandLineGeneratorSection()
+    {
+        EditorGUILayout.BeginVertical("box");
+
+        m_ShowCliSection = EditorGUILayout.Foldout(m_ShowCliSection, "Jenkins & Unity CLI 명령어 생성기 (다중 버전 지원)", true, EditorStyles.foldoutHeader);
+        if (m_ShowCliSection)
+        {
+            EditorGUILayout.Space(4);
+
+            // 1. 실행 주체 (Runner Type)
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("실행 방식 (Runner)", GUILayout.Width(130));
+            m_CliRunner = (ECliRunnerType)EditorGUILayout.EnumPopup(m_CliRunner);
+            EditorGUILayout.EndHorizontal();
+
+            // 2. 명령어 모드 (Command Mode)
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("파라미터 모드 (Mode)", GUILayout.Width(130));
+            m_CliMode = (ECliCommandMode)EditorGUILayout.EnumPopup(m_CliMode);
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(4);
+
+            // 가이드 설명 레이블
+            string modeDesc = m_CliMode switch
+            {
+                ECliCommandMode.ProfileOnly => "▶ 1) 순수 프로필: '-buildProfile <경로>' 단일 인자로 가장 깔끔하게 프로필 전체 설정을 적용합니다.",
+                ECliCommandMode.FullUnpack => "▶ 2) 전체 풀기: 프로필 없이 '-buildTarget', '-buildType', '-buildVersion' 등 모든 개별 CLI 인자를 명시합니다.",
+                ECliCommandMode.ProfileOverride => "▶ 3) 프로필+오버라이드: 프로필 기본값 기반으로, CI 환경변수(Version 등)로 필요한 값만 덮어씁니다.",
+                _ => ""
+            };
+            EditorGUILayout.LabelField(modeDesc, EditorStyles.miniLabel);
+
+            string runnerDesc = m_CliRunner switch
+            {
+                ECliRunnerType.DirectUnityExe => "▶ Runner: 'Unity.exe' 직접 호출 (Jenkins 환경변수 UNITY_PATH 또는 로컬 Unity.exe)",
+                ECliRunnerType.UnityHubHeadless => "▶ Runner: 'Unity Hub.exe -- --headless run --project-path' (프로젝트 버전 일치 에디터 자동 탐색)",
+                _ => ""
+            };
+            EditorGUILayout.LabelField(runnerDesc, EditorStyles.miniLabel);
+
+            EditorGUILayout.Space(4);
+
+            // 실시간 미리보기
+            string previewCmd = BuildCommandLine(m_CliRunner, m_CliMode, false);
+            EditorGUILayout.TextArea(previewCmd, GUILayout.Height(64));
+
+            EditorGUILayout.Space(4);
+
+            // 액션 버튼 모음
+            EditorGUILayout.BeginHorizontal();
+
+            GUI.backgroundColor = new Color(0.4f, 0.85f, 1f);
+            if (GUILayout.Button("선택한 CLI 명령어 복사", GUILayout.Height(28)))
+            {
+                GUIUtility.systemCopyBuffer = previewCmd;
+                EditorUtility.DisplayDialog("복사 완료", $"선택된 CLI 명령어가 클립보드에 복사되었습니다!\n\n{previewCmd}", "확인");
+            }
+            GUI.backgroundColor = Color.white;
+
+            if (GUILayout.Button("배치 파일(.bat) 저장", GUILayout.Height(28), GUILayout.Width(130)))
+            {
+                ExportBatchScript(previewCmd);
+            }
+
+            if (GUILayout.Button("파워셸(.ps1) 저장", GUILayout.Height(28), GUILayout.Width(130)))
+            {
+                ExportPowerShellScript(previewCmd);
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private string BuildCommandLine(ECliRunnerType runner, ECliCommandMode mode, bool isJenkinsVar)
+    {
+        string projectPath = isJenkinsVar ? "${PROJECT_PATH}" : BuildHelper.ProjectPath;
+        if (string.IsNullOrEmpty(projectPath))
+            projectPath = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+        string logPath = isJenkinsVar ? "${LOG_FILE}" : "build.log";
+        string profilePath = m_SelectedProfile != null ? AssetDatabase.GetAssetPath(m_SelectedProfile) : "Assets/Editor/HBBuild/Profiles/BuildProfile_PC_DEV.asset";
+
+        var sb = new StringBuilder();
+
+        // Runner prefix
+        if (runner == ECliRunnerType.DirectUnityExe)
+        {
+            string unityExe = isJenkinsVar ? "\"${UNITY_PATH}\"" : $"\"{EditorApplication.applicationPath}\"";
+            sb.Append($"{unityExe} -batchmode -quit -projectPath \"{projectPath}\" -executeMethod ProjectBuild.JenkinsBuild -logFile \"{logPath}\"");
+        }
+        else
+        {
+            // Unity Hub CLI Headless
+            string hubPath = @"C:\Program Files\Unity Hub\Unity Hub.exe";
+            sb.Append($"\"{hubPath}\" -- --headless run --project-path \"{projectPath}\" -- -batchmode -quit -executeMethod ProjectBuild.JenkinsBuild -logFile \"{logPath}\"");
+        }
+
+        // Mode arguments
+        switch (mode)
+        {
+            case ECliCommandMode.ProfileOnly:
+                sb.Append($" -buildProfile \"{profilePath}\"");
+                break;
+
+            case ECliCommandMode.FullUnpack:
+                string targetStr = GetBuildTarget(m_Platform).ToString();
+                string sceneArg = m_ScenePath.Count > 0 ? string.Join(";", m_ScenePath) : "NONE";
+                string outDir = string.IsNullOrEmpty(m_OutputPath) ? BuildHelper.GetDefaultOutputPath(GetBuildTarget(m_Platform)) : m_OutputPath;
+
+                sb.Append($" -buildTarget {targetStr}");
+                sb.Append($" -buildType {m_BuildType}");
+                sb.Append($" -buildVersion \"{(isJenkinsVar ? "${params.BUILD_VERSION}" : m_Version)}\"");
+                sb.Append($" -versionCode \"{(isJenkinsVar ? "${params.VERSION_CODE}" : m_VersionCode)}\"");
+                sb.Append($" -devBuild {m_DevBuild.ToString().ToLower()}");
+                sb.Append($" -cleanBuild {m_CleanBuild.ToString().ToLower()}");
+                sb.Append($" -isAab {m_IsAab.ToString().ToLower()}");
+                sb.Append($" -zipPackage {m_ZipPackage.ToString().ToLower()}");
+                sb.Append($" -sceneList \"{sceneArg}\"");
+                sb.Append($" -outputPath \"{outDir}\"");
+                break;
+
+            case ECliCommandMode.ProfileOverride:
+                sb.Append($" -buildProfile \"{profilePath}\"");
+                sb.Append($" -buildVersion \"{(isJenkinsVar ? "${params.BUILD_VERSION}" : m_Version)}\"");
+                sb.Append($" -versionCode \"{(isJenkinsVar ? "${params.VERSION_CODE}" : m_VersionCode)}\"");
+                sb.Append($" -buildType {m_BuildType}");
+                sb.Append($" -devBuild {m_DevBuild.ToString().ToLower()}");
+                break;
+        }
+
+        return sb.ToString();
+    }
+
+    private void ExportBatchScript(string cmd)
+    {
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        string defaultPath = Path.Combine(projectRoot, "RunBuild.bat");
+        string selected = EditorUtility.SaveFilePanel("배치 스크립트(.bat) 저장", projectRoot, "RunBuild", "bat");
+        if (!string.IsNullOrEmpty(selected))
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("@echo off");
+            sb.AppendLine("echo ===================================================");
+            sb.AppendLine("echo   Starting Automated Unity CLI Build Process");
+            sb.AppendLine("echo ===================================================");
+            sb.AppendLine(cmd);
+            sb.AppendLine("echo.");
+            sb.AppendLine("if %ERRORLEVEL% EQU 0 (");
+            sb.AppendLine("    echo [SUCCESS] Unity Build finished with success code 0.");
+            sb.AppendLine(") else (");
+            sb.AppendLine("    echo [ERROR] Unity Build failed! Check build.log for details.");
+            sb.AppendLine(")");
+            sb.AppendLine("pause");
+
+            File.WriteAllText(selected, sb.ToString(), Encoding.Default);
+            EditorUtility.DisplayDialog("저장 완료", $"배치 파일이 성공적으로 생성되었습니다:\n{selected}", "확인");
+            EditorUtility.RevealInFinder(selected);
+        }
+    }
+
+    private void ExportPowerShellScript(string cmd)
+    {
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        string selected = EditorUtility.SaveFilePanel("파워셸 스크립트(.ps1) 저장", projectRoot, "RunBuild", "ps1");
+        if (!string.IsNullOrEmpty(selected))
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Write-Host '===================================================' -ForegroundColor Cyan");
+            sb.AppendLine("Write-Host '   Starting Automated Unity CLI Build Process' -ForegroundColor Cyan");
+            sb.AppendLine("Write-Host '===================================================' -ForegroundColor Cyan");
+            sb.AppendLine($"$cmd = '{cmd.Replace("'", "''")}'");
+            sb.AppendLine("Invoke-Expression $cmd");
+            sb.AppendLine("if ($LASTEXITCODE -eq 0) {");
+            sb.AppendLine("    Write-Host '[SUCCESS] Unity Build finished successfully!' -ForegroundColor Green");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    Write-Host \"[ERROR] Unity Build failed with exit code $LASTEXITCODE!\" -ForegroundColor Red");
+            sb.AppendLine("}");
+
+            File.WriteAllText(selected, sb.ToString(), Encoding.UTF8);
+            EditorUtility.DisplayDialog("저장 완료", $"파워셸 스크립트가 성공적으로 생성되었습니다:\n{selected}", "확인");
+            EditorUtility.RevealInFinder(selected);
+        }
+    }
+
+    #endregion
+
     private void DrawActionButtons()
     {
         GUI.backgroundColor = new Color(0.35f, 0.85f, 0.45f);
@@ -681,15 +1087,6 @@ public class ProjectBuild : EditorWindow
             GenerateJenkinsfile();
         }
         GUI.backgroundColor = Color.white;
-
-        EditorGUILayout.Space(2);
-
-        if (GUILayout.Button("Jenkins CLI 명령어 복사", GUILayout.Height(28)))
-        {
-            string cliCmd = GetCommandLinePreview();
-            GUIUtility.systemCopyBuffer = cliCmd;
-            EditorUtility.DisplayDialog("복사 완료", $"Jenkins 배치 명령어가 클립보드에 복사되었습니다:\n\n{cliCmd}", "확인");
-        }
     }
 
     private void LoadScenesFromBuildSettings()
@@ -712,6 +1109,14 @@ public class ProjectBuild : EditorWindow
 
     private void ExecuteLocalBuild()
     {
+        if (m_SelectedProfile != null)
+        {
+            SaveToCurrentProfile();
+            AbsBuild.ExecuteFromProfile(m_SelectedProfile);
+            EditorUtility.DisplayDialog("빌드 완료", $"'{m_SelectedProfile.name}' 프로필 기반 플레이어 빌드가 성공적으로 완료되었습니다!", "확인");
+            return;
+        }
+
         var target = GetBuildTarget(m_Platform);
         var scenes = m_ScenePath.Count > 0 ? m_ScenePath.ToArray() : BuildHelper.GetDefaultBuildScenes();
 
@@ -781,30 +1186,72 @@ public class ProjectBuild : EditorWindow
 
     private void GenerateJenkinsfile()
     {
-        string targetStr = GetBuildTarget(m_Platform).ToString();
-        string sceneArg = m_ScenePath.Count > 0 ? string.Join(";", m_ScenePath) : "NONE";
+        var allProfiles = HBBuildProfile.FindAllProfiles();
+        var profileChoices = new List<string>();
+
+        if (m_SelectedProfile != null)
+        {
+            profileChoices.Add(AssetDatabase.GetAssetPath(m_SelectedProfile));
+        }
+
+        foreach (var p in allProfiles)
+        {
+            string pPath = AssetDatabase.GetAssetPath(p);
+            if (!profileChoices.Contains(pPath))
+                profileChoices.Add(pPath);
+        }
+
+        if (profileChoices.Count == 0)
+        {
+            profileChoices.Add("Assets/Editor/HBBuild/Profiles/BuildProfile_PC_DEV.asset");
+        }
+
+        string choicesArrayStr = string.Join(", ", profileChoices.Select(c => $"'{c}'"));
+        string defaultProfile = profileChoices[0];
 
         var sb = new StringBuilder();
         sb.AppendLine("// ==========================================================================");
-        sb.AppendLine("// Jenkins Declarative Pipeline - Generated by HB Custom Build Manager");
+        sb.AppendLine($"// Jenkins Declarative Pipeline - Generated by HB Custom Build Manager");
+        sb.AppendLine($"// Mode: {m_CliMode} | Runner: {m_CliRunner}");
         sb.AppendLine($"// Generated Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine("// ==========================================================================");
         sb.AppendLine("pipeline {");
         sb.AppendLine("    agent any");
         sb.AppendLine();
         sb.AppendLine("    parameters {");
-        sb.AppendLine($"        choice(name: 'BUILD_TARGET', choices: ['{targetStr}', 'StandaloneWindows64', 'Android', 'iOS'], description: '빌드 타겟 플랫폼')");
-        sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: ['{m_BuildType}', 'DEV', 'QA', 'LIVE'], description: '빌드 환경 모드')");
-        sb.AppendLine($"        string(name: 'BUILD_VERSION', defaultValue: '{m_Version}', description: '앱 버전 (Bundle Version)')");
-        sb.AppendLine($"        string(name: 'VERSION_CODE', defaultValue: '{m_VersionCode}', description: '버전 코드 (Android/iOS)')");
-        sb.AppendLine($"        booleanParam(name: 'DEV_BUILD', defaultValue: {m_DevBuild.ToString().ToLower()}, description: 'Development Build 활성화')");
-        sb.AppendLine($"        booleanParam(name: 'CLEAN_BUILD', defaultValue: {m_CleanBuild.ToString().ToLower()}, description: 'Clean Build Cache')");
-        sb.AppendLine($"        booleanParam(name: 'IS_AAB', defaultValue: {m_IsAab.ToString().ToLower()}, description: 'Android App Bundle(.aab) 빌드 여부')");
-        sb.AppendLine($"        booleanParam(name: 'ZIP_PACKAGE', defaultValue: {m_ZipPackage.ToString().ToLower()}, description: 'PC 빌드 결과물 ZIP 압축 여부')");
+
+        if (m_CliMode == ECliCommandMode.ProfileOnly || m_CliMode == ECliCommandMode.ProfileOverride)
+        {
+            sb.AppendLine($"        choice(name: 'BUILD_PROFILE', choices: [{choicesArrayStr}], description: '실행할 HBBuildProfile(.asset) 경로')");
+        }
+
+        if (m_CliMode == ECliCommandMode.FullUnpack)
+        {
+            string targetStr = GetBuildTarget(m_Platform).ToString();
+            sb.AppendLine($"        choice(name: 'BUILD_TARGET', choices: ['{targetStr}', 'StandaloneWindows64', 'Android', 'iOS'], description: '빌드 타겟 플랫폼')");
+            sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: ['{m_BuildType}', 'DEV', 'QA', 'LIVE'], description: '빌드 환경 모드')");
+        }
+
+        if (m_CliMode == ECliCommandMode.FullUnpack || m_CliMode == ECliCommandMode.ProfileOverride)
+        {
+            sb.AppendLine($"        string(name: 'BUILD_VERSION', defaultValue: '{m_Version}', description: '앱 버전 (Bundle Version)')");
+            sb.AppendLine($"        string(name: 'VERSION_CODE', defaultValue: '{m_VersionCode}', description: '버전 코드 (Android/iOS)')");
+        }
+
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    environment {");
-        sb.AppendLine("        UNITY_PATH = 'C:/Program Files/Unity/Hub/Editor/6000.0.46f1/Editor/Unity.exe'");
+
+        if (m_CliRunner == ECliRunnerType.DirectUnityExe)
+        {
+            string unityPath = EditorApplication.applicationPath.Replace('\\', '/');
+            sb.AppendLine($"        UNITY_PATH = '{unityPath}'");
+        }
+        else
+        {
+            sb.AppendLine("        UNITY_HUB_PATH = 'C:/Program Files/Unity Hub/Unity Hub.exe'");
+        }
+
         sb.AppendLine("        PROJECT_PATH = \"${WORKSPACE}\"");
         sb.AppendLine("        OUTPUT_DIR = \"${WORKSPACE}/BuildOutput\"");
         sb.AppendLine("        LOG_FILE = \"${WORKSPACE}/build.log\"");
@@ -817,25 +1264,16 @@ public class ProjectBuild : EditorWindow
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        stage('Unity Player Build') {");
+        sb.AppendLine("        stage('Unity Build Execution') {");
         sb.AppendLine("            steps {");
         sb.AppendLine("                script {");
-        sb.AppendLine("                    echo \"Starting Unity CLI Build: Target=${params.BUILD_TARGET}, Type=${params.BUILD_TYPE}, Ver=${params.BUILD_VERSION}\"");
+        sb.AppendLine($"                    echo \"Executing Unity Build: Runner={m_CliRunner}, Mode={m_CliMode}\"");
+
+        string rawCmd = BuildCommandLine(m_CliRunner, m_CliMode, true);
+        string formattedCmd = rawCmd.Replace(" -", " \\\n                        -");
+
         sb.AppendLine("                    def unityArgs = \"\"\"");
-        sb.AppendLine("                        \\\"${UNITY_PATH}\\\" -batchmode -quit \\");
-        sb.AppendLine("                        -projectPath \\\"${PROJECT_PATH}\\\" \\");
-        sb.AppendLine("                        -executeMethod ProjectBuild.JenkinsBuild \\");
-        sb.AppendLine("                        -logFile \\\"${LOG_FILE}\\\" \\");
-        sb.AppendLine("                        -buildTarget ${params.BUILD_TARGET} \\");
-        sb.AppendLine("                        -buildType ${params.BUILD_TYPE} \\");
-        sb.AppendLine("                        -buildVersion ${params.BUILD_VERSION} \\");
-        sb.AppendLine("                        -versionCode ${params.VERSION_CODE} \\");
-        sb.AppendLine("                        -devBuild ${params.DEV_BUILD} \\");
-        sb.AppendLine("                        -cleanBuild ${params.CLEAN_BUILD} \\");
-        sb.AppendLine("                        -isAab ${params.IS_AAB} \\");
-        sb.AppendLine("                        -zipPackage ${params.ZIP_PACKAGE} \\");
-        sb.AppendLine($"                        -sceneList \\\"{sceneArg}\\\" \\");
-        sb.AppendLine("                        -outputPath \\\"${OUTPUT_DIR}\\\"");
+        sb.AppendLine($"                        {formattedCmd}");
         sb.AppendLine("                    \"\"\".stripIndent().trim()");
         sb.AppendLine();
         sb.AppendLine("                    if (isUnix()) {");
@@ -875,7 +1313,7 @@ public class ProjectBuild : EditorWindow
 
         bool saveFile = EditorUtility.DisplayDialog(
             "Jenkinsfile (Groovy) 생성 완료",
-            "Jenkinsfile Groovy 스크립트가 생성되어 클립보드에 복사되었습니다!\n\n프로젝트 루트에 'Jenkinsfile' 파일로 바로 저장하시겠습니까?",
+            $"현재 선택된 옵션(Runner: {m_CliRunner}, Mode: {m_CliMode}) 기반의 Jenkinsfile Groovy 코드가 클립보드에 복사되었습니다!\n\n프로젝트 루트에 'Jenkinsfile' 파일로 저장하시겠습니까?",
             "Jenkinsfile 파일로 저장",
             "클립보드 복사만 유지"
         );
@@ -888,19 +1326,6 @@ public class ProjectBuild : EditorWindow
         }
     }
 
-    private string GetCommandLinePreview()
-    {
-        string targetStr = GetBuildTarget(m_Platform).ToString();
-        string sceneArg = m_ScenePath.Count > 0 ? string.Join(";", m_ScenePath) : "NONE";
-
-        return $"Unity.exe -batchmode -quit -projectPath \"{BuildHelper.ProjectPath}\" " +
-               $"-executeMethod ProjectBuild.JenkinsBuild -logFile \"build.log\" " +
-               $"-buildTarget {targetStr} -buildType {m_BuildType} -buildVersion {m_Version} " +
-               $"-versionCode {m_VersionCode} -devBuild {m_DevBuild.ToString().ToLower()} " +
-               $"-cleanBuild {m_CleanBuild.ToString().ToLower()} -isAab {m_IsAab.ToString().ToLower()} " +
-               $"-sceneList \"{sceneArg}\" -outputPath \"{m_OutputPath}\"";
-    }
-
     #region Jenkins CLI Entrypoint
 
     public static void JenkinsBuild()
@@ -910,6 +1335,14 @@ public class ProjectBuild : EditorWindow
         BuildHelper.SetUpAllArgs();
         BuildHelper.ReadDevBuildState();
         BuildHelper.ReadEnvironment();
+
+        var profileArg = BuildHelper.GetArg(BuildHelper.BUILD_PROFILE);
+        if (!string.IsNullOrEmpty(profileArg))
+        {
+            BuildHelper.Log($"Detected -buildProfile argument: {profileArg}");
+            AbsBuild.ExecuteFromProfilePath(profileArg);
+            return;
+        }
 
         var platformTargetStr = BuildHelper.GetArg(BuildHelper.BUILD_TARGET);
         if (string.IsNullOrEmpty(platformTargetStr) ||

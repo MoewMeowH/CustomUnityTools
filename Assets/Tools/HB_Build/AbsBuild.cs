@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -58,6 +58,115 @@ public static class AbsBuild
         Log($"==========================================================================");
 
         return report;
+    }
+
+    /// <summary>
+    /// 지정된 HBBuildProfile 에셋을 바탕으로 빌드 파이프라인을 실행합니다.
+    /// </summary>
+    public static BuildReport ExecuteFromProfile(HBBuildProfile profile)
+    {
+        if (profile == null)
+        {
+            throw ThrowError("HBBuildProfile instance is null!");
+        }
+
+        Log($"[Pipeline] Executing build from Profile: {profile.name} (Platform: {profile.TargetPlatform}, Mode: {profile.BuildType})");
+        var context = profile.ToBuildContext();
+        return Execute(context);
+    }
+
+    /// <summary>
+    /// 에셋 경로를 통해 HBBuildProfile을 로드하여 빌드 파이프라인을 실행합니다. (Jenkins -buildProfile CLI 지원)
+    /// </summary>
+    public static BuildReport ExecuteFromProfilePath(string profilePath)
+    {
+        if (string.IsNullOrWhiteSpace(profilePath))
+        {
+            throw ThrowError("Build profile path argument is empty!");
+        }
+
+        profilePath = profilePath.Trim().Replace('\\', '/');
+        var profile = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(profilePath);
+        if (profile == null)
+        {
+            string fileNameWithoutExt = Path.GetFileNameWithoutExtension(profilePath);
+            string[] guids = AssetDatabase.FindAssets($"t:HBBuildProfile {fileNameWithoutExt}");
+            if (guids != null && guids.Length > 0)
+            {
+                string resolvedPath = AssetDatabase.GUIDToAssetPath(guids[0]);
+                profile = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(resolvedPath);
+            }
+        }
+
+        if (profile == null)
+        {
+            throw ThrowError($"Failed to load HBBuildProfile at path: '{profilePath}'");
+        }
+
+        var context = profile.ToBuildContext();
+        ApplyCommandLineOverrides(context);
+        return Execute(context);
+    }
+
+    private static void ApplyCommandLineOverrides(BuildContext context)
+    {
+        var buildTypeStr = GetArg(BUILD_TYPE);
+        if (!string.IsNullOrEmpty(buildTypeStr) && Enum.TryParse<EBuildType>(buildTypeStr, true, out var bType))
+        {
+            Log($"[CLI Override] BuildType: {context.BuildType} -> {bType}");
+            context.BuildType = bType;
+        }
+
+        var ver = GetArg(BUILD_VERSION);
+        if (!string.IsNullOrEmpty(ver))
+        {
+            Log($"[CLI Override] Version: {context.Version} -> {ver}");
+            context.Version = ver;
+        }
+
+        var vCode = GetArg(VERSION_CODE);
+        if (!string.IsNullOrEmpty(vCode))
+        {
+            Log($"[CLI Override] VersionCode: {context.VersionCode} -> {vCode}");
+            context.VersionCode = vCode;
+        }
+
+        var devBuildStr = GetArg(DEV_BUILD);
+        if (!string.IsNullOrEmpty(devBuildStr) && bool.TryParse(devBuildStr, out bool dev))
+        {
+            Log($"[CLI Override] DevBuild: {context.IsDevBuild} -> {dev}");
+            context.IsDevBuild = dev;
+        }
+
+        var isAabStr = GetArg(IS_AAB);
+        if (!string.IsNullOrEmpty(isAabStr) && bool.TryParse(isAabStr, out bool aab))
+        {
+            Log($"[CLI Override] IsAab: {context.IsAab} -> {aab}");
+            context.IsAab = aab;
+        }
+
+        var zipStr = GetArg(ZIP_PACKAGE);
+        if (!string.IsNullOrEmpty(zipStr) && bool.TryParse(zipStr, out bool zip))
+        {
+            Log($"[CLI Override] ZipPackage: {context.ZipPackage} -> {zip}");
+            context.ZipPackage = zip;
+        }
+
+        var customOut = GetArg(OUTPUT_PATH);
+        if (!string.IsNullOrEmpty(customOut))
+        {
+            Log($"[CLI Override] OutputPath: {context.OutputPath} -> {customOut}");
+            context.OutputPath = customOut;
+        }
+
+        string ext = context.Target switch
+        {
+            BuildTarget.Android => context.IsAab ? ".aab" : ".apk",
+            BuildTarget.StandaloneWindows or BuildTarget.StandaloneWindows64 => ".exe",
+            _ => ""
+        };
+        string appName = $"{Application.productName}_v{context.Version}_{context.BuildType}{ext}";
+        context.PlayerOptions.locationPathName = Path.Combine(context.OutputPath, appName);
     }
 
     /// <summary>
@@ -126,7 +235,7 @@ public static class AbsBuild
         context.PlayerOptions = new BuildPlayerOptions
         {
             scenes = context.Scenes.ToArray(),
-            target = context.Target,
+            target = target,
             targetGroup = context.TargetGroup,
             locationPathName = locationPath,
             options = BuildOptions.CompressWithLz4HC
