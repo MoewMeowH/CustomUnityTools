@@ -1,6 +1,6 @@
 {
   "name": "com.hb.cheat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "HB_Cheat",
   "description": "Development cheat panel (UI Toolkit, mobile-first) with attribute-based cheat definitions, server cheat string composition, strict release-build exclusion and Unity CLI automation.",
   "unity": "6000.3",
@@ -11,6 +11,13 @@
     "qa",
     "uitk",
     "automation"
+  ],
+  "samples": [
+    {
+      "displayName": "Cheat Examples",
+      "description": "Local / Server cheats by type: option providers, DependsOn, enum, bool, string, CheatResult, and a server transport with a fake network.",
+      "path": "Samples~/CheatExamples"
+    }
   ],
   "author": {
     "name": "HoBeenH",
