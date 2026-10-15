@@ -262,37 +262,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
             }
 
             if (panelRenderer.panelSettings == null)
-            {
-                if (settings != null && settings.PanelSettings != null)
-                    panelRenderer.panelSettings = settings.PanelSettings;
-                else
-                    panelRenderer.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
-
-#if UNITY_EDITOR
-                if (panelRenderer.panelSettings == null)
-                {
-                    string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
-                    if (pGuids != null && pGuids.Length > 0)
-                    {
-                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
-                        panelRenderer.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
-                    }
-                }
-#endif
-
-                if (panelRenderer.panelSettings == null)
-                {
-                    var fallback = ScriptableObject.CreateInstance<PanelSettings>();
-                    fallback.name = "HB_RuntimePanelSettings";
-                    fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
-                    fallback.referenceResolution = new Vector2Int(1200, 800);
-                    fallback.match = 0.5f;
-                    fallback.sortingOrder = 1000;
-                    panelRenderer.panelSettings = fallback;
-                }
-            }
-
-            InGameConsole.EnsureThemeStyleSheet(panelRenderer.panelSettings);
+                panelRenderer.panelSettings = InGameConsole.ResolvePanelSettings(settings);
+            else
+                InGameConsole.EnsureThemeStyleSheet(panelRenderer.panelSettings);
 
             if (panelRenderer.sortingOrder < 1000)
             {
@@ -326,37 +298,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
             }
 
             if (uiDocument.panelSettings == null)
-            {
-                if (settings != null && settings.PanelSettings != null)
-                    uiDocument.panelSettings = settings.PanelSettings;
-                else
-                    uiDocument.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
-
-#if UNITY_EDITOR
-                if (uiDocument.panelSettings == null)
-                {
-                    string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
-                    if (pGuids != null && pGuids.Length > 0)
-                    {
-                        string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
-                        uiDocument.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
-                    }
-                }
-#endif
-
-                if (uiDocument.panelSettings == null)
-                {
-                    var fallback = ScriptableObject.CreateInstance<PanelSettings>();
-                    fallback.name = "HB_RuntimePanelSettings";
-                    fallback.scaleMode = PanelScaleMode.ScaleWithScreenSize;
-                    fallback.referenceResolution = new Vector2Int(1200, 800);
-                    fallback.match = 0.5f;
-                    fallback.sortingOrder = 1000;
-                    uiDocument.panelSettings = fallback;
-                }
-            }
-
-            InGameConsole.EnsureThemeStyleSheet(uiDocument.panelSettings);
+                uiDocument.panelSettings = InGameConsole.ResolvePanelSettings(settings);
+            else
+                InGameConsole.EnsureThemeStyleSheet(uiDocument.panelSettings);
 
             if (uiDocument.sortingOrder < 1000)
             {
