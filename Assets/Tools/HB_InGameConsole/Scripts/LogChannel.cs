@@ -89,16 +89,25 @@ public class LogChannel
 
     [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
     [HideInCallstack]
-    public void Watch(string key, Func<object> getter)
+    public void Watch(string key, Func<object> getter, UnityEngine.Object owner = null)
     {
-        HLogCore.Watch($"{Tag}/{key}", getter);
+        HLogCore.Watch($"{Tag}/{key}", getter, owner);
     }
 
     [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
     [HideInCallstack]
-    public void Watch<T>(string key, Func<T> getter)
+    public void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null)
     {
-        HLogCore.Watch<T>($"{Tag}/{key}", getter);
+        HLogCore.Watch<T>($"{Tag}/{key}", getter, owner);
+    }
+
+    /// <summary>
+    /// 이 채널에 등록한 Watch 항목을 제거합니다.
+    /// </summary>
+    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
+    public void Unwatch(string key)
+    {
+        HLogCore.Unwatch($"{Tag}/{key}");
     }
 
     /// <summary>

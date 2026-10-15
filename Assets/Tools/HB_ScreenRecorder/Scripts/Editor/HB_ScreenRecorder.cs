@@ -12,11 +12,11 @@ using UnityEditor.Recorder.Input;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [NoAutoStaticsCleanup]
 #endif
 public static class HB_ScreenRecorder
@@ -41,6 +41,7 @@ public static class HB_ScreenRecorder
     }
 
     private static RecorderController s_RecorderController;
+    private static RecorderControllerSettings s_ControllerSettings;
     private static bool s_IsRecording = false;
     private static string s_CurrentSessionFolder = string.Empty;
     private static double s_StartTime = 0;
@@ -53,12 +54,26 @@ public static class HB_ScreenRecorder
     private static void ResetStaticsOnDomainReload()
     {
         s_RecorderController = null;
+        s_ControllerSettings = null;
         s_IsRecording = false;
         s_CurrentSessionFolder = string.Empty;
         s_StartTime = 0;
         s_TargetFps = 30;
         s_CurrentIssueTag = string.Empty;
         s_CurrentNotes = string.Empty;
+
+        // Recorder는 Play Mode에서만 녹화되므로, Play Mode를 나가면 자동으로 녹화를 마무리하고 진단 파일을 저장한다
+        EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+        EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+    }
+
+    private static void OnPlayModeStateChanged(PlayModeStateChange state)
+    {
+        if (state == PlayModeStateChange.ExitingPlayMode && s_IsRecording)
+        {
+            Debug.Log("[HB_ScreenRecorder] Play Mode 종료로 녹화를 자동 저장합니다.");
+            StopRecording();
+        }
     }
 #endif
 
@@ -89,6 +104,12 @@ public static class HB_ScreenRecorder
         if (IsRecording)
         {
             Debug.LogWarning("[HB_ScreenRecorder] 이미 녹화가 진행 중입니다.");
+            return false;
+        }
+
+        if (!EditorApplication.isPlaying)
+        {
+            Debug.LogWarning("[HB_ScreenRecorder] Unity Recorder는 Play Mode에서만 녹화할 수 있습니다. Play Mode에 들어간 뒤 시작하세요.");
             return false;
         }
 
@@ -131,6 +152,7 @@ public static class HB_ScreenRecorder
 
         controllerSettings.AddRecorderSettings(movieSettings);
 
+        s_ControllerSettings = controllerSettings;
         s_RecorderController = new RecorderController(controllerSettings);
         s_StartTime = EditorApplication.timeSinceStartup;
 
@@ -154,9 +176,26 @@ public static class HB_ScreenRecorder
             s_RecorderController = null;
         }
         s_IsRecording = false;
+        DestroyControllerSettings();
 
         SaveDiagnosticLogsAndState(s_CurrentSessionFolder, "Video Recording Session", duration);
         Debug.Log($"[HB_ScreenRecorder] 녹화 완료 ({duration:F2}s): {s_CurrentSessionFolder}");
+    }
+
+    /// <summary>
+    /// 녹화마다 만드는 설정 ScriptableObject(컨트롤러 + 무비 레코더 설정)를 정리합니다.
+    /// </summary>
+    private static void DestroyControllerSettings()
+    {
+        if (s_ControllerSettings == null) return;
+
+        foreach (var recorder in s_ControllerSettings.RecorderSettings)
+        {
+            if (recorder != null)
+                UnityEngine.Object.DestroyImmediate(recorder);
+        }
+        UnityEngine.Object.DestroyImmediate(s_ControllerSettings);
+        s_ControllerSettings = null;
     }
 
     public static string TakeScreenshot(string issueTag = "", string notes = "")
@@ -265,19 +304,8 @@ public static class HB_ScreenRecorder
         sb.AppendLine($"Dump Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine("--------------------------------------------------");
 
-        Type hbLogType = Type.GetType("InGameConsoleSystem.HLogCore, HB.InGameConsole")
-                      ?? Type.GetType("InGameConsoleSystem.HLogCore")
-                      ?? Type.GetType("HLog.HLogCore, HB.InGameConsole")
-                      ?? Type.GetType("HLog.HLogCore")
-                      ?? Type.GetType("HLog, HB.InGameConsole")
-                      ?? Type.GetType("HLog, Assembly-CSharp")
-                      ?? Type.GetType("HLog")
-                      ?? Type.GetType("Logger, HB.InGameConsole") 
-                      ?? Type.GetType("Logger, Assembly-CSharp") 
-                      ?? Type.GetType("Logger")
-                      ?? Type.GetType("HB_Log, HB.InGameConsole") 
-                      ?? Type.GetType("HB_Log, Assembly-CSharp") 
-                      ?? Type.GetType("HB_Log");
+        // HB_InGameConsole 패키지가 설치되어 있으면 로그 기록을 가져온다 (선택 의존이라 리플렉션으로 조회)
+        Type hbLogType = Type.GetType("HLogCore, HB.InGameConsole");
 
         if (hbLogType != null)
         {

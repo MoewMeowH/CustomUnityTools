@@ -1,6 +1,6 @@
 ﻿# HB_InGameConsole & HLog
 
-Unity 6 / 7 및 최신 런타임을 지원하는 고성능 인게임 콘솔 및 에디터 로깅 / 디버깅 툴킷입니다.
+Unity 6.3 이상(6 / 7)을 지원하는 고성능 인게임 콘솔 및 에디터 로깅 / 디버깅 툴킷입니다.
 
 ---
 
@@ -12,6 +12,11 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_InGameCon
 ```
 
 설치 즉시 프로젝트의 `Assets/Scripts/LogChannels.cs` 파일이 자동 생성(Auto-Bootstrap)되므로 추가 설정 없이 바로 `HLog`를 호출할 수 있습니다.
+
+- **콘솔 설정 (InitMode, AutoCreateUI 등)**: UPM으로 설치된 패키지는 읽기 전용이라 패키지 안의 기본 설정은 수정할 수 없습니다. `Tools > HB > In-Game Console > Settings` 메뉴를 실행하면 기본값을 복사한 `Assets/Resources/HB_InGameConsoleUserSettings.asset`이 생성되며, 이 에셋이 있으면 패키지 기본 설정보다 우선 적용됩니다.
+- **다른 스레드 로그**: Task, Job 등 메인 스레드가 아닌 곳에서 찍은 로그도 수집합니다. 메인 스레드에서 다음 프레임에 콘솔에 추가되므로 메인 스레드 로그와 순서가 약간 어긋날 수 있습니다.
+- **Watch 해제**: `Watch(key, getter, this)`처럼 owner를 넘기면 owner가 파괴될 때 자동 해제되며, `Unwatch(key)`로 직접 해제할 수도 있습니다.
+- **asmdef를 쓰는 프로젝트**: 기본 생성 위치(`Assets/Scripts`)는 Assembly-CSharp에 포함되어 asmdef 코드에서 `HLog`를 참조할 수 없습니다. LogChannel Generator 설정에서 출력 폴더를 해당 asmdef 폴더 안으로 지정하세요.
 
 ---
 

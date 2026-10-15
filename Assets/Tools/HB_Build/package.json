@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "displayName": "HB_Build",
   "description": "Multiplatform custom build manager with Jenkins CI/CD automated pipeline and Groovy Jenkinsfile generator.",
-  "unity": "2021.3",
-  "unityRelease": "0b1",
+  "unity": "6000.3",
   "dependencies": {},
   "keywords": [
     "build",

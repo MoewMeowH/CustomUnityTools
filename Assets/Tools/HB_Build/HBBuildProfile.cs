@@ -5,7 +5,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 
@@ -15,7 +15,7 @@ using Unity.Scripting.LifecycleManagement;
 /// 플랫폼, 환경, 버전, 씬, 전처리기 에셋 등의 빌드 설정을 독립적으로 관리하고
 /// Jenkins CI/CD에서 '-buildProfile' 단일 파라미터로 재현성 높은 빌드를 수행할 수 있습니다.
 /// </summary>
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [NoAutoStaticsCleanup]
 #endif
 [CreateAssetMenu(fileName = "BuildProfile_New", menuName = "HB_Build/Build Profile", order = 50)]

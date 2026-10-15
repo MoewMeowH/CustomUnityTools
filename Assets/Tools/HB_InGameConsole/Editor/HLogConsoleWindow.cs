@@ -167,6 +167,7 @@ namespace InGameConsoleSystem.Editor
             HLogCore.OnLogAdded += OnLogAdded;
             HLogCore.OnLogsCleared += OnLogsCleared;
             HLogCore.OnWatchUpdated += OnWatchUpdated;
+            HLogCore.OnWatchRemoved += OnWatchRemoved;
             HLogCore.OnTagDiscovered += OnTagDiscovered;
 
             EditorApplication.playModeStateChanged -= OnPlayModeChanged;
@@ -182,6 +183,7 @@ namespace InGameConsoleSystem.Editor
             HLogCore.OnLogAdded -= OnLogAdded;
             HLogCore.OnLogsCleared -= OnLogsCleared;
             HLogCore.OnWatchUpdated -= OnWatchUpdated;
+            HLogCore.OnWatchRemoved -= OnWatchRemoved;
             HLogCore.OnTagDiscovered -= OnTagDiscovered;
 
             EditorApplication.playModeStateChanged -= OnPlayModeChanged;
@@ -251,6 +253,14 @@ namespace InGameConsoleSystem.Editor
             selectedEntry = null;
             isDirty = true;
             Repaint();
+        }
+
+        private void OnWatchRemoved(string key)
+        {
+            if (currentTab == ConsoleTab.Watch)
+            {
+                Repaint();
+            }
         }
 
         private void OnWatchUpdated(string key, string value)
@@ -575,15 +585,7 @@ namespace InGameConsoleSystem.Editor
             GUILayout.FlexibleSpace();
 
             // Log Count Stats & Level Toggles
-            int infoCount = 0, warnCount = 0, errCount = 0;
-            var history = HLogCore.History;
-            for (int i = 0; i < history.Count; i++)
-            {
-                var lt = history[i].LogType;
-                if (lt == LogType.Log) infoCount++;
-                else if (lt == LogType.Warning) warnCount++;
-                else errCount++;
-            }
+            HLogCore.GetLogTypeCounts(out int infoCount, out int warnCount, out int errCount);
 
             EditorGUI.BeginChangeCheck();
             showInfo = GUILayout.Toggle(showInfo, $"Info: {infoCount}", EditorStyles.toolbarButton, GUILayout.Width(75));
@@ -642,16 +644,7 @@ namespace InGameConsoleSystem.Editor
             GUI.color = Color.white;
 
             var knownTags = HLogCore.KnownTags;
-            bool hasUntaggedLogs = false;
-            var history = HLogCore.History;
-            for (int i = 0; i < history.Count; i++)
-            {
-                if (string.IsNullOrEmpty(history[i].Tag))
-                {
-                    hasUntaggedLogs = true;
-                    break;
-                }
-            }
+            bool hasUntaggedLogs = HLogCore.HasUntaggedLogs;
 
             var tagsToDisplay = new List<string>(knownTags);
             if (hasUntaggedLogs && !tagsToDisplay.Contains("[Untagged]"))

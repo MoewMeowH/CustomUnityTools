@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "displayName": "HB_TestFrameworkHelper",
   "description": "HeartBeat Test Framework Helper - Includes Inspector slot null validation ([NeedSlotNullCheck]) and expandable test utilities.",
-  "unity": "2022.3",
+  "unity": "6000.3",
   "author": {
     "name": "HeartBeat"
   },

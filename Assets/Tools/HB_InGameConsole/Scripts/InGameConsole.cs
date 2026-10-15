@@ -1,4 +1,4 @@
-﻿#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+﻿#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 using Unity.Scripting.LifecycleManagement;
 #endif
 using System.Reflection;
@@ -6,7 +6,7 @@ using InGameConsoleSystem;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [AutoStaticsCleanup]
 #endif
 public static partial class InGameConsole
@@ -32,7 +32,7 @@ public static partial class InGameConsole
         }
     }
 
-#if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_0_OR_NEWER)
+#if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER)
 #if UNITY_EDITOR
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStaticsOnDomainReload()
@@ -78,7 +78,7 @@ public static partial class InGameConsole
         var settings = InGameConsoleSettings.Instance;
         var go = new GameObject("[InGameConsole]");
 
-#if UNITY_6000_0_OR_NEWER
+#if UNITY_6000_5_OR_NEWER
         // Unity 6+ 권장 PanelRenderer 컴포넌트 생성 (UIDocument 대체)
         var panelRenderer = go.AddComponent<PanelRenderer>();
         panelRenderer.sortingOrder = 9999;
