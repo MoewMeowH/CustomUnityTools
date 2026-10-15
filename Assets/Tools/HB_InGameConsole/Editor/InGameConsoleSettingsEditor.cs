@@ -2,7 +2,6 @@
 using InGameConsoleSystem;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace InGameConsoleSystem.Editor
 {
@@ -29,16 +28,9 @@ namespace InGameConsoleSystem.Editor
                 AssetDatabase.CreateFolder("Assets", "Resources");
             }
 
-            // 현재 쓰이는 설정(패키지 기본값)을 복사해 시작값으로 사용
-            var current = InGameConsoleSettings.Instance;
-            var settings = current != null
-                ? Object.Instantiate(current)
-                : ScriptableObject.CreateInstance<InGameConsoleSettings>();
+            var settings = ScriptableObject.CreateInstance<InGameConsoleSettings>();
 
-            if (settings.ConsoleVisualTree == null)
-                settings.ConsoleVisualTree = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
-            if (settings.PanelSettings == null)
-                settings.PanelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
+            // VisualTree/PanelSettings는 비워 두면 패키지 기본값을 사용한다 (필요할 때만 프로젝트 에셋을 지정)
 
             AssetDatabase.CreateAsset(settings, InGameConsoleSettings.UserAssetPath);
             AssetDatabase.SaveAssets();

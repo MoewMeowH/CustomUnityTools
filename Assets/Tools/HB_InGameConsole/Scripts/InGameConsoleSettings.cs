@@ -23,11 +23,6 @@ namespace InGameConsoleSystem
         public const string UserResourcePath = "HB_InGameConsoleUserSettings";
         public const string UserAssetPath = "Assets/Resources/" + UserResourcePath + ".asset";
 
-        /// <summary>
-        /// 패키지에 포함된 기본 설정 (사용자 설정이 없을 때 사용)
-        /// </summary>
-        private const string DefaultResourcePath = "InGameConsoleSettings";
-
         private static InGameConsoleSettings s_Instance;
 
 #if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER)
@@ -94,10 +89,8 @@ namespace InGameConsoleSystem
             {
                 if (s_Instance == null)
                 {
-                    // 사용자 설정 > 패키지 기본 설정 순
+                    // 사용자 설정이 없으면 코드 기본값 (패키지에 .asset을 두지 않음: 상위 Unity 버전 직렬화 호환 문제)
                     s_Instance = Resources.Load<InGameConsoleSettings>(UserResourcePath);
-                    if (s_Instance == null)
-                        s_Instance = Resources.Load<InGameConsoleSettings>(DefaultResourcePath);
 #if UNITY_EDITOR
                     if (s_Instance == null)
                     {
@@ -113,30 +106,7 @@ namespace InGameConsoleSystem
                     {
                         s_Instance = CreateInstance<InGameConsoleSettings>();
                         s_Instance.name = "InGameConsoleSettings";
-                        s_Instance.consoleVisualTree = Resources.Load<VisualTreeAsset>("HB_InGameConsole");
-                        s_Instance.panelSettings = Resources.Load<PanelSettings>("HB_PanelSettings");
-
-#if UNITY_EDITOR
-                        if (s_Instance.consoleVisualTree == null)
-                        {
-                            string[] vGuids = UnityEditor.AssetDatabase.FindAssets("HB_InGameConsole t:VisualTreeAsset");
-                            if (vGuids != null && vGuids.Length > 0)
-                            {
-                                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(vGuids[0]);
-                                s_Instance.consoleVisualTree = UnityEditor.AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
-                            }
-                        }
-
-                        if (s_Instance.panelSettings == null)
-                        {
-                            string[] pGuids = UnityEditor.AssetDatabase.FindAssets("HB_PanelSettings t:PanelSettings");
-                            if (pGuids != null && pGuids.Length > 0)
-                            {
-                                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(pGuids[0]);
-                                s_Instance.panelSettings = UnityEditor.AssetDatabase.LoadAssetAtPath<PanelSettings>(path);
-                            }
-                        }
-#endif
+                        // VisualTree/PanelSettings는 비워 두면 InGameConsole이 패키지 기본값(UXML, 코드 생성 PanelSettings)을 사용
                     }
                 }
                 return s_Instance;
