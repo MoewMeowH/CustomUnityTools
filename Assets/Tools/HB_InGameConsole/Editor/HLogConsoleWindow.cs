@@ -68,6 +68,12 @@ namespace InGameConsoleSystem.Editor
         private bool showWarning = true;
         private bool showError = true;
         private bool autoScroll = true;
+        // 맨 아래를 보고 있는지 여부. 위로 스크롤하면 false가 되어 새 로그를 따라가지 않는다
+        private bool isStickToBottom = true;
+        private bool isScrollToBottomPending = true;
+        private float logContentHeight;
+        private float logViewHeight;
+        private const float BottomTolerance = 4f;
         private bool pauseOnError = false;
 
         // Search & Channel Filter
@@ -245,11 +251,15 @@ namespace InGameConsoleSystem.Editor
             }
 
             isDirty = true;
+            if (autoScroll && isStickToBottom)
+                isScrollToBottomPending = true;
             Repaint();
         }
 
         private void OnLogsCleared()
         {
+            isStickToBottom = true;
+            isScrollToBottomPending = true;
             selectedEntry = null;
             isDirty = true;
             Repaint();
@@ -558,7 +568,13 @@ namespace InGameConsoleSystem.Editor
             GUILayout.Space(10);
 
             // Options
-            autoScroll = GUILayout.Toggle(autoScroll, "Auto Scroll", EditorStyles.toolbarButton, GUILayout.Width(75));
+            bool newAutoScroll = GUILayout.Toggle(autoScroll, "Auto Scroll", EditorStyles.toolbarButton, GUILayout.Width(75));
+            if (newAutoScroll && !autoScroll)
+            {
+                isStickToBottom = true;
+                isScrollToBottomPending = true;
+            }
+            autoScroll = newAutoScroll;
             pauseOnError = GUILayout.Toggle(pauseOnError, "Pause on Error", EditorStyles.toolbarButton, GUILayout.Width(95));
 
             GUILayout.Space(6);
@@ -740,6 +756,14 @@ namespace InGameConsoleSystem.Editor
         private void DrawLogsView()
         {
             float listHeight = position.height - detailPanelHeight - 48f;
+
+            // 스크롤 뷰가 이벤트를 소비하기 전에 사용자 입력(휠, 스크롤바 드래그)인지 기록
+            var eventType = Event.current.type;
+            bool isUserScrollEvent = eventType == EventType.ScrollWheel || eventType == EventType.MouseDrag ||
+                                     eventType == EventType.MouseDown || eventType == EventType.MouseUp ||
+                                     eventType == EventType.KeyDown;
+            float prevScrollY = logScroll.y;
+
             logScroll = EditorGUILayout.BeginScrollView(logScroll, GUILayout.Height(Mathf.Max(listHeight, 80f)));
 
             for (int i = 0; i < filteredLogs.Count; i++)
@@ -809,12 +833,35 @@ namespace InGameConsoleSystem.Editor
                 GUI.color = Color.white;
             }
 
-            if (autoScroll && Event.current.type == EventType.Repaint)
+            if (eventType == EventType.Repaint)
             {
-                logScroll.y = float.MaxValue;
+                logContentHeight = filteredLogs.Count > 0 ? GUILayoutUtility.GetLastRect().yMax : 0f;
+
+                if (autoScroll && isScrollToBottomPending)
+                {
+                    logScroll.y = float.MaxValue;
+                    isScrollToBottomPending = false;
+                }
             }
 
             EditorGUILayout.EndScrollView();
+
+            if (eventType == EventType.Repaint)
+            {
+                logViewHeight = GUILayoutUtility.GetLastRect().height;
+            }
+
+            // 사용자가 위로 올리면 따라가기를 멈추고, 다시 맨 아래로 내리면 재개
+            if (isUserScrollEvent && !Mathf.Approximately(prevScrollY, logScroll.y))
+            {
+                isStickToBottom = IsLogScrollAtBottom();
+            }
+        }
+
+        private bool IsLogScrollAtBottom()
+        {
+            float maxScroll = logContentHeight - logViewHeight;
+            return maxScroll <= 0f || logScroll.y >= maxScroll - BottomTolerance;
         }
 
         private void DrawLogTypeBadge(Rect rect, LogType type)

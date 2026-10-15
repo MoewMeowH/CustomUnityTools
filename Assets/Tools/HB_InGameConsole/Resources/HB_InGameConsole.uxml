@@ -81,6 +81,17 @@
                         </ui:VisualElement>
                     </ui:VisualElement>
 
+                    <!-- Auto Scroll Card -->
+                    <ui:VisualElement class="hb-settings-card">
+                        <ui:VisualElement class="hb-settings-row">
+                            <ui:VisualElement class="hb-settings-row-text">
+                                <ui:Label text="Auto Scroll" class="hb-settings-item-title"/>
+                                <ui:Label text="Follow new logs while viewing the bottom. Scroll up to pause, scroll back down to resume" class="hb-settings-item-desc"/>
+                            </ui:VisualElement>
+                            <ui:Button name="toggleAutoScrollBtn" text="Scroll: ON" class="hb-settings-toggle-btn hb-toggle-on"/>
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
                     <!-- Channel Toggles Card -->
                     <ui:VisualElement class="hb-settings-card">
                         <ui:Label text="Channel Log Enable (Per Channel)" class="hb-settings-item-title" style="margin-bottom: 4px;"/>

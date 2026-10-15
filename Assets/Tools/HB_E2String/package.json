@@ -5,7 +5,8 @@
   "description": "Zero-Allocation Enum to String Roslyn Source Generator helper with dedicated Editor Window.",
   "unity": "6000.3",
   "author": {
-    "name": "HB"
+    "name": "HoBeenH",
+    "email": "whdmstlsk@gmail.com"
   },
   "keywords": [
     "enum",
@@ -13,5 +14,6 @@
     "source-generator",
     "zero-allocation",
     "hb"
-  ]
+  ],
+  
 }

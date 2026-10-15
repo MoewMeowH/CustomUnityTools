@@ -42,6 +42,8 @@ namespace InGameConsoleSystem
         [Header("UI")]
         [SerializeField] private bool autoCreateUI = true;
         [SerializeField] private bool showFpsGraph = true;
+        [Tooltip("맨 아래를 보고 있을 때 새 로그를 따라 자동으로 스크롤합니다. 위로 스크롤하면 멈추고, 다시 맨 아래로 내리면 이어서 따라갑니다.")]
+        [SerializeField] private bool autoScroll = true;
 
         [Header("Resources")]
         [SerializeField] private VisualTreeAsset consoleVisualTree;
@@ -69,6 +71,12 @@ namespace InGameConsoleSystem
         {
             get => showFpsGraph;
             set => showFpsGraph = value;
+        }
+
+        public bool AutoScroll
+        {
+            get => autoScroll;
+            set => autoScroll = value;
         }
 
         public VisualTreeAsset ConsoleVisualTree
