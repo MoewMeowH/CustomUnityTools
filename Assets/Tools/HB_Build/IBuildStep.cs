@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
+using UnityEngine;
 
 /// <summary>
 /// 빌드 파이프라인 전반에서 공유되는 데이터 컨텍스트입니다.
@@ -22,6 +24,53 @@ public class BuildContext
     public List<string> Scenes { get; set; } = new List<string>();
     public BuildPlayerOptions PlayerOptions;
     public BuildReport Report { get; set; }
+
+    /// <summary>
+    /// 이번 빌드에서 제외할 스텝 ID 목록 (프로필 에셋 또는 -disabledSteps CLI 인자로 지정)
+    /// </summary>
+    public HashSet<string> DisabledStepIds { get; } = new HashSet<string>();
+
+    /// <summary>
+    /// 빌드 결과물 경로를 계산합니다.
+    /// Windows는 버전별 하위 폴더에 실행 파일과 데이터 폴더를 모으고, Android는 단일 파일, iOS는 Xcode 프로젝트 폴더입니다.
+    /// </summary>
+    public string GetLocationPathName()
+    {
+        string outDir = BuildHelper.ResolveProjectRelativePath(OutputPath);
+        string baseName = $"{Application.productName}_v{Version}_{BuildType}";
+        return Target switch
+        {
+            BuildTarget.Android => Path.Combine(outDir, baseName + (IsAab ? ".aab" : ".apk")),
+            BuildTarget.StandaloneWindows or BuildTarget.StandaloneWindows64 => Path.Combine(outDir, baseName, baseName + ".exe"),
+            _ => Path.Combine(outDir, baseName)
+        };
+    }
+
+    /// <summary>
+    /// 현재 컨텍스트 값(씬, 경로, 개발 빌드 옵션 등)으로 PlayerOptions를 다시 구성합니다.
+    /// 컨텍스트 값을 바꾼 뒤에는 반드시 호출해야 실제 빌드 옵션에 반영됩니다.
+    /// </summary>
+    public void RebuildPlayerOptions()
+    {
+        PlayerOptions = new BuildPlayerOptions
+        {
+            scenes = Scenes.ToArray(),
+            target = Target,
+            targetGroup = TargetGroup,
+            locationPathName = GetLocationPathName(),
+            options = BuildOptions.CompressWithLz4HC
+        };
+
+        if (IsDevBuild)
+        {
+            PlayerOptions.options |= BuildOptions.Development;
+            if (IsDeepProfile)
+                PlayerOptions.options |= BuildOptions.EnableDeepProfilingSupport;
+        }
+
+        if (IsCleanBuild)
+            PlayerOptions.options |= BuildOptions.CleanBuildCache;
+    }
 
     /// <summary>
     /// 프로젝트 전용 커스텀 스텝들이 자유롭게 데이터를 주고받을 수 있는 확장 딕셔너리

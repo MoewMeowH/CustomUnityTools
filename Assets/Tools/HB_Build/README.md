@@ -39,5 +39,18 @@ Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
   -outputPath "BuildOutput"
 ```
 
+- `-buildType`, `-devBuild` 등에 잘못된 값을 주면 기본값으로 대체하지 않고 빌드를 실패시킵니다.
+- `-disabledSteps "StepFullName1;StepFullName2"`: 이번 빌드에서 제외할 스텝 ID (프로필 빌드는 프로필의 `DisabledStepIds`를 사용)
+- 프로필의 플랫폼과 같은 `-buildTarget`을 함께 넘기는 것을 권장합니다. 빌드 도중 플랫폼을 전환하면 스크립트가 재컴파일되지 않아 `#if UNITY_ANDROID` 등이 이전 플랫폼 기준으로 동작합니다.
+
+## 빌드 동작 메모
+- **스텝 On/Off**: Build Manager 창의 체크박스 상태는 빌드 프로필 에셋(`DisabledStepIds`)에 저장되어 로컬과 CI에서 동일하게 적용됩니다.
+- **설정 복원**: 기본 스텝이 변경한 PlayerSettings / EditorUserBuildSettings(버전, 심볼, 로그 설정 등)는 빌드 성공·실패와 관계없이 빌드 전 값으로 복원됩니다. 커스텀 스텝이 다른 설정을 바꾸면 직접 복원해야 합니다.
+- **전처리기 심볼**: DefineContainer에 해당 빌드 타입/플랫폼 항목이 없으면 기존 심볼을 유지하고, 항목은 있는데 리스트가 비어 있으면 심볼을 모두 제거합니다.
+- **출력 경로**: 기본값은 프로젝트 기준 `BuildOutput/<Target>`입니다. Windows 빌드는 `<출력경로>/<이름>/<이름>.exe`처럼 버전별 하위 폴더에 생성되고, ZIP은 `<출력경로>/<이름>.zip`으로 생성됩니다. 같은 이름의 폴더가 이미 있으면 덮어쓰지 않고 `<이름> (2)`, `<이름> (3)` 폴더로 분리합니다. ZIP에는 `*_DoNotShip`, `*_ButDontShipItWithYourGame` 폴더가 포함되지 않습니다.
+- **로컬 빌드**: 프로필 빌드는 저장된 프로필 값으로 실행됩니다. 창에 저장하지 않은 변경이 있으면 빌드 전에 저장 여부를 묻고, 자동 저장하지 않습니다.
+- **Jenkinsfile**: 생성된 파이프라인은 빌드 전에 `BuildOutput/` 폴더만 지웁니다 (`Library/` 캐시는 유지). 소스 정리는 Jenkins job의 checkout 설정을 사용하세요.
+- Build Settings에 활성 씬이 없고 프로필에도 씬이 없으면 빌드를 실패시킵니다.
+
 ## 에디터 메뉴 경로
 - `Tools > HB > Build Manager`

@@ -79,6 +79,10 @@ public class HBBuildProfile : ScriptableObject
     [Tooltip("파이프라인 스텝(IPreBuildStep/IPostBuildStep)에 전달할 확장 Key-Value")]
     [SerializeField] public List<CustomStringEntry> CustomEntries = new List<CustomStringEntry>();
 
+    [Header("=== 파이프라인 스텝 ===")]
+    [Tooltip("이 프로필로 빌드할 때 제외할 스텝 ID (IPreBuildStep/IPostBuildStep.StepId). Build Manager 창의 체크박스로 편집")]
+    [SerializeField] public List<string> DisabledStepIds = new List<string>();
+
     /// <summary>
     /// 프로필에 저장된 설정을 바탕으로 파이프라인 실행용 BuildContext 객체를 생성합니다.
     /// </summary>
@@ -91,19 +95,12 @@ public class HBBuildProfile : ScriptableObject
             ? BuildHelper.GetDefaultOutputPath(target) 
             : OutputPath.Trim();
 
-        var sceneList = (Scenes != null && Scenes.Count > 0)
+        // 공백 항목만 있는 경우도 비어 있는 것으로 보고 Build Settings 씬을 사용
+        var sceneList = Scenes != null
             ? Scenes.Where(s => !string.IsNullOrWhiteSpace(s)).ToList()
-            : BuildHelper.GetDefaultBuildScenes().ToList();
-
-        string ext = target switch
-        {
-            BuildTarget.Android => IsAab ? ".aab" : ".apk",
-            BuildTarget.StandaloneWindows or BuildTarget.StandaloneWindows64 => ".exe",
-            _ => ""
-        };
-
-        string appName = $"{Application.productName}_v{Version}_{BuildType}{ext}";
-        string locationPath = Path.Combine(outDir, appName);
+            : new List<string>();
+        if (sceneList.Count == 0)
+            sceneList = BuildHelper.GetDefaultBuildScenes().ToList();
 
         var context = new BuildContext
         {
@@ -120,6 +117,15 @@ public class HBBuildProfile : ScriptableObject
             OutputPath = outDir,
             Scenes = sceneList
         };
+
+        if (DisabledStepIds != null)
+        {
+            foreach (var stepId in DisabledStepIds)
+            {
+                if (!string.IsNullOrWhiteSpace(stepId))
+                    context.DisabledStepIds.Add(stepId);
+            }
+        }
 
         if (SceneDefineAsset != null)
             context.SetCustomData("SceneDefine", SceneDefineAsset);
@@ -141,26 +147,7 @@ public class HBBuildProfile : ScriptableObject
             }
         }
 
-        context.PlayerOptions = new BuildPlayerOptions
-        {
-            scenes = sceneList.ToArray(),
-            target = target,
-            targetGroup = targetGroup,
-            locationPathName = locationPath,
-            options = BuildOptions.CompressWithLz4HC
-        };
-
-        if (DevBuild)
-        {
-            context.PlayerOptions.options |= BuildOptions.Development;
-            if (DeepProfile)
-                context.PlayerOptions.options |= BuildOptions.EnableDeepProfilingSupport;
-        }
-
-        if (CleanBuild)
-        {
-            context.PlayerOptions.options |= BuildOptions.CleanBuildCache;
-        }
+        context.RebuildPlayerOptions();
 
         return context;
     }
@@ -201,7 +188,7 @@ public class HBBuildProfile : ScriptableObject
     /// </summary>
     public static HBBuildProfile CreateNewProfileAsset(string profileName = "New_BuildProfile")
     {
-        string folder = "Assets/Editor/HBBuild/Profiles";
+        string folder = BuildHelper.USER_PROFILES_DIR;
         if (!Directory.Exists(folder))
         {
             Directory.CreateDirectory(folder);
