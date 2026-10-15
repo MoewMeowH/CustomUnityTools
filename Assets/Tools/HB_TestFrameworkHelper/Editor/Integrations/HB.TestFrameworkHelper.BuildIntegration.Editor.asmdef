@@ -1,0 +1,28 @@
+﻿{
+    "name": "HB.TestFrameworkHelper.BuildIntegration.Editor",
+    "rootNamespace": "HB.TestFrameworkHelper.Editor",
+    "references": [
+        "HB.TestFrameworkHelper.Editor",
+        "HB.TestFrameworkHelper.Runtime",
+        "HB.CustomBuild.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "HB_CUSTOM_BUILD_ENABLED"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.hb.custombuild",
+            "expression": "",
+            "define": "HB_CUSTOM_BUILD_ENABLED"
+        }
+    ],
+    "noEngineReferences": false
+}
