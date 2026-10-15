@@ -16,12 +16,19 @@ namespace HB.E2String.Editor
     {
         public string EnumName;
         public string Namespace;
+        public string ContainingTypes; // 중첩 enum의 바깥 타입 경로 (예: "Outer.Inner"), 없으면 빈 문자열
         public string AssetPath;
         public int LineNumber;
         public string AttributeName;
         public List<string> Members = new List<string>();
 
-        public string FullTypeName => string.IsNullOrEmpty(Namespace) ? EnumName : $"{Namespace}.{EnumName}";
+        /// <summary>네임스페이스를 제외한 타입 이름 (예: Outer.MyEnum)</summary>
+        public string TypeName => string.IsNullOrEmpty(ContainingTypes) ? EnumName : $"{ContainingTypes}.{EnumName}";
+
+        public string FullTypeName => string.IsNullOrEmpty(Namespace) ? TypeName : $"{Namespace}.{TypeName}";
+
+        /// <summary>Source Generator가 생성하는 확장 클래스 이름 (중첩 경로의 '.'을 '_'로 치환)</summary>
+        public string ExtensionClassName => $"{TypeName.Replace('.', '_')}Extensions";
     }
 
     /// <summary>
@@ -34,16 +41,32 @@ namespace HB.E2String.Editor
     {
         private const string PREFS_TARGET_FOLDER_KEY = "HB_E2String_TargetFolder";
         private const string DEFAULT_TARGET_FOLDER = "Assets/Tools/HB_E2String/Runtime";
+        private const string COMPAT_NAMESPACE = "EString.Script";
+        private const string ATTRIBUTE_FILE_NAME = "E2StringAttribute.cs";
 
-        // 상태 변수
-        private bool m_IsAttributeInstalled = false;
-        private string m_InstalledAttributePath = string.Empty;
+        // 스캔용 정규식 (주석·문자열·전처리 지시문이 제거된 코드에 적용)
+        private static readonly Regex s_ScopeTokenRegex = new Regex(
+            @"\{|\}|\bnamespace\s+(?<ns>[\w.]+)|\b(?:class|struct)\s+(?<type>\w+)|\benum\s+(?<enum>\w+)",
+            RegexOptions.Compiled);
+        private static readonly Regex s_E2StringAttrRegex = new Regex(
+            @"\[[^\]]*?(?<![\w.])(?:\w+\.)*E2String(?:Attribute)?(?![\w.])[^\]]*\]",
+            RegexOptions.Compiled);
+        private static readonly Regex s_AttributeSectionRegex = new Regex(@"\[[^\]]*\]", RegexOptions.Compiled);
+        private static readonly Regex s_IdentifierRegex = new Regex(@"^[\p{L}_][\p{L}\p{Nd}_]*$", RegexOptions.Compiled);
+        private static readonly Regex s_AttributeClassRegex = new Regex(@"\bclass\s+E2StringAttribute\b", RegexOptions.Compiled);
+        private static readonly Regex s_NamespaceNameRegex = new Regex(
+            @"^[\p{L}_][\p{L}\p{Nd}_]*(?:\.[\p{L}_][\p{L}\p{Nd}_]*)*$", RegexOptions.Compiled);
+
+        // 상태 변수 (도메인 리로드 후에도 유지되어 재스캔을 피한다)
+        [SerializeField] private bool m_HasScanned = false;
+        [SerializeField] private bool m_IsAttributeInstalled = false;
+        [SerializeField] private string m_InstalledAttributePath = string.Empty;
         private string m_TargetFolderPath = DEFAULT_TARGET_FOLDER;
         private bool m_UseGlobalNamespace = true;
-        private string m_CustomNamespace = "EString.Script";
+        private string m_CustomNamespace = COMPAT_NAMESPACE;
 
         // Enum 목록 검색 변수
-        private List<E2StringEnumInfo> m_EnumList = new List<E2StringEnumInfo>();
+        [SerializeField] private List<E2StringEnumInfo> m_EnumList = new List<E2StringEnumInfo>();
         private string m_SearchFilter = string.Empty;
         private Vector2 m_ScrollPosition = Vector2.zero;
         private bool m_ShowGuide = false;
@@ -65,15 +88,201 @@ namespace HB.E2String.Editor
         private void OnEnable()
         {
             m_TargetFolderPath = EditorPrefs.GetString(PREFS_TARGET_FOLDER_KEY, DEFAULT_TARGET_FOLDER);
-            RefreshAll();
+
+            // 전체 스캔은 처음 열 때만 수행하고, 이후에는 Scan / Refresh 버튼으로 갱신한다.
+            if (!m_HasScanned)
+            {
+                RefreshAll();
+            }
         }
 
         public void RefreshAll()
         {
             CheckAttributeInstallation();
             ScanTargetEnums();
+            m_HasScanned = true;
             Repaint();
         }
+
+        #region 파일 유틸리티
+
+        /// <summary>
+        /// Assets 하위의 .cs 파일 경로를 '/' 구분자로 열거합니다. Unity가 무시하는 폴더('.' 시작, '~' 끝)는 제외합니다.
+        /// </summary>
+        private static IEnumerable<string> EnumerateProjectScripts()
+        {
+            foreach (string file in Directory.EnumerateFiles("Assets", "*.cs", SearchOption.AllDirectories))
+            {
+                string path = file.Replace('\\', '/');
+                if (IsIgnoredByUnity(path)) continue;
+                yield return path;
+            }
+        }
+
+        private static bool IsIgnoredByUnity(string path)
+        {
+            string[] segments = path.Split('/');
+            for (int i = 0; i < segments.Length - 1; i++)
+            {
+                string segment = segments[i];
+                if (segment.StartsWith(".", StringComparison.Ordinal) || segment.EndsWith("~", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool TryReadText(string path, out string text)
+        {
+            try
+            {
+                text = File.ReadAllText(path);
+                return true;
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                text = null;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 절대 경로 또는 프로젝트 상대 경로를 "Assets" 또는 "Assets/..." 형식으로 변환합니다. Assets 밖이면 false.
+        /// </summary>
+        private static bool TryToAssetsRelativePath(string path, out string assetPath)
+        {
+            assetPath = null;
+            if (string.IsNullOrWhiteSpace(path)) return false;
+
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(path.Trim()).Replace('\\', '/').TrimEnd('/');
+            }
+            catch (Exception e) when (e is ArgumentException || e is NotSupportedException || e is PathTooLongException)
+            {
+                return false;
+            }
+
+            string assetsRoot = Path.GetFullPath(Application.dataPath).Replace('\\', '/').TrimEnd('/');
+
+            if (string.Equals(fullPath, assetsRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                assetPath = "Assets";
+                return true;
+            }
+
+            if (fullPath.StartsWith(assetsRoot + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                assetPath = "Assets" + fullPath.Substring(assetsRoot.Length);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 주석, 문자열/문자 리터럴, 전처리 지시문을 공백으로 치환합니다. 줄바꿈은 유지하므로 인덱스와 줄 번호가 원본과 같습니다.
+        /// </summary>
+        private static string StripNonCode(string src)
+        {
+            var sb = new StringBuilder(src.Length);
+            int n = src.Length;
+            int i = 0;
+            bool atLineStart = true;
+
+            while (i < n)
+            {
+                char c = src[i];
+                char next = i + 1 < n ? src[i + 1] : '\0';
+
+                // 전처리 지시문 (#if, #region 등)
+                if (atLineStart && c == '#')
+                {
+                    while (i < n && src[i] != '\n') AppendBlank(sb, src[i++]);
+                    continue;
+                }
+
+                // 한 줄 주석
+                if (c == '/' && next == '/')
+                {
+                    while (i < n && src[i] != '\n') AppendBlank(sb, src[i++]);
+                    continue;
+                }
+
+                // 블록 주석
+                if (c == '/' && next == '*')
+                {
+                    int end = src.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                    end = end < 0 ? n : end + 2;
+                    while (i < end) AppendBlank(sb, src[i++]);
+                    atLineStart = false;
+                    continue;
+                }
+
+                // 축자 문자열 (@"", $@"", @$"")
+                bool isVerbatim = (c == '@' && next == '"')
+                                  || (((c == '$' && next == '@') || (c == '@' && next == '$')) && i + 2 < n && src[i + 2] == '"');
+                if (isVerbatim)
+                {
+                    while (src[i] != '"') AppendBlank(sb, src[i++]);
+                    AppendBlank(sb, src[i++]); // 여는 따옴표
+                    while (i < n)
+                    {
+                        if (src[i] == '"')
+                        {
+                            if (i + 1 < n && src[i + 1] == '"')
+                            {
+                                AppendBlank(sb, src[i++]);
+                                AppendBlank(sb, src[i++]);
+                                continue;
+                            }
+                            AppendBlank(sb, src[i++]);
+                            break;
+                        }
+                        AppendBlank(sb, src[i++]);
+                    }
+                    atLineStart = false;
+                    continue;
+                }
+
+                // 일반 문자열 / 문자 리터럴
+                if (c == '"' || c == '\'')
+                {
+                    char quote = c;
+                    AppendBlank(sb, src[i++]);
+                    while (i < n && src[i] != '\n')
+                    {
+                        char s = src[i];
+                        if (s == '\\' && i + 1 < n)
+                        {
+                            AppendBlank(sb, src[i++]);
+                            AppendBlank(sb, src[i++]);
+                            continue;
+                        }
+                        AppendBlank(sb, src[i++]);
+                        if (s == quote) break;
+                    }
+                    atLineStart = false;
+                    continue;
+                }
+
+                sb.Append(c);
+                if (c == '\n') atLineStart = true;
+                else if (!char.IsWhiteSpace(c)) atLineStart = false;
+                i++;
+            }
+
+            return sb.ToString();
+        }
+
+        private static void AppendBlank(StringBuilder sb, char original)
+        {
+            sb.Append(original == '\n' || original == '\r' ? original : ' ');
+        }
+
+        #endregion
 
         #region 어트리뷰트 스크립트 검사 및 생성 로직
 
@@ -85,28 +294,26 @@ namespace HB.E2String.Editor
             m_IsAttributeInstalled = false;
             m_InstalledAttributePath = string.Empty;
 
-            // 1. MonoScript 에셋 검색
-            string[] guids = AssetDatabase.FindAssets("E2StringAttribute t:MonoScript");
-            if (guids != null && guids.Length > 0)
-            {
-                m_InstalledAttributePath = AssetDatabase.GUIDToAssetPath(guids[0]);
-                m_IsAttributeInstalled = true;
-                return;
-            }
-
-            // 2. 전체 .cs 파일 중 클래스 선언 검색 (파일명이 다른 경우 대비)
-            string[] allScriptGuids = AssetDatabase.FindAssets("t:MonoScript");
-            foreach (string guid in allScriptGuids)
+            // 1. 파일명으로 후보를 찾고 실제 클래스 선언이 있는지 확인 (패키지 포함)
+            foreach (string guid in AssetDatabase.FindAssets("E2StringAttribute t:MonoScript"))
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;
-                if (path.Contains("/Editor/")) continue; // 에디터 전용 제외
-
                 var monoScript = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
-                if (monoScript == null) continue;
+                if (monoScript != null && DeclaresAttributeClass(monoScript.text))
+                {
+                    m_InstalledAttributePath = path;
+                    m_IsAttributeInstalled = true;
+                    return;
+                }
+            }
 
-                string text = monoScript.text;
-                if (text.Contains("class E2StringAttribute"))
+            // 2. 파일명이 다른 경우 대비: Assets 하위 전체 .cs 검색 (에디터 전용 제외)
+            foreach (string path in EnumerateProjectScripts())
+            {
+                if (path.Contains("/Editor/")) continue;
+                if (!TryReadText(path, out string text)) continue;
+
+                if (DeclaresAttributeClass(text))
                 {
                     m_InstalledAttributePath = path;
                     m_IsAttributeInstalled = true;
@@ -115,40 +322,81 @@ namespace HB.E2String.Editor
             }
         }
 
+        private static bool DeclaresAttributeClass(string text)
+        {
+            if (string.IsNullOrEmpty(text) || text.IndexOf("E2StringAttribute", StringComparison.Ordinal) < 0) return false;
+            return s_AttributeClassRegex.IsMatch(StripNonCode(text));
+        }
+
         /// <summary>
         /// 지정한 경로에 E2StringAttribute 스크립트를 생성합니다.
         /// </summary>
         private void CreateAttributeScript()
         {
-            if (string.IsNullOrWhiteSpace(m_TargetFolderPath))
+            string requestedFolder = string.IsNullOrWhiteSpace(m_TargetFolderPath) ? DEFAULT_TARGET_FOLDER : m_TargetFolderPath;
+            if (!TryToAssetsRelativePath(requestedFolder, out string folderPath))
             {
-                m_TargetFolderPath = DEFAULT_TARGET_FOLDER;
+                EditorUtility.DisplayDialog("E2String Manager",
+                    $"생성 폴더는 프로젝트의 Assets 폴더 안이어야 합니다.\n\n입력값: {requestedFolder}", "확인");
+                return;
             }
 
-            // 폴더 경로 정규화
-            string folderPath = m_TargetFolderPath.Replace('\\', '/').TrimEnd('/');
-            string fullDirPath = Path.GetFullPath(folderPath);
-
-            if (!Directory.Exists(fullDirPath))
+            string ns = m_UseGlobalNamespace ? COMPAT_NAMESPACE : (m_CustomNamespace ?? string.Empty).Trim();
+            if (!string.IsNullOrEmpty(ns) && !s_NamespaceNameRegex.IsMatch(ns))
             {
-                Directory.CreateDirectory(fullDirPath);
+                EditorUtility.DisplayDialog("E2String Manager", $"올바르지 않은 네임스페이스 이름입니다: {ns}", "확인");
+                return;
             }
 
-            string filePath = Path.Combine(folderPath, "E2StringAttribute.cs").Replace('\\', '/');
+            string filePath = $"{folderPath}/{ATTRIBUTE_FILE_NAME}";
+            if (File.Exists(filePath) &&
+                !EditorUtility.DisplayDialog("E2String Manager", $"이미 파일이 존재합니다. 덮어쓸까요?\n\n경로: {filePath}", "덮어쓰기", "취소"))
+            {
+                return;
+            }
 
+            // 글로벌 옵션: 글로벌 + EString.Script 둘 다 생성 / 커스텀: 지정 네임스페이스만 (비우면 글로벌만)
+            bool includeGlobal = m_UseGlobalNamespace || string.IsNullOrEmpty(ns);
+            string source = BuildAttributeSource(includeGlobal, ns);
+
+            try
+            {
+                Directory.CreateDirectory(folderPath);
+                File.WriteAllText(filePath, source, new UTF8Encoding(true));
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                EditorUtility.DisplayDialog("E2String Manager", $"스크립트 생성에 실패했습니다.\n\n{e.Message}", "확인");
+                return;
+            }
+
+            AssetDatabase.Refresh();
+
+            m_TargetFolderPath = folderPath;
+            EditorPrefs.SetString(PREFS_TARGET_FOLDER_KEY, folderPath);
+            EditorUtility.DisplayDialog("E2String Manager", $"E2StringAttribute 스크립트가 성공적으로 생성되었습니다!\n\n경로: {filePath}", "확인");
+
+            RefreshAll();
+        }
+
+        private static string BuildAttributeSource(bool includeGlobal, string ns)
+        {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated by HB E2String Manager />");
             sb.AppendLine("using System;");
-            sb.AppendLine();
-            sb.AppendLine("[AttributeUsage(AttributeTargets.Enum, Inherited = false, AllowMultiple = false)]");
-            sb.AppendLine("public sealed class E2StringAttribute : Attribute");
-            sb.AppendLine("{");
-            sb.AppendLine("}");
-            sb.AppendLine();
 
-            string ns = m_UseGlobalNamespace ? "EString.Script" : m_CustomNamespace.Trim();
+            if (includeGlobal)
+            {
+                sb.AppendLine();
+                sb.AppendLine("[AttributeUsage(AttributeTargets.Enum, Inherited = false, AllowMultiple = false)]");
+                sb.AppendLine("public sealed class E2StringAttribute : Attribute");
+                sb.AppendLine("{");
+                sb.AppendLine("}");
+            }
+
             if (!string.IsNullOrEmpty(ns))
             {
+                sb.AppendLine();
                 sb.AppendLine($"namespace {ns}");
                 sb.AppendLine("{");
                 sb.AppendLine("    [AttributeUsage(AttributeTargets.Enum, Inherited = false, AllowMultiple = false)]");
@@ -158,18 +406,18 @@ namespace HB.E2String.Editor
                 sb.AppendLine("}");
             }
 
-            File.WriteAllText(filePath, sb.ToString(), new UTF8Encoding(true));
-            AssetDatabase.Refresh();
-
-            EditorPrefs.SetString(PREFS_TARGET_FOLDER_KEY, folderPath);
-            EditorUtility.DisplayDialog("E2String Manager", $"E2StringAttribute 스크립트가 성공적으로 생성되었습니다!\n\n경로: {filePath}", "확인");
-
-            RefreshAll();
+            return sb.ToString();
         }
 
         #endregion
 
         #region Enum 검색 로직
+
+        private struct Scope
+        {
+            public string Namespace;
+            public string TypeName;
+        }
 
         /// <summary>
         /// 프로젝트 내 모든 C# 파일에서 [E2String]이 적용된 Enum을 검색합니다.
@@ -178,149 +426,126 @@ namespace HB.E2String.Editor
         {
             m_EnumList.Clear();
 
-            string[] guids = AssetDatabase.FindAssets("t:MonoScript");
-            var attrRegex = new Regex(@"\[\s*(?:.*?[,\s])?E2String(?:Attribute)?(?:\(.*?\))?[^\]]*\]", RegexOptions.Compiled);
-            var enumDeclRegex = new Regex(@"(?:public|internal|private|protected)?\s*enum\s+([A-Za-z0-9_]+)", RegexOptions.Compiled);
-            var namespaceRegex = new Regex(@"namespace\s+([A-Za-z0-9_.]+)", RegexOptions.Compiled);
-
-            foreach (string guid in guids)
+            foreach (string path in EnumerateProjectScripts())
             {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;
-                if (path.StartsWith("Packages/")) continue; // Unity 기본 패키지 제외
-                if (path.EndsWith("E2StringAttribute.cs", StringComparison.OrdinalIgnoreCase)) continue;
-
-                var monoScript = AssetDatabase.LoadAssetAtPath<MonoScript>(path);
-                if (monoScript == null) continue;
-
-                string text = monoScript.text;
-                if (string.IsNullOrEmpty(text)) continue;
+                if (path.EndsWith(ATTRIBUTE_FILE_NAME, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!TryReadText(path, out string text)) continue;
 
                 // 빠른 문자열 사전 필터
-                if (!text.Contains("E2String")) continue;
+                if (text.IndexOf("E2String", StringComparison.Ordinal) < 0) continue;
 
-                string[] lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-                string currentNamespace = string.Empty;
-
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string line = lines[i].Trim();
-
-                    // 네임스페이스 감지
-                    var nsMatch = namespaceRegex.Match(line);
-                    if (nsMatch.Success)
-                    {
-                        currentNamespace = nsMatch.Groups[1].Value.TrimEnd(';', '{', ' ');
-                    }
-
-                    // 어트리뷰트 매칭 검사
-                    var attrMatch = attrRegex.Match(line);
-                    if (attrMatch.Success)
-                    {
-                        string matchedAttr = attrMatch.Value;
-
-                        // 다음 몇 줄 내에서 enum 선언 탐색
-                        for (int j = i + 1; j < Math.Min(lines.Length, i + 8); j++)
-                        {
-                            string nextLine = lines[j].Trim();
-                            var enumMatch = enumDeclRegex.Match(nextLine);
-                            if (enumMatch.Success)
-                            {
-                                string enumName = enumMatch.Groups[1].Value;
-
-                                // enum 멤버 추출
-                                var members = ExtractEnumMembers(lines, j);
-
-                                m_EnumList.Add(new E2StringEnumInfo
-                                {
-                                    EnumName = enumName,
-                                    Namespace = currentNamespace,
-                                    AssetPath = path,
-                                    LineNumber = j + 1,
-                                    AttributeName = matchedAttr,
-                                    Members = members
-                                });
-                                break;
-                            }
-
-                            // 다른 어트리뷰트가 나오면 계속 진행, 단 빈줄이 아닌 코드 블록이 나오면 중단
-                            if (!nextLine.StartsWith("[") && !string.IsNullOrWhiteSpace(nextLine))
-                            {
-                                break;
-                            }
-                        }
-                    }
-                }
+                ScanFile(path, StripNonCode(text));
             }
         }
 
-        private List<string> ExtractEnumMembers(string[] lines, int enumDeclLineIndex)
+        private void ScanFile(string path, string code)
+        {
+            var scopes = new List<Scope>();
+            string pendingNamespace = null;
+            string pendingType = null;
+
+            int lineNumber = 1;
+            int lineCountedUntil = 0;
+
+            for (Match m = s_ScopeTokenRegex.Match(code); m.Success; m = m.NextMatch())
+            {
+                string token = m.Value;
+                if (token == "{")
+                {
+                    scopes.Add(new Scope { Namespace = pendingNamespace, TypeName = pendingType });
+                    pendingNamespace = null;
+                    pendingType = null;
+                    continue;
+                }
+
+                if (token == "}")
+                {
+                    if (scopes.Count > 0) scopes.RemoveAt(scopes.Count - 1);
+                    continue;
+                }
+
+                if (m.Groups["ns"].Success)
+                {
+                    pendingNamespace = m.Groups["ns"].Value;
+                    continue;
+                }
+
+                if (m.Groups["type"].Success)
+                {
+                    pendingType = m.Groups["type"].Value;
+                    continue;
+                }
+
+                // enum 선언: 직전 선언 경계(; { }) 이후의 어트리뷰트 영역에 E2String이 있는지 확인
+                int prefixStart = code.LastIndexOfAny(new[] { ';', '{', '}' }, Math.Max(0, m.Index - 1)) + 1;
+                Match attrMatch = s_E2StringAttrRegex.Match(code, prefixStart, m.Index - prefixStart);
+                if (!attrMatch.Success) continue;
+
+                lineNumber += CountNewLines(code, lineCountedUntil, m.Index);
+                lineCountedUntil = m.Index;
+
+                m_EnumList.Add(new E2StringEnumInfo
+                {
+                    EnumName = m.Groups["enum"].Value,
+                    Namespace = JoinScopes(scopes, true),
+                    ContainingTypes = JoinScopes(scopes, false),
+                    AssetPath = path,
+                    LineNumber = lineNumber,
+                    AttributeName = attrMatch.Value,
+                    Members = ExtractEnumMembers(code, m.Index + m.Length)
+                });
+            }
+        }
+
+        private static int CountNewLines(string text, int start, int end)
+        {
+            int count = 0;
+            for (int i = start; i < end; i++)
+            {
+                if (text[i] == '\n') count++;
+            }
+            return count;
+        }
+
+        private static string JoinScopes(List<Scope> scopes, bool namespaces)
+        {
+            var sb = new StringBuilder();
+            foreach (var scope in scopes)
+            {
+                string part = namespaces ? scope.Namespace : scope.TypeName;
+                if (string.IsNullOrEmpty(part)) continue;
+                if (sb.Length > 0) sb.Append('.');
+                sb.Append(part);
+            }
+            return sb.ToString();
+        }
+
+        private static List<string> ExtractEnumMembers(string code, int searchStart)
         {
             var members = new List<string>();
-            bool bodyStarted = false;
 
-            for (int i = enumDeclLineIndex; i < Math.Min(lines.Length, enumDeclLineIndex + 100); i++)
+            int open = code.IndexOf('{', searchStart);
+            if (open < 0) return members;
+            int close = code.IndexOf('}', open + 1);
+            if (close < 0) return members;
+
+            string body = code.Substring(open + 1, close - open - 1);
+            foreach (string raw in body.Split(','))
             {
-                string line = lines[i].Trim();
-                if (!bodyStarted)
-                {
-                    if (line.Contains("{"))
-                    {
-                        bodyStarted = true;
-                        int braceIdx = line.IndexOf('{');
-                        line = line.Substring(braceIdx + 1).Trim();
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
-
-                if (bodyStarted)
-                {
-                    if (line.Contains("}"))
-                    {
-                        int endIdx = line.IndexOf('}');
-                        string beforeEnd = line.Substring(0, endIdx).Trim();
-                        ParseMemberLine(beforeEnd, members);
-                        break;
-                    }
-
-                    ParseMemberLine(line, members);
-                }
-            }
-
-            return members;
-        }
-
-        private void ParseMemberLine(string line, List<string> members)
-        {
-            if (string.IsNullOrWhiteSpace(line)) return;
-            if (line.StartsWith("//") || line.StartsWith("/*")) return;
-
-            // 주석 제거
-            int commentIdx = line.IndexOf("//", StringComparison.Ordinal);
-            if (commentIdx >= 0) line = line.Substring(0, commentIdx);
-
-            string[] tokens = line.Split(',');
-            foreach (var token in tokens)
-            {
-                string t = token.Trim();
-                if (string.IsNullOrEmpty(t)) continue;
-
-                // = 값 대입 부분 제거
+                // 멤버 어트리뷰트 [Tag] 및 = 값 대입 부분 제거
+                string t = s_AttributeSectionRegex.Replace(raw, string.Empty);
                 int eqIdx = t.IndexOf('=');
-                if (eqIdx >= 0) t = t.Substring(0, eqIdx).Trim();
+                if (eqIdx >= 0) t = t.Substring(0, eqIdx);
+                t = t.Trim();
+                if (t.StartsWith("@", StringComparison.Ordinal)) t = t.Substring(1);
 
-                // 어트리뷰트 제거 [Tag] Member
-                int closeBracket = t.LastIndexOf(']');
-                if (closeBracket >= 0) t = t.Substring(closeBracket + 1).Trim();
-
-                if (Regex.IsMatch(t, @"^[A-Za-z0-9_]+$"))
+                if (s_IdentifierRegex.IsMatch(t))
                 {
                     members.Add(t);
                 }
             }
+
+            return members;
         }
 
         #endregion
@@ -391,6 +616,8 @@ namespace HB.E2String.Editor
                 if (GUILayout.Button("Scan / Refresh", EditorStyles.toolbarButton, GUILayout.Width(110)))
                 {
                     RefreshAll();
+                    // 데이터가 바뀌었으므로 현재 이벤트의 남은 레이아웃을 중단한다
+                    GUIUtility.ExitGUI();
                 }
 
                 m_ShowGuide = GUILayout.Toggle(m_ShowGuide, "Guide & Cheatsheet", EditorStyles.toolbarButton, GUILayout.Width(140));
@@ -430,7 +657,7 @@ namespace HB.E2String.Editor
                     EditorGUILayout.HelpBox(
                         "프로젝트 내에 E2StringAttribute 스크립트가 없습니다.\n" +
                         "Source Generator가 인식할 수 있도록 어트리뷰트 스크립트를 생성해주세요.\n" +
-                        "(서버와 공유하는 Enum 디렉토리나 원하는 위치를 지정하여 생성할 수 있습니다.)",
+                        "(서버와 공유하는 Enum 디렉토리 등 Assets 하위의 원하는 위치를 지정하여 생성할 수 있습니다.)",
                         MessageType.Warning);
 
                     EditorGUILayout.Space(4);
@@ -442,19 +669,9 @@ namespace HB.E2String.Editor
 
                         if (GUILayout.Button("폴더 선택...", GUILayout.Width(80)))
                         {
-                            string selected = EditorUtility.OpenFolderPanel("E2StringAttribute 저장 폴더 선택", Application.dataPath, "");
-                            if (!string.IsNullOrEmpty(selected))
-                            {
-                                if (selected.StartsWith(Application.dataPath))
-                                {
-                                    m_TargetFolderPath = "Assets" + selected.Substring(Application.dataPath.Length);
-                                }
-                                else
-                                {
-                                    m_TargetFolderPath = selected;
-                                }
-                                EditorPrefs.SetString(PREFS_TARGET_FOLDER_KEY, m_TargetFolderPath);
-                            }
+                            SelectTargetFolder();
+                            // 모달 패널 이후 레이아웃 불일치를 막는다
+                            GUIUtility.ExitGUI();
                         }
                     }
 
@@ -472,6 +689,7 @@ namespace HB.E2String.Editor
                             EditorGUILayout.LabelField("커스텀 네임스페이스", GUILayout.Width(120));
                             m_CustomNamespace = EditorGUILayout.TextField(m_CustomNamespace);
                         }
+                        EditorGUILayout.LabelField("비워두면 글로벌 네임스페이스에만 생성됩니다.", EditorStyles.miniLabel);
                     }
 
                     EditorGUILayout.Space(4);
@@ -479,14 +697,36 @@ namespace HB.E2String.Editor
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         GUILayout.FlexibleSpace();
+
+                        Color prevBackground = GUI.backgroundColor;
                         GUI.backgroundColor = new Color(0.3f, 0.8f, 0.3f);
-                        if (GUILayout.Button("E2StringAttribute 스크립트 생성", GUILayout.Height(28), GUILayout.Width(230)))
+                        bool create = GUILayout.Button("E2StringAttribute 스크립트 생성", GUILayout.Height(28), GUILayout.Width(230));
+                        GUI.backgroundColor = prevBackground;
+
+                        if (create)
                         {
                             CreateAttributeScript();
+                            GUIUtility.ExitGUI();
                         }
-                        GUI.backgroundColor = Color.white;
                     }
                 }
+            }
+        }
+
+        private void SelectTargetFolder()
+        {
+            string selected = EditorUtility.OpenFolderPanel("E2StringAttribute 저장 폴더 선택", Application.dataPath, "");
+            if (string.IsNullOrEmpty(selected)) return;
+
+            if (TryToAssetsRelativePath(selected, out string assetPath))
+            {
+                m_TargetFolderPath = assetPath;
+                EditorPrefs.SetString(PREFS_TARGET_FOLDER_KEY, m_TargetFolderPath);
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("E2String Manager",
+                    $"프로젝트의 Assets 폴더 안의 경로만 선택할 수 있습니다.\n\n선택한 경로: {selected}", "확인");
             }
         }
 
@@ -522,7 +762,7 @@ namespace HB.E2String.Editor
                 {
                     if (!string.IsNullOrEmpty(m_SearchFilter))
                     {
-                        bool matchName = item.EnumName.IndexOf(m_SearchFilter, StringComparison.OrdinalIgnoreCase) >= 0;
+                        bool matchName = item.TypeName.IndexOf(m_SearchFilter, StringComparison.OrdinalIgnoreCase) >= 0;
                         bool matchNs = !string.IsNullOrEmpty(item.Namespace) && item.Namespace.IndexOf(m_SearchFilter, StringComparison.OrdinalIgnoreCase) >= 0;
                         bool matchPath = item.AssetPath.IndexOf(m_SearchFilter, StringComparison.OrdinalIgnoreCase) >= 0;
 
@@ -549,7 +789,7 @@ namespace HB.E2String.Editor
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     GUILayout.Label("-", GUILayout.Width(16));
-                    GUILayout.Label(item.EnumName, m_BoldLabelStyle);
+                    GUILayout.Label(item.TypeName, m_BoldLabelStyle);
 
                     if (!string.IsNullOrEmpty(item.Namespace))
                     {
@@ -582,16 +822,18 @@ namespace HB.E2String.Editor
 
                     if (GUILayout.Button("호출 복사", EditorStyles.miniButton, GUILayout.Width(70)))
                     {
-                        string safeClassName = item.EnumName;
+                        string typeName = item.TypeName;
+                        string extClass = item.ExtensionClassName;
+                        string sampleValue = item.Members.Count > 0 ? $"{typeName}.{item.Members[0]}" : $"default({typeName})";
                         string copyText =
                             $"// [E2String] {item.FullTypeName} 사용 예시\n" +
-                            $"string str = {item.EnumName}.{ (item.Members.Count > 0 ? item.Members[0] : "None") }.ToStringFast();\n" +
-                            $"int num = {item.EnumName}.{ (item.Members.Count > 0 ? item.Members[0] : "None") }.ToIntFast();\n" +
-                            $"{item.EnumName} parsed = str.To{item.EnumName}();\n" +
-                            $"bool ok = {safeClassName}Extensions.TryParseFast(str, out var result);\n" +
-                            $"var allValues = {safeClassName}Extensions.AllValues;";
+                            $"string str = {sampleValue}.ToStringFast();\n" +
+                            $"int num = {sampleValue}.ToIntFast();\n" +
+                            $"{typeName} parsed = str.To{item.EnumName}();\n" +
+                            $"bool ok = {extClass}.TryParseFast(str, out var result);\n" +
+                            $"var allValues = {extClass}.AllValues;";
                         EditorGUIUtility.systemCopyBuffer = copyText;
-                        ShowNotification(new GUIContent($"'{item.EnumName}' 호출 코드 복사됨"));
+                        ShowNotification(new GUIContent($"'{item.TypeName}' 호출 코드 복사됨"));
                     }
                 }
 
@@ -627,7 +869,8 @@ namespace HB.E2String.Editor
                     "- myEnum.ToInt() / myEnum.ToIntFast() : Enum -> int 변환 (Unity 2021.3+ UnsafeUtility.As 지원)\n" +
                     "- intVal.To{EnumName}(fallback) / intVal.To{EnumName}Fast() : int -> Enum 변환\n" +
                     "- {EnumName}Extensions.IsDefined(val) : Enum 또는 int 값 유효성 검사\n" +
-                    "- {EnumName}Extensions.Count / Names / AllNames / Values / AllValues : 캐싱된 배열 및 읽기 전용 리스트",
+                    "- {EnumName}Extensions.Count / Names / AllNames / Values / AllValues : 캐싱된 배열 및 읽기 전용 리스트\n" +
+                    "- 중첩 enum은 바깥 타입 경로의 '.'이 '_'로 치환됩니다 (예: Outer_MyEnumExtensions)",
                     MessageType.None);
             }
         }

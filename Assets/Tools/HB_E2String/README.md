@@ -14,22 +14,18 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String
 
 ## 주요 기능
 - **Roslyn Source Generator (`E2StringGenerator`)**:
-  - `[E2String]` 또는 `[EnumToString]` 어트리뷰트가 선언된 Enum을 컴파일 타임에 탐색하여 `{EnumName}_Extensions.g.cs` 파일을 자동 생성합니다.
+  - `[E2String]` 어트리뷰트가 선언된 Enum을 컴파일 타임에 탐색하여 `{EnumName}_Extensions.g.cs` 파일을 자동 생성합니다.
   - **상수 및 캐시 컬렉션**: `Count`, `Names`(`string[]`), `AllNames`(`IReadOnlyList<string>`), `Values`(`T[]`), `AllValues`(`IReadOnlyList<T>`)
   - **Enum <-> String 변환**: `switch` 식 기반의 `ToStringFast(fallback)`, `To{EnumName}(fallback)`, `TryParseFast(value, out result, fallback)`
   - **Enum <-> Int 변환**: Unity 2021.3 이상에서는 `UnsafeUtility.As<T, int>`를, 그 외 환경에서는 명시적 캐스팅을 사용하는 `ToInt()`, `ToIntFast()`, `To{EnumName}(int, fallback)`, `To{EnumName}Fast(int)`
   - **유효성 검사**: `switch` 식 기반의 `IsDefined(T value)` 및 `IsDefined(int value)`
 - **에디터 매니저 윈도우 (`Tools > HB > E2String Manager`)**:
-  - 프로젝트 내 `[E2String]`이 적용된 모든 Enum 목록과 멤버, 선언 위치를 정규식으로 스캔하여 시각화합니다.
-  - 프로젝트 내 `E2StringAttribute.cs` 존재 여부를 확인하고, 서버 공유 디렉터리 등 지정한 경로에 어트리뷰트 스크립트를 생성하는 기능을 제공합니다.
-- **테스트 및 검증**:
-  - `Assets/Tools/HB_E2String/Tests`에 NUnit 기반의 단위 테스트가 포함되어 있으며, 정수 변환, 빠른 문자열 파싱, 잘못된 문자열의 폴백 처리 등을 검증합니다.
+  - 프로젝트 내 `[E2String]`이 적용된 모든 Enum 목록과 멤버, 선언 위치를 스캔하여 시각화합니다.
+  - 프로젝트 내 `E2StringAttribute.cs` 존재 여부를 확인하고, 서버 공유 디렉터리 등 `Assets` 하위 경로에 어트리뷰트 스크립트를 생성하는 기능을 제공합니다.
 
 ## 사용 예시
 
 ```csharp
-using HB.E2String;
-
 [E2String]
 public enum CharacterState
 {
