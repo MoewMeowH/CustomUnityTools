@@ -20,11 +20,15 @@ namespace HB.Cheat
         /// <summary>PC 열기/닫기 키. Input System은 Key 이름, 구 Input Manager는 KeyCode 이름 (예: F8). 비우면 사용 안 함.</summary>
         public string ToggleKey = "F8";
 
-        /// <summary>서버 응답 대기 시간 (초). 넘으면 TimedOut.</summary>
+        /// <summary>
+        /// 서버 응답 대기 시간 (초, 최소 0.5). 넘으면 TimedOut이 되고 서버 큐가 멈춘다
+        /// (늦은 응답이 도착하거나 ResumeServerQueue를 부르면 재개).
+        /// </summary>
         public float ServerTimeoutSeconds = 10f;
 
         public int HistoryCapacity = 50;
 
+        /// <summary>false면 씬이 바뀔 때 패널이 함께 파괴되어 종료된다. 다시 쓰려면 CheatSystem.Initialize를 부른다.</summary>
         public bool DontDestroyOnLoad = true;
 
         /// <summary>

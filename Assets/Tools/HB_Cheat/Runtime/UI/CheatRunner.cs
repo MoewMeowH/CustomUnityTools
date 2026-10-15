@@ -142,7 +142,7 @@ namespace HB.Cheat.UI
 
         private void OnDestroy()
         {
-            CheatSystem.Shutdown();
+            CheatSystem.Shutdown(this);
             if (m_CreatedPanelSettings != null) Destroy(m_CreatedPanelSettings);
         }
 
