@@ -45,8 +45,9 @@ namespace HB.Cheat
                         if (tokens.Count < 2) return Error("Usage: raw <command...>");
                         return Raw(line.Substring(line.IndexOf("raw", StringComparison.OrdinalIgnoreCase) + 3).Trim(), source);
                     case "status":
-                        if (tokens.Count < 2 || !int.TryParse(tokens[1], out int id)) return Error("Usage: status <executionId>");
-                        return Status(id);
+                        if (tokens.Count < 2 || !int.TryParse(tokens[1], out int id)) return Error("Usage: status <executionId> [session=S]");
+                        ParsePairs(tokens, 2).TryGetValue("session", out string session);
+                        return Status(id, session);
                     case "history":
                         var historyArgs = ParsePairs(tokens, 1);
                         int count = historyArgs.TryGetValue("limit", out string countText) && int.TryParse(countText, out int c) ? c : 20;
@@ -133,7 +134,7 @@ namespace HB.Cheat
 
         public static string Run(string cheatId, IReadOnlyDictionary<string, string> args, CheatSource source = CheatSource.Code)
         {
-            if (!CheatSystem.IsInitialized) return Error("CheatSystem is not initialized (enter Play Mode)");
+            if (!CheatSystem.IsInitialized) return NotInitialized();
             if (!CheatRegistry.TryGet(cheatId, out var def)) return Error($"Unknown cheat '{cheatId}'");
             if (!TryBuildValues(def, args, allowMissing: false, out var values, out string error)) return Error(error);
 
@@ -145,7 +146,7 @@ namespace HB.Cheat
         {
             if (IsAutomation(source) && !CheatSystem.Options.AllowRawFromAutomation)
                 return Error("Raw commands from automation are disabled (CheatRuntimeOptions.AllowRawFromAutomation, Tools > HB > Cheat)", "raw_disabled");
-            if (!CheatSystem.IsInitialized) return Error("CheatSystem is not initialized (enter Play Mode)");
+            if (!CheatSystem.IsInitialized) return NotInitialized();
             if (string.IsNullOrWhiteSpace(command)) return Error("Empty raw command");
             return ExecutionJson(CheatSystem.ExecuteRaw(command, source));
         }
@@ -154,8 +155,16 @@ namespace HB.Cheat
         /// 찾지 못하면 code로 구분한다: "evicted"(이번 세션에 실행됐지만 히스토리 용량으로 지워짐), "unknown"(발급된 적 없는 id).
         /// 끝나지 않은 실행은 히스토리에서 지워지지 않으므로 둘 다 다시 조회할 필요가 없다.
         /// </summary>
-        public static string Status(int executionId)
+        /// <remarks>
+        /// session(run 응답의 "session")을 넘기면 현재 세션과 다를 때 code "session_changed"로 거절한다.
+        /// 정적 상태가 초기화되면 id가 1부터 다시 발급되므로, 넘기지 않으면 다른 실행의 결과를 받을 수 있다.
+        /// </remarks>
+        public static string Status(int executionId, string session = null)
         {
+            string current = CheatSystem.SessionId;
+            if (!string.IsNullOrEmpty(session) && session != current)
+                return Error($"Session changed ({session} -> {current}). Execution {executionId} belongs to a previous session", "session_changed");
+
             var execution = CheatSystem.FindExecution(executionId);
             if (execution != null) return ExecutionJson(execution);
             if (CheatSystem.WasIssued(executionId))
@@ -167,7 +176,7 @@ namespace HB.Cheat
         {
             var history = CheatSystem.History;
             var w = new CheatJsonWriter();
-            w.BeginObject().Prop("ok", true);
+            w.BeginObject().Prop("ok", true).Prop("session", CheatSystem.SessionId);
             WriteServerQueue(w);
             w.Key("history").BeginArray();
             for (int i = Math.Max(0, history.Count - limit); i < history.Count; i++)
@@ -223,7 +232,7 @@ namespace HB.Cheat
         public static string ExecutionJson(CheatExecution execution)
         {
             var w = new CheatJsonWriter();
-            w.BeginObject().Prop("ok", true);
+            w.BeginObject().Prop("ok", true).Prop("session", execution.Session);
             WriteServerQueue(w);
             w.Key("execution");
             WriteExecution(w, execution);
@@ -264,6 +273,9 @@ namespace HB.Cheat
                 .Prop("describe", e.Describe())
                 .EndObject();
         }
+
+        /// <summary>Play Mode가 아니거나 재컴파일 등으로 초기화가 풀렸다 → 자동화는 멈추고 사람에게 넘긴다</summary>
+        public static string NotInitialized() => Error("CheatSystem is not initialized (enter Play Mode)", "not_initialized");
 
         private static bool IsAutomation(CheatSource source) => source == CheatSource.Cli || source == CheatSource.Bridge;
 

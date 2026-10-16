@@ -69,7 +69,7 @@ namespace HB.Cheat.Tests
         public void HistoryJson_HasServerQueue()
         {
             ForceTimeout(CheatSystem.Execute(Def(ServerId), null));
-            StringAssert.StartsWith("{\"ok\":true,\"serverQueue\":{\"paused\":true,", CheatProtocol.History(20));
+            StringAssert.Contains("\"serverQueue\":{\"paused\":true,", CheatProtocol.History(20));
         }
 
         [Test]

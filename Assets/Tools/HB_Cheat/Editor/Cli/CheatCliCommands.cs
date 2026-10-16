@@ -10,7 +10,7 @@ namespace HB.Cheat.Editor
     ///   unity command cheat_list
     ///   unity command cheat_options --id item.enchant --arg level --args "itemId=1001"
     ///   unity command cheat_run --id item.enchant --args "itemId=1001 level=15"
-    ///   unity command cheat_status --execution 3
+    ///   unity command cheat_status --execution 3 --session 1a2b3c4d
     /// 서버 치트는 Pending으로 시작하므로 cheat_status로 결과를 확인한다.
     /// 실패는 예외가 아니라 항상 {"ok":false,"error":"..."} JSON으로 돌려준다.
     /// </summary>
@@ -59,12 +59,14 @@ namespace HB.Cheat.Editor
         }
 
         [CliCommand("cheat_status", "Get the status of a cheat execution (JSON)")]
-        public static string Status([CliArg("execution", "Execution id returned by cheat_run", Required = true)] int execution)
+        public static string Status(
+            [CliArg("execution", "Execution id returned by cheat_run", Required = true)] int execution,
+            [CliArg("session", "Session returned by cheat_run. If it differs from the current session, fails with code session_changed")] string session = "")
         {
             return Guard(() =>
             {
                 if (!TryRequirePlayMode(out string error)) return error;
-                return CheatProtocol.Status(execution);
+                return CheatProtocol.Status(execution, session);
             });
         }
 
@@ -99,7 +101,7 @@ namespace HB.Cheat.Editor
                 error = null;
                 return true;
             }
-            error = CheatProtocol.Error("Enter Play Mode first (CheatSystem is not initialized)");
+            error = CheatProtocol.NotInitialized();
             return false;
         }
     }

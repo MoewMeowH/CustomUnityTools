@@ -22,6 +22,8 @@ namespace HB.Cheat
 
         private static bool s_IsInitialized;
         private static int s_NextExecutionId = 1;
+        // 실행 id 공간의 식별자. 정적 상태가 초기화될 때(Play Mode 재시작, Play Mode 중 재컴파일)만 바뀐다
+        private static string s_SessionId;
         private static CheatRunner s_Runner;
         private static ICheatPanelHost s_ActiveHost;
         private static readonly List<CheatExecution> s_History = new List<CheatExecution>();
@@ -92,6 +94,13 @@ namespace HB.Cheat
         /// <summary>id가 이번 세션에서 발급된 적이 있는지 (히스토리에서 지워졌는지 판단용)</summary>
         internal static bool WasIssued(int executionId) => executionId > 0 && executionId < s_NextExecutionId;
 
+        /// <summary>
+        /// 실행 id 공간의 세션 값 (8자리 16진). Play Mode 재시작·재컴파일로 id가 1부터 다시 발급되면 바뀐다.
+        /// Shutdown → Initialize(씬 전환 등)로는 바뀌지 않는다 (id와 히스토리가 이어지므로).
+        /// 실행이 아직 없어도 값이 있다 (재시작 직후 이전 세션 값과 비교할 수 있도록 처음 읽을 때 만든다).
+        /// </summary>
+        public static string SessionId => s_SessionId ??= Guid.NewGuid().ToString("N").Substring(0, 8);
+
 #if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER)
 #if UNITY_EDITOR
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -118,6 +127,7 @@ namespace HB.Cheat
         {
             s_IsInitialized = false;
             s_NextExecutionId = 1;
+            s_SessionId = null;
             s_History.Clear();
             s_ServerQueue.Clear();
             s_InFlight = null;
