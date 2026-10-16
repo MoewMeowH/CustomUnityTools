@@ -349,10 +349,13 @@ namespace HB.Cheat
             return true;
         }
 
-        public static CheatExecution Execute(CheatDefinition definition, object[] values)
+        public static CheatExecution Execute(CheatDefinition definition, object[] values) => Execute(definition, values, CheatSource.Code);
+
+        /// <summary>실행 주체를 지정해 실행한다 (패널·CLI·브리지가 쓴다).</summary>
+        public static CheatExecution Execute(CheatDefinition definition, object[] values, CheatSource source)
         {
             var copy = values != null ? (object[])values.Clone() : Array.Empty<object>();
-            var execution = new CheatExecution(s_NextExecutionId++, definition, copy, Time.realtimeSinceStartup);
+            var execution = new CheatExecution(s_NextExecutionId++, definition, copy, Time.realtimeSinceStartup, source);
 
             if (definition != null)
                 s_LastValues[definition.Id] = copy;
@@ -390,9 +393,12 @@ namespace HB.Cheat
         }
 
         /// <summary>조합 없이 문자열 그대로 서버에 보낸다.</summary>
-        public static CheatExecution ExecuteRaw(string command)
+        public static CheatExecution ExecuteRaw(string command) => ExecuteRaw(command, CheatSource.Code);
+
+        /// <summary>실행 주체를 지정해 raw 명령을 보낸다.</summary>
+        public static CheatExecution ExecuteRaw(string command, CheatSource source)
         {
-            var execution = new CheatExecution(s_NextExecutionId++, null, Array.Empty<object>(), Time.realtimeSinceStartup)
+            var execution = new CheatExecution(s_NextExecutionId++, null, Array.Empty<object>(), Time.realtimeSinceStartup, source)
             {
                 Command = command?.Trim()
             };

@@ -518,7 +518,9 @@ namespace HB.Cheat.UI
                 card.style.borderLeftColor = CheatStyles.StatusColor(execution.Status);
 
                 var headerRow = CheatStyles.Row();
-                var statusLabel = CheatStyles.Label($"#{execution.Id}  {CheatStyles.StatusText(execution.Status)}", CheatStyles.SmallFontSize, CheatStyles.StatusColor(execution.Status), bold: true);
+                // 패널이 아닌 실행(자동화 등)은 주체를 붙여 사람이 구분할 수 있게 한다
+                string source = execution.Source == CheatSource.Panel ? string.Empty : $"  [{CheatStyles.SourceText(execution.Source)}]";
+                var statusLabel = CheatStyles.Label($"#{execution.Id}  {CheatStyles.StatusText(execution.Status)}{source}", CheatStyles.SmallFontSize, CheatStyles.StatusColor(execution.Status), bold: true);
                 statusLabel.style.flexGrow = 1;
                 headerRow.Add(statusLabel);
                 headerRow.Add(CheatStyles.Button(execution.Definition != null ? "Edit" : "Reuse", () => ReuseExecution(execution), CheatStyles.SurfaceHigh));
@@ -572,7 +574,7 @@ namespace HB.Cheat.UI
         private void SendRaw()
         {
             if (m_RawField == null || string.IsNullOrWhiteSpace(m_RawField.value)) return;
-            m_LastRawExecution = CheatSystem.ExecuteRaw(m_RawField.value);
+            m_LastRawExecution = CheatSystem.ExecuteRaw(m_RawField.value, CheatSource.Panel);
             RefreshRawStatus();
         }
 
@@ -748,7 +750,7 @@ namespace HB.Cheat.UI
         private void Run()
         {
             if (m_Selected == null) return;
-            m_LastExecution = CheatSystem.Execute(m_Selected, m_Values);
+            m_LastExecution = CheatSystem.Execute(m_Selected, m_Values, CheatSource.Panel);
             RefreshStatus();
         }
 

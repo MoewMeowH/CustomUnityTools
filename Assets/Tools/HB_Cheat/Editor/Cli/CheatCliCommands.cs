@@ -44,7 +44,7 @@ namespace HB.Cheat.Editor
             {
                 if (!TryRequirePlayMode(out string error)) return error;
                 if (!CheatProtocol.TryParsePairs(args ?? string.Empty, out var pairs, out error)) return CheatProtocol.Error(error);
-                return CheatProtocol.Run(id, pairs);
+                return CheatProtocol.Run(id, pairs, CheatSource.Cli);
             });
         }
 
@@ -54,7 +54,7 @@ namespace HB.Cheat.Editor
             return Guard(() =>
             {
                 if (!TryRequirePlayMode(out string error)) return error;
-                return CheatProtocol.Raw(command);
+                return CheatProtocol.Raw(command, CheatSource.Cli);
             });
         }
 

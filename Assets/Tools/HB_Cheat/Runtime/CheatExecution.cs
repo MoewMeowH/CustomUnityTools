@@ -17,6 +17,9 @@ namespace HB.Cheat
         /// <summary>서버로 보낸 명령 문자열 (Local이면 null)</summary>
         public string Command { get; internal set; }
 
+        /// <summary>누가 실행했는지 (패널 / CLI / 브리지 / 코드)</summary>
+        public CheatSource Source { get; }
+
         public CheatStatus Status { get; internal set; }
         public string Message { get; internal set; }
         public float StartedAt { get; }
@@ -28,12 +31,13 @@ namespace HB.Cheat
         public bool IsDone => Status != CheatStatus.Pending;
         public bool IsServer => Definition == null || Definition.Target == CheatTarget.Server;
 
-        internal CheatExecution(int id, CheatDefinition definition, object[] values, float startedAt)
+        internal CheatExecution(int id, CheatDefinition definition, object[] values, float startedAt, CheatSource source)
         {
             Id = id;
             Definition = definition;
             Values = values;
             StartedAt = startedAt;
+            Source = source;
             Status = CheatStatus.Pending;
         }
 
