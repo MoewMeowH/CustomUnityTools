@@ -18,6 +18,4 @@ MonoBehaviour:
   conditionalSymbol: USE_HLOG
   useSameName: 1
   autoGenerateOnSave: 1
-  channels:
-  - varName: Channel1
-    tagName: Channel1
+  channels: []
