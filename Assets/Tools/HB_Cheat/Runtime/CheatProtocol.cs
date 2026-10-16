@@ -269,19 +269,37 @@ namespace HB.Cheat
             return tokens;
         }
 
-        /// <summary>"k=v k2=v2" 형식 (CLI 인자 하나로 받을 때)</summary>
+        /// <summary>"k=v k2=v2" 형식 (CLI 인자 하나로 받을 때). 형식이 틀리면 FormatException (예외 없이 받으려면 TryParsePairs)</summary>
         public static Dictionary<string, string> ParsePairs(string text) => ParsePairs(Tokenize(text), 0);
+
+        /// <summary>ParsePairs의 예외 없는 버전. 형식이 틀리면 false와 이유</summary>
+        public static bool TryParsePairs(string text, out Dictionary<string, string> pairs, out string error)
+        {
+            return TryParsePairs(Tokenize(text), 0, out pairs, out error);
+        }
 
         private static Dictionary<string, string> ParsePairs(List<string> tokens, int start)
         {
-            var pairs = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (!TryParsePairs(tokens, start, out var pairs, out string error)) throw new FormatException(error);
+            return pairs;
+        }
+
+        private static bool TryParsePairs(List<string> tokens, int start, out Dictionary<string, string> pairs, out string error)
+        {
+            pairs = new Dictionary<string, string>(StringComparer.Ordinal);
             for (int i = start; i < tokens.Count; i++)
             {
                 int eq = tokens[i].IndexOf('=');
-                if (eq <= 0) throw new FormatException($"Expected k=v but got '{tokens[i]}'");
+                if (eq <= 0)
+                {
+                    error = $"Expected k=v but got '{tokens[i]}'";
+                    pairs = null;
+                    return false;
+                }
                 pairs[tokens[i].Substring(0, eq)] = tokens[i].Substring(eq + 1);
             }
-            return pairs;
+            error = null;
+            return true;
         }
 
         #endregion
