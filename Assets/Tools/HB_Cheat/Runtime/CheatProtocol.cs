@@ -140,8 +140,11 @@ namespace HB.Cheat
             return ExecutionJson(CheatSystem.Execute(def, values, source));
         }
 
+        /// <summary>자동화 주체(Cli·Bridge)는 CheatRuntimeOptions.AllowRawFromAutomation이 켜져 있어야 보낸다 (기본 꺼짐).</summary>
         public static string Raw(string command, CheatSource source = CheatSource.Code)
         {
+            if (IsAutomation(source) && !CheatSystem.Options.AllowRawFromAutomation)
+                return Error("Raw commands from automation are disabled (CheatRuntimeOptions.AllowRawFromAutomation, Tools > HB > Cheat)", "raw_disabled");
             if (!CheatSystem.IsInitialized) return Error("CheatSystem is not initialized (enter Play Mode)");
             if (string.IsNullOrWhiteSpace(command)) return Error("Empty raw command");
             return ExecutionJson(CheatSystem.ExecuteRaw(command, source));
@@ -261,6 +264,8 @@ namespace HB.Cheat
                 .Prop("describe", e.Describe())
                 .EndObject();
         }
+
+        private static bool IsAutomation(CheatSource source) => source == CheatSource.Cli || source == CheatSource.Bridge;
 
         public static string Error(string message)
         {

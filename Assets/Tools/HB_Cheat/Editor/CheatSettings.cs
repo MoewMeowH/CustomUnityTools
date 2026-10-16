@@ -46,6 +46,10 @@ namespace HB.Cheat.Editor
         [SerializeField] private int historyCapacity = 50;
         [SerializeField] private bool dontDestroyOnLoad = true;
 
+        [Header("Automation")]
+        [Tooltip("Unity CLI cheat_raw / 브리지 raw로 서버에 임의 문자열을 보내도록 허용 (기본 꺼짐). 패널 Raw 탭은 항상 허용.")]
+        [SerializeField] private bool allowRawFromAutomation;
+
         [Header("Release Guard")]
         [Tooltip("Development Build가 아닌 빌드를 릴리즈로 본다 (치트 심볼이 켜져 있으면 빌드 실패)")]
         [SerializeField] private bool treatNonDevelopmentAsRelease = true;
@@ -68,6 +72,7 @@ namespace HB.Cheat.Editor
         public float ServerTimeoutSeconds => Mathf.Max(0.5f, serverTimeoutSeconds);
         public int HistoryCapacity => Mathf.Max(1, historyCapacity);
         public bool DontDestroyOnLoad => dontDestroyOnLoad;
+        public bool AllowRawFromAutomation => allowRawFromAutomation;
 
         public bool TreatNonDevelopmentAsRelease => treatNonDevelopmentAsRelease;
         public IReadOnlyList<string> ReleaseDefines => releaseDefines;

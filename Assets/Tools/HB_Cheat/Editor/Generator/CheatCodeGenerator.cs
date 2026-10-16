@@ -354,6 +354,7 @@ namespace HB.Cheat.Editor
             sb.AppendLine($"            options.ServerTimeoutSeconds = {settings.ServerTimeoutSeconds.ToString("R", CultureInfo.InvariantCulture)}f;");
             sb.AppendLine($"            options.HistoryCapacity = {settings.HistoryCapacity};");
             sb.AppendLine($"            options.DontDestroyOnLoad = {Bool(settings.DontDestroyOnLoad)};");
+            sb.AppendLine($"            options.AllowRawFromAutomation = {Bool(settings.AllowRawFromAutomation)};");
             sb.AppendLine();
 
             // Provider는 타입마다 하나만 만든다

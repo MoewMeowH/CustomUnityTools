@@ -26,7 +26,15 @@ namespace HB.Cheat
         /// </summary>
         public float ServerTimeoutSeconds = 10f;
 
+        /// <summary>히스토리 보존 건수. 끝나지 않은 실행은 지우지 않으므로 그만큼 넘을 수 있다.</summary>
         public int HistoryCapacity = 50;
+
+        /// <summary>
+        /// 자동화 경로(Unity CLI cheat_raw, 브리지 raw)에서 raw 명령을 서버로 보낼지.
+        /// 기본 false: 서버로 임의 문자열이 가는 통로는 켜야만 열린다 ("비워 두면 기존 동작" 원칙의 의도적 예외).
+        /// 패널 Raw 탭과 코드의 CheatSystem.ExecuteRaw는 영향을 받지 않는다.
+        /// </summary>
+        public bool AllowRawFromAutomation = false;
 
         /// <summary>false면 씬이 바뀔 때 패널이 함께 파괴되어 종료된다. 다시 쓰려면 CheatSystem.Initialize를 부른다.</summary>
         public bool DontDestroyOnLoad = true;
