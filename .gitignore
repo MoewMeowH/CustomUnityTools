@@ -56,3 +56,6 @@ ProjectSettings/TimelineSettings.asset
 
 # 프로젝트 루트 밖 코드를 외부 에이전트 리뷰에 넘길 때 쓰는 임시 사본 (CLAUDE.md "프로젝트 루트 밖의 코드를 리뷰할 때")
 /review_tmp/
+
+# MCP 서버 설정. 기기마다 publish 폴더 절대 경로가 달라 추적하지 않는다 (템플릿: HB_Orchestration project-files/.mcp.example.json)
+/.mcp.json
