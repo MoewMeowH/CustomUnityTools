@@ -89,21 +89,11 @@ namespace HB.Cheat
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStaticsOnDomainReload()
         {
-            s_IsInitialized = false;
-            s_NextExecutionId = 1;
+            ResetExecutionState();
             s_Runner = null;
             s_ActiveHost = null;
-            s_History.Clear();
-            s_ServerQueue.Clear();
-            s_InFlight = null;
-            s_ServerQueuePaused = false;
-            s_ServerQueuePauseReason = null;
-            s_IsSendingNext = false;
             s_IsInitializing = false;
             s_IsShuttingDown = false;
-            s_MainThreadId = -1;
-            while (s_PendingReports.TryDequeue(out _)) { }
-            s_LastValues.Clear();
             s_Bridges.Clear();
             s_Favorites = null;
             ServerTransport = null;
@@ -113,6 +103,43 @@ namespace HB.Cheat
             CheatOptionCache.Clear();
         }
 #endif
+#endif
+
+#if UNITY_EDITOR
+        private static void ResetExecutionState()
+        {
+            s_IsInitialized = false;
+            s_NextExecutionId = 1;
+            s_History.Clear();
+            s_ServerQueue.Clear();
+            s_InFlight = null;
+            s_ServerQueuePaused = false;
+            s_ServerQueuePauseReason = null;
+            s_IsSendingNext = false;
+            s_MainThreadId = -1;
+            while (s_PendingReports.TryDequeue(out _)) { }
+            s_LastValues.Clear();
+        }
+
+        /// <summary>
+        /// EditMode 테스트용: 러너·UI 없이 실행 경로만 켠다. 시간 초과는 테스트가 Tick을 직접 부른다.
+        /// (러너 → Tick 연결은 Play Mode에서 확인한다)
+        /// </summary>
+        internal static void InitializeHeadlessForTests()
+        {
+            if (s_Runner != null) throw new InvalidOperationException("CheatSystem is running with a runner (exit Play Mode first).");
+            ResetExecutionState();
+            s_MainThreadId = Thread.CurrentThread.ManagedThreadId;
+            s_IsInitialized = true;
+        }
+
+        /// <summary>EditMode 테스트 정리: 실행 상태와 전송만 비운다 (이벤트 구독은 그대로)</summary>
+        internal static void ResetForTests()
+        {
+            if (s_Runner != null) return;
+            ResetExecutionState();
+            ServerTransport = null;
+        }
 #endif
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
