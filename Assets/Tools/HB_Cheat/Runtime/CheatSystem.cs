@@ -317,14 +317,23 @@ namespace HB.Cheat
         /// </summary>
         public static bool Validate(CheatDefinition definition, object[] values, out string error)
         {
+            return Validate(definition, values, out error, out _);
+        }
+
+        /// <summary>실패 이유를 CheatErrorCode로도 돌려준다 (missing_argument / out_of_range_value / unlisted_value / option_provider_failed).</summary>
+        public static bool Validate(CheatDefinition definition, object[] values, out string error, out string code)
+        {
+            code = null;
             if (definition == null)
             {
                 error = "Cheat definition is null";
+                code = CheatErrorCode.InternalError;
                 return false;
             }
             if (values == null || values.Length != definition.Args.Length)
             {
                 error = $"'{definition.Id}' expects {definition.Args.Length} argument(s)";
+                code = CheatErrorCode.InternalError;
                 return false;
             }
 
@@ -336,6 +345,7 @@ namespace HB.Cheat
                 if (value == null)
                 {
                     error = $"'{arg.DisplayLabel}' is not selected";
+                    code = CheatErrorCode.MissingArgument;
                     return false;
                 }
 
@@ -345,6 +355,7 @@ namespace HB.Cheat
                     if (d < arg.Min || d > arg.Max)
                     {
                         error = $"'{arg.DisplayLabel}' must be in [{arg.Min}, {arg.Max}]";
+                        code = CheatErrorCode.OutOfRangeValue;
                         return false;
                     }
                 }
@@ -355,11 +366,13 @@ namespace HB.Cheat
                     if (optionError != null)
                     {
                         error = optionError;
+                        code = CheatErrorCode.OptionProviderFailed;
                         return false;
                     }
                     if (!ContainsValue(options, value))
                     {
                         error = $"'{arg.DisplayLabel}': {CheatValueParser.ToText(value)} is not in the option list";
+                        code = CheatErrorCode.UnlistedValue;
                         return false;
                     }
                 }

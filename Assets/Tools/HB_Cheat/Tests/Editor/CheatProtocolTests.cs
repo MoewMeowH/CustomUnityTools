@@ -40,7 +40,7 @@ namespace HB.Cheat.Tests
         [Test]
         public void Handle_BadPairs_ReturnsJsonError()
         {
-            Assert.AreEqual("{\"ok\":false,\"error\":\"Expected k=v but got 'level'\"}", CheatProtocol.Handle($"run {IntArgId} level"));
+            Assert.AreEqual("{\"ok\":false,\"error\":\"Expected k=v but got 'level'\",\"code\":\"malformed_argument\"}", CheatProtocol.Handle($"run {IntArgId} level"));
         }
 
         [Test]
