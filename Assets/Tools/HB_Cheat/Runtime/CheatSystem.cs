@@ -81,8 +81,13 @@ namespace HB.Cheat
         /// <summary>전송을 기다리는 서버 치트 수 (전송 중인 건 제외)</summary>
         public static int QueuedServerCount => s_ServerQueue.Count;
 
-        /// <summary>최근 실행 (오래된 것부터)</summary>
+        /// <summary>최근 실행 (오래된 것부터). 최근 HistoryCapacity건 + 끝나지 않은 실행이라 용량을 넘을 수 있다.</summary>
         public static IReadOnlyList<CheatExecution> History => s_History;
+
+        internal static int HistoryCapacity => Math.Max(1, Options.HistoryCapacity);
+
+        /// <summary>id가 이번 세션에서 발급된 적이 있는지 (히스토리에서 지워졌는지 판단용)</summary>
+        internal static bool WasIssued(int executionId) => executionId > 0 && executionId < s_NextExecutionId;
 
 #if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER)
 #if UNITY_EDITOR
@@ -660,13 +665,26 @@ namespace HB.Cheat
         private static void AddHistory(CheatExecution execution)
         {
             s_History.Add(execution);
-            int capacity = Math.Max(1, Options.HistoryCapacity);
-            while (s_History.Count > capacity)
-            {
-                // 대기 중인 건은 응답 처리를 위해 대기 큐에 남아 있다
-                s_History.RemoveAt(0);
-            }
+            TrimHistory();
             RaiseExecutionChanged(execution);
+        }
+
+        // 최근 용량만큼 + 끝나지 않은 실행을 남긴다. 끝나지 않은 실행을 지우면 결과를 조회할 곳이 없어진다
+        // (자동화가 cheat_status로 폴링 중일 수 있다). 그만큼 용량을 넘을 수 있다.
+        // 실행이 끝날 때가 아니라 새 실행이 들어올 때만 정리한다 (끝나자마자 지워져 결과를 못 보는 일이 없도록).
+        private static void TrimHistory()
+        {
+            int windowStart = s_History.Count - HistoryCapacity;
+            if (windowStart <= 0) return;
+
+            int write = 0;
+            for (int i = 0; i < s_History.Count; i++)
+            {
+                var entry = s_History[i];
+                if (i >= windowStart || !entry.IsDone)
+                    s_History[write++] = entry;
+            }
+            s_History.RemoveRange(write, s_History.Count - write);
         }
 
         private static bool ContainsValue(IReadOnlyList<CheatOption> options, object value)
