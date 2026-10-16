@@ -185,17 +185,42 @@ unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 ra
 
 ### 응답 JSON
 
-- 실패는 예외가 아니라 항상 `{"ok":false,"error":"..."}`입니다. 자동화가 분기해야 하는 실패에는 `code`가 붙습니다.
+- 성공은 `{"ok":true,...}`, 실패는 예외가 아니라 항상 `{"ok":false,"error":"...","code":"..."}`입니다.
+- **인자·요청 문제는 `ok:false` + `code`**, **실행 결과 문제**(로컬 치트의 실패·예외, 서버 응답 실패, 전송 실패, 시간 초과)는 `ok:true` + `execution.status`(`Failed` / `TimedOut`)입니다. 범위 밖·목록에 없는 값처럼 인자 문제는 자동화 경로에서 실행을 만들지 않습니다(패널은 기존대로 실행 후 `Failed`로 남김).
+- `code`는 **계약**입니다. 이름을 바꾸지 않습니다. `error` 문구는 사람용이라 바뀔 수 있으니 분기는 `code`로 합니다. 상수: `HB.Cheat.CheatErrorCode`.
 
-  | code | 뜻 |
+  | code | 언제 나오나 |
   |---|---|
-  | `evicted` | 이번 세션에 실행됐지만 히스토리 용량으로 지워짐 |
-  | `unknown` | 발급된 적 없는 실행 id |
-  | `session_changed` | `--session`이 현재 세션과 다름 (Play Mode 재시작·재컴파일로 id가 1부터 다시 발급됨) |
-  | `not_initialized` | Play Mode가 아니거나 재컴파일 등으로 CheatSystem 초기화가 풀림 |
-  | `raw_disabled` | 자동화 경로의 raw가 꺼져 있음 |
+  | `not_initialized` | Play Mode가 아니거나, Play Mode 중 재컴파일 등으로 CheatSystem 초기화가 풀림 |
+  | `session_changed` | `--session`(브리지 `session=`)이 현재 세션과 다름. Play Mode 재시작·재컴파일로 실행 id가 1부터 다시 발급됨 |
+  | `raw_disabled` | 자동화 경로(CLI·브리지)의 raw가 꺼져 있음 |
+  | `evicted_execution` | 현재 세션에서 실행됐지만 히스토리 용량으로 지워진 실행 id |
+  | `unknown_execution` | 현재 세션에서 발급된 적 없는 실행 id (세션을 넘기면 이전 세션 id는 `session_changed`) |
+  | `empty_command` | 브리지에 빈 줄 |
+  | `unknown_command` | 브리지의 모르는 동사 |
+  | `invalid_usage` | 브리지 동사의 위치 인자(치트 id · 인자 이름 · 실행 id)가 없거나 형식이 틀림 |
+  | `malformed_argument` | `k=v` 형식이 아닌 토큰 (CLI `--args`, 브리지) |
+  | `unknown_cheat` | 등록되지 않은 치트 id |
+  | `unknown_argument` | 치트에 없는 인자 이름 (`--arg`, `--args`의 키) |
+  | `argument_without_options` | 선택 목록이 없는 인자에 `options` 요청 |
+  | `unparsable_value` | 값을 인자 타입으로 바꿀 수 없음 (예: int 인자에 `abc`) |
+  | `missing_argument` | 기본값 없는 인자를 넣지 않음 |
+  | `out_of_range_value` | 숫자가 `[CheatRange]` 범위 밖 |
+  | `unlisted_value` | 값이 선택 목록에 없음 |
+  | `option_provider_failed` | 선택 목록 Provider가 예외를 냄 |
+  | `empty_raw_command` | raw 명령이 비어 있음 |
+  | `internal_error` | 예상하지 못한 예외 |
 
-- `run` / `raw` / `status` / `history` 응답에는 서버 큐 상태가 붙습니다.
+  처리는 쓰는 쪽이 정합니다. 예: 자동화는 `ok:false`면 `code`를 기록하고 멈춘 뒤 사람에게 넘긴다.
+
+- Unity CLI 프레임워크가 명령을 부르기 전에 거절하는 오류(필수 인자 누락, `--execution abc` 같은 타입 오류)는 이 JSON이 아니라 CLI 봉투로 옵니다. `code`가 없습니다.
+
+  ```json
+  {"success":false,"command":"unity command cheat_status","data":null,
+   "errors":[{"code":"INVALID_COMMAND_ARGS","message":"... --execution에는 Int32이(가) 필요하지만 abc이(가) 지정되었습니다."}]}
+  ```
+
+- `run` / `raw` / `status` / `history` 응답에는 세션과 서버 큐 상태가 붙습니다.
 
   ```json
   {"ok":true,"session":"1a2b3c4d",
@@ -206,14 +231,14 @@ unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 ra
 
   - `session`: 실행 id 공간의 식별자. Play Mode 재시작이나 Play Mode 중 재컴파일로 정적 상태가 초기화되면 id가 1부터 다시 발급되고 세션 값도 바뀝니다. 씬 전환에 따른 재초기화(`Shutdown` → `Initialize`)로는 바뀌지 않습니다.
   - `source`: 실행 주체 `Panel` / `Cli` / `Bridge` / `Code`. 패널 히스토리에도 패널이 아닌 실행은 `[CLI]`처럼 표시됩니다.
-  - `blocked`: 끝나지 않았는데 서버 큐가 멈춰 **스스로는 진행되지 않는** 서버 실행.
+  - `done`: 실행이 끝남 (`Succeeded` / `Failed` / `TimedOut`).
+  - `blocked`: 끝나지 않았는데 서버 큐가 멈춰 **스스로는 진행되지 않는** 서버 실행. 큐는 늦은 응답이 오거나 사람이 패널 History 탭의 Resume(또는 재접속 코드의 `CheatSystem.ResumeServerQueue`)을 눌러야 진행됩니다. 재접속 전에 재개하면 늦은 응답이 다음 결과로 붙기 때문에 자동화용 재개 명령은 일부러 두지 않았습니다.
 
-### 자동화 폴링 규칙
+### 폴링
 
-1. `cheat_run` 응답의 `execution.id`와 `session`을 저장하고, `cheat_status --execution <id> --session <session>`으로 폴링합니다. **`--session`을 빼면** run과 status 사이에 초기화가 끼었을 때 다른 실행의 결과를 받을 수 있습니다.
-2. `done == true`면 끝(`Succeeded` / `Failed` / `TimedOut`).
-3. `blocked == true`, 또는 `code`가 `session_changed` / `not_initialized`면 **폴링을 멈추고 사람에게 넘깁니다.** 큐는 늦은 응답이 오거나 사람이 패널 History 탭의 Resume(또는 재접속 코드의 `CheatSystem.ResumeServerQueue`)을 눌러야 진행됩니다. 재접속 전에 재개하면 늦은 응답이 다음 결과로 붙기 때문에 자동화용 재개 명령은 일부러 두지 않았습니다.
-4. 끝나지 않은 실행은 히스토리에서 지워지지 않습니다(최근 `HistoryCapacity`건 + 끝나지 않은 실행을 남기므로 그만큼 용량을 넘을 수 있습니다). 끝난 실행은 새 실행이 용량 이상 쌓이기 전에 조회합니다.
+- `cheat_run` 응답의 `execution.id`와 `session`을 저장하고 `cheat_status --execution <id> --session <session>`으로 조회합니다. **`--session`을 빼면** run과 status 사이에 초기화가 끼었을 때 다른 실행의 결과를 받을 수 있습니다.
+- 끝나지 않은 실행은 히스토리에서 지워지지 않습니다(최근 `HistoryCapacity`건 + 끝나지 않은 실행을 남기므로 그만큼 용량을 넘을 수 있습니다). 끝난 실행은 새 실행이 용량 이상 쌓이기 전에 조회합니다.
+- 예: 자동화는 `done`이면 결과를 읽고, `blocked`이거나 `ok:false`면 멈추고 사람에게 넘긴다.
 
 ### raw (자동화 경로는 기본 꺼짐)
 

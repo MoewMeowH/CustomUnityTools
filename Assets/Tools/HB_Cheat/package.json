@@ -1,6 +1,6 @@
 {
   "name": "com.hb.cheat",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "displayName": "HB_Cheat",
   "description": "Development cheat panel (UI Toolkit, mobile-first) with attribute-based cheat definitions, server cheat string composition, strict release-build exclusion and Unity CLI automation.",
   "unity": "6000.3",
