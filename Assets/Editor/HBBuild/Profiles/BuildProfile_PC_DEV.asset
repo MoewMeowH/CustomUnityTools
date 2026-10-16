@@ -1,0 +1,31 @@
+%UNITY 7.0
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 625e9aa526c44cbf98dcfb978b31ef8d, type: 3}
+  m_Name: BuildProfile_PC_DEV
+  m_EditorClassIdentifier: HB.CustomBuild.Editor::HBBuildProfile
+  TargetPlatform: 0
+  BuildType: 0
+  Version: 1.0.0
+  VersionCode: 1
+  DevBuild: 0
+  DeepProfile: 0
+  CleanBuild: 0
+  IsAab: 0
+  ZipPackage: 0
+  ProvisionUUID: 
+  OutputPath: F:\AI\ToolCreate\BuildOutput\StandaloneWindows64
+  Scenes:
+  - Assets/Scenes/SampleScene.unity
+  SceneDefineAsset: {fileID: 0}
+  ProjectDefineAsset: {fileID: 0}
+  CustomEntries: []

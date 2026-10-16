@@ -1,0 +1,16 @@
+{
+    "name": "HB.E2String.Benchmarks",
+    "rootNamespace": "HB.E2String.Benchmarks",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_EDITOR || E2S_BENCHMARK"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
