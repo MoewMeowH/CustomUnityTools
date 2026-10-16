@@ -147,10 +147,17 @@ namespace HB.Cheat
             return ExecutionJson(CheatSystem.ExecuteRaw(command, source));
         }
 
+        /// <summary>
+        /// 찾지 못하면 code로 구분한다: "evicted"(이번 세션에 실행됐지만 히스토리 용량으로 지워짐), "unknown"(발급된 적 없는 id).
+        /// 끝나지 않은 실행은 히스토리에서 지워지지 않으므로 둘 다 다시 조회할 필요가 없다.
+        /// </summary>
         public static string Status(int executionId)
         {
             var execution = CheatSystem.FindExecution(executionId);
-            return execution != null ? ExecutionJson(execution) : Error($"Unknown execution {executionId}");
+            if (execution != null) return ExecutionJson(execution);
+            if (CheatSystem.WasIssued(executionId))
+                return Error($"Execution {executionId} was removed from history (capacity {CheatSystem.HistoryCapacity})", "evicted");
+            return Error($"Unknown execution {executionId}", "unknown");
         }
 
         public static string History(int limit)
@@ -234,6 +241,12 @@ namespace HB.Cheat
         public static string Error(string message)
         {
             return new CheatJsonWriter().BeginObject().Prop("ok", false).Prop("error", message).EndObject().ToString();
+        }
+
+        /// <summary>자동화가 문구 대신 분기할 수 있도록 code를 붙인 에러</summary>
+        public static string Error(string message, string code)
+        {
+            return new CheatJsonWriter().BeginObject().Prop("ok", false).Prop("error", message).Prop("code", code).EndObject().ToString();
         }
 
         /// <summary>공백 구분, "..." 안의 공백은 유지, \" 이스케이프</summary>
