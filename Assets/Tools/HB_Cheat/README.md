@@ -178,10 +178,55 @@ unity command cheat_options --id item.enchant --arg level --args "itemId=1001"
 unity command cheat_run --id item.enchant --args "itemId=1001 level=15"
 unity command cheat_status --execution 3      # 서버 치트는 Pending → Succeeded / Failed / TimedOut
 unity command cheat_history --limit 10
-unity command cheat_raw --command "item_add 1001 10"
+unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 raw 참고)
 ```
 
-실기기 연결(ADB, 로컬 소켓 등)은 `ICheatBridge`를 구현해 `CheatSystem.RegisterBridge`로 등록합니다. 받은 한 줄을 `CheatProtocol.Handle(line)`에 넘기고 결과 JSON을 돌려주면 됩니다(`list` / `options` / `run` / `raw` / `status` / `history`).
+실기기 연결(ADB, 로컬 소켓 등)은 `ICheatBridge`를 구현해 `CheatSystem.RegisterBridge`로 등록합니다. 받은 한 줄을 `CheatProtocol.Handle(line)`에 넘기고 결과 JSON을 돌려주면 됩니다(`list` / `options` / `run` / `raw` / `status` / `history`). `Handle`은 **메인 스레드에서** 부릅니다(소켓 스레드에서 받았다면 메인 스레드로 넘긴 뒤 호출).
+
+### 응답 JSON
+
+- 실패는 예외가 아니라 항상 `{"ok":false,"error":"..."}`입니다. 자동화가 분기해야 하는 실패에는 `code`가 붙습니다.
+
+  | code | 뜻 |
+  |---|---|
+  | `evicted` | 이번 세션에 실행됐지만 히스토리 용량으로 지워짐 |
+  | `unknown` | 발급된 적 없는 실행 id (Play Mode를 다시 시작하면 id가 1부터 다시 발급됩니다) |
+  | `raw_disabled` | 자동화 경로의 raw가 꺼져 있음 |
+
+- `run` / `raw` / `status` / `history` 응답에는 서버 큐 상태가 붙습니다.
+
+  ```json
+  {"ok":true,
+   "serverQueue":{"paused":true,"reason":"#7 timed out","queued":1,"inFlight":null},
+   "execution":{"id":8,"cheatId":"item.clear","target":"Server","source":"Cli",
+                "status":"Pending","done":false,"blocked":true,"message":"Paused: ...","command":"item_clear","describe":"..."}}
+  ```
+
+  - `source`: 실행 주체 `Panel` / `Cli` / `Bridge` / `Code`. 패널 히스토리에도 패널이 아닌 실행은 `[CLI]`처럼 표시됩니다.
+  - `blocked`: 끝나지 않았는데 서버 큐가 멈춰 **스스로는 진행되지 않는** 서버 실행.
+
+### 자동화 폴링 규칙
+
+1. `cheat_run`의 `execution.id`로 `cheat_status`를 폴링합니다.
+2. `done == true`면 끝(`Succeeded` / `Failed` / `TimedOut`).
+3. `blocked == true`면 **폴링을 멈추고 사람에게 넘깁니다.** 큐는 늦은 응답이 오거나 사람이 패널 History 탭의 Resume(또는 재접속 코드의 `CheatSystem.ResumeServerQueue`)을 눌러야 진행됩니다. 재접속 전에 재개하면 늦은 응답이 다음 결과로 붙기 때문에 자동화용 재개 명령은 일부러 두지 않았습니다.
+4. 끝나지 않은 실행은 히스토리에서 지워지지 않습니다(최근 `HistoryCapacity`건 + 끝나지 않은 실행을 남기므로 그만큼 용량을 넘을 수 있습니다). 끝난 실행은 새 실행이 용량 이상 쌓이기 전에 조회합니다.
+
+### raw (자동화 경로는 기본 꺼짐)
+
+`cheat_raw`와 브리지 `raw`는 서버로 임의 문자열을 보내므로 **기본으로 거절**합니다(`code: "raw_disabled"`). 필요하면 `Tools > HB > Cheat` 설정의 **Allow Raw From Automation**을 켜거나 `CheatSystem.Options.AllowRawFromAutomation = true`로 엽니다. 패널 Raw 탭과 코드의 `CheatSystem.ExecuteRaw`는 영향이 없습니다. ("옵션을 비워 두면 기존 동작" 원칙의 의도적 예외입니다.)
+
+### 예약 인자 이름
+
+`query`, `limit`은 프로토콜 옵션으로 쓰므로 치트 인자 이름으로 쓰면 자동화에서 값을 넣을 수 없습니다.
+
+### 테스트
+
+`Tests/Editor`에 EditMode 테스트(`HB.Cheat.Tests.Editor`)가 있습니다. 이 저장소에서는 바로 돌고, 패키지로 설치한 프로젝트에서는 `Packages/manifest.json`의 `"testables": ["com.hb.cheat"]`에 넣어야 보입니다.
+
+```bash
+unity command run_tests --mode EditMode --filter HB.Cheat.Tests   # 에디터가 열려 있을 때
+```
 
 ---
 
