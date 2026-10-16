@@ -59,3 +59,7 @@ ProjectSettings/TimelineSettings.asset
 
 # MCP 서버 설정. 기기마다 publish 폴더 절대 경로가 달라 추적하지 않는다 (템플릿: HB_Orchestration project-files/.mcp.example.json)
 /.mcp.json
+
+# Unity 크래시 복구 씬. 에디터가 자동 생성한다
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
