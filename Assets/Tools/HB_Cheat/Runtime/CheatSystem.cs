@@ -81,6 +81,9 @@ namespace HB.Cheat
         /// <summary>전송을 기다리는 서버 치트 수 (전송 중인 건 제외)</summary>
         public static int QueuedServerCount => s_ServerQueue.Count;
 
+        /// <summary>서버로 보내 응답을 기다리는 실행 (없으면 null)</summary>
+        public static CheatExecution InFlightServerExecution => s_InFlight;
+
         /// <summary>최근 실행 (오래된 것부터). 최근 HistoryCapacity건 + 끝나지 않은 실행이라 용량을 넘을 수 있다.</summary>
         public static IReadOnlyList<CheatExecution> History => s_History;
 
