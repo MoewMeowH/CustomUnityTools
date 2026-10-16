@@ -39,51 +39,150 @@
 
 준비: 프로젝트에 등록된 치트가 없어 샘플(`Samples~/CheatExamples`)을 `Assets/Samples/HB_Cheat/`로 복사해 사용, 끝난 뒤 생성 레지스트리(`Assets/Cheats/Generated`)와 함께 삭제. 커밋하지 않음.
 
-**고치기 전 (0.1.2)**
+**고치기 전 (0.1.2)** — 응답 원문. `--result-only` 출력의 바깥 문자열 감싸기만 풀었다.
+
+*cheat_list → 17개*
+
+*잘못된 --args (`--format json`, CLI 전체 출력)*
 
 ```
-$ unity command cheat_run --id item.enchant --args "itemId=1001 level"
-{"success":false,...,"errors":[{"code":"COMMAND_FAILED","message":"Pipeline server returned 400 Bad Request: Command Execution Failed. Command 'cheat_run' failed: Expected k=v but got 'level'"}]}
+$ unity command cheat_run --id item.enchant --args "itemId=1001 level" --format json
+{
+  "success": false,
+  "command": "unity command cheat_run",
+  "data": null,
+  "errors": [
+    {
+      "code": "COMMAND_FAILED",
+      "message": "Pipeline server returned 400 Bad Request: Command Execution Failed. Command 'cheat_run' failed: Expected k=v but got 'level'"
+    }
+  ],
+  "warnings": []
+}
 exit=6
+```
 
-# HistoryCapacity=2, 응답 없는 전송으로 서버 치트 3건 → 전송 중인 #2 조회
+*정상 서버 치트 / 없는 id*
+
+```
+$ unity command cheat_run --id item.clear
+{"ok":true,"execution":{"id":1,"cheatId":"item.clear","target":"Server","status":"Pending","done":false,"message":null,"command":"item_clear","describe":"Item/Clear Inventory"}}
+$ unity command cheat_status --execution 1
+{"ok":true,"execution":{"id":1,"cheatId":"item.clear","target":"Server","status":"Succeeded","done":true,"message":"Success","command":"item_clear","describe":"Item/Clear Inventory"}}
+$ unity command cheat_status --execution 999
+{"ok":false,"error":"Unknown execution 999"}
+```
+
+*2번 재현: HistoryCapacity=2 + 응답 없는 전송(CheatLogTransport)으로 서버 치트 3건*
+
+```
+# eval → set  (HistoryCapacity = 2, ServerTransport = new CheatLogTransport())
+$ unity command cheat_run --id item.clear   (1/3)
+{"ok":true,"execution":{"id":2,"cheatId":"item.clear","target":"Server","status":"Pending","done":false,"message":null,"command":"item_clear","describe":"Item/Clear Inventory"}}
+$ unity command cheat_run --id item.clear   (2/3)
+{"ok":true,"execution":{"id":3,"cheatId":"item.clear","target":"Server","status":"Pending","done":false,"message":"Queued (waiting for the previous server cheat)","command":"item_clear","describe":"Item/Clear Inventory"}}
+$ unity command cheat_run --id item.clear   (3/3)
+{"ok":true,"execution":{"id":4,"cheatId":"item.clear","target":"Server","status":"Pending","done":false,"message":"Queued (waiting for the previous server cheat)","command":"item_clear","describe":"Item/Clear Inventory"}}
 $ unity command cheat_status --execution 2
 {"ok":false,"error":"Unknown execution 2"}
+$ unity command cheat_history
+{"ok":true,"history":[{"id":3,"cheatId":"item.clear","target":"Server","status":"Pending","done":false,"message":"Queued (waiting for the previous server cheat)","command":"item_clear","describe":"Item/Clear Inventory"},{"id":4,"cheatId":"item.clear","target":"Server","status":"Pending","done":false,"message":"Queued (waiting for the previous server cheat)","command":"item_clear","describe":"Item/Clear Inventory"}]}
 ```
 
-**고친 뒤 (0.1.3)**
+**고친 뒤 (0.1.3)** — 응답 원문
+
+*1. cheat_list → 17개*
+
+*2. 잘못된 --args*
 
 ```
-$ unity command cheat_list            → 17개
 $ unity command cheat_run --id item.enchant --args "itemId=1001 level"
-{"ok":false,"error":"Expected k=v but got 'level'"}          exit=0
+{"ok":false,"error":"Expected k=v but got 'level'"}
+```
+
+(종료 코드는 아래 2b에서 따로 확인. 기록 스크립트의 echo가 따옴표를 지워 명령 줄의 따옴표는 원래 호출대로 되돌려 적음)
+
+*3. 정상 서버 치트 (가짜 네트워크 0.3초 응답)*
+
+```
 $ unity command cheat_run --id item.clear
-{"ok":true,"serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":1},"execution":{"id":1,...,"source":"Cli","status":"Pending","done":false,"blocked":false,...}}
+{"ok":true,"serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":1},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Pending","done":false,"blocked":false,"message":null,"command":"item_clear","describe":"Item/Clear Inventory"}}
 $ unity command cheat_status --execution 1
-{"ok":true,...,"execution":{"id":1,...,"status":"Succeeded","done":true,"blocked":false,"message":"Success",...}}
+{"ok":true,"serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Succeeded","done":true,"blocked":false,"message":"Success","command":"item_clear","describe":"Item/Clear Inventory"}}
+```
+
+*4. raw (기본 꺼짐)*
+
+```
 $ unity command cheat_raw --command "item_add 1001 10"
-{"ok":false,"error":"Raw commands from automation are disabled (...)","code":"raw_disabled"}
+{"ok":false,"error":"Raw commands from automation are disabled (CheatRuntimeOptions.AllowRawFromAutomation, Tools > HB > Cheat)","code":"raw_disabled"}
+```
+
+*5. 없는 id*
+
+```
 $ unity command cheat_status --execution 999
 {"ok":false,"error":"Unknown execution 999","code":"unknown"}
 ```
 
-**러너 → Tick 연결 (사용자 결정 3번 요청)** — 시간 초과 0.5초 + 응답 없는 전송(`CheatLogTransport`)
+**러너 → Tick 연결 (사용자 결정 3번 요청)** — 시간 초과 0.5초 + 응답 없는 전송(`CheatLogTransport`). 아래는 재컴파일 사건 뒤 다시 시작한 Play Mode의 기록 (첫 시도 기록은 무효라 뺐다)
+
+*2b. 잘못된 --args 종료 코드*
 
 ```
-$ unity command cheat_run --id item.clear                     → #1 Pending, inFlight 1
-(2초 대기)
-$ unity command cheat_status --execution 1
-{"ok":true,"serverQueue":{"paused":true,"reason":"#1 timed out","queued":0,"inFlight":null},"execution":{"id":1,...,"status":"TimedOut","done":true,"blocked":false,...}}
+$ unity command cheat_run --id item.enchant --args "itemId=1001 level" --result-only
+exit=0
+```
+
+*6. 러너 → Tick: 시간 초과 0.5초 + 응답 없는 전송*
+
+```
+# eval → timeout=0.5, CheatLogTransport
 $ unity command cheat_run --id item.clear
-{"ok":true,"serverQueue":{"paused":true,"reason":"#1 timed out","queued":1,"inFlight":null},"execution":{"id":2,...,"status":"Pending","done":false,"blocked":true,"message":"Paused: #1 timed out. ..."}}
-# 백그라운드 스레드에서 ReportServerResult → true 반환, 직후 아직 paused (큐에 쌓임)
-# 다음 Tick: 늦은 응답으로 버리고 재개 → #2 전송 → 0.5초 뒤 #2 TimedOut ("reason":"#2 timed out")
-# 시간 초과 30초로 바꾸고 #3 실행 → 백그라운드 스레드 응답 → Tick에서 처리
-$ unity command cheat_status --execution 3
-{"ok":true,...,"execution":{"id":3,...,"status":"Succeeded","done":true,"blocked":false,"message":"ok from thread",...}}
+{"ok":true,"serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":1},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Pending","done":false,"blocked":false,"message":null,"command":"item_clear","describe":"Item/Clear Inventory"}}
+$ unity command cheat_status --execution 1
+{"ok":true,"serverQueue":{"paused":true,"reason":"#1 timed out","queued":0,"inFlight":null},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"TimedOut","done":true,"blocked":false,"message":"No server response in 0.5s. Server queue paused","command":"item_clear","describe":"Item/Clear Inventory"}}
 ```
 
-→ 러너가 매 프레임 `Tick`을 불러 ① 시간 초과 ② 스레드 밖 응답 처리 ③ 늦은 응답 폐기·재개가 모두 동작함을 확인.
+*7. 정지 중 새 실행 → blocked*
+
+```
+$ unity command cheat_run --id item.clear
+{"ok":true,"serverQueue":{"paused":true,"reason":"#1 timed out","queued":1,"inFlight":null},"execution":{"id":2,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Pending","done":false,"blocked":true,"message":"Paused: #1 timed out. Waiting for the late response or ResumeServerQueue","command":"item_clear","describe":"Item/Clear Inventory"}}
+```
+
+*8. 백그라운드 스레드에서 늦은 응답 → 다음 Tick에서 버리고 재개*
+
+```
+# eval → off-thread returned True, still paused right after=True
+$ unity command cheat_status --execution 2
+{"ok":true,"serverQueue":{"paused":true,"reason":"#2 timed out","queued":0,"inFlight":null},"execution":{"id":2,"cheatId":"item.clear","target":"Server","source":"Cli","status":"TimedOut","done":true,"blocked":false,"message":"No server response in 0.5s. Server queue paused","command":"item_clear","describe":"Item/Clear Inventory"}}
+```
+
+*9. 백그라운드 스레드 응답 → #2 성공*
+
+```
+# eval → reported
+$ unity command cheat_history --limit 5
+{"ok":true,"serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"history":[{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"TimedOut","done":true,"blocked":false,"message":"No server response in 0.5s. Server queue paused","command":"item_clear","describe":"Item/Clear Inventory"},{"id":2,"cheatId":"item.clear","target":"Server","source":"Cli","status":"TimedOut","done":true,"blocked":false,"message":"No server response in 0.5s. Server queue paused","command":"item_clear","describe":"Item/Clear Inventory"}]}
+```
+
+*9b. 시간 초과 30초로 → 백그라운드 스레드 응답 → Tick에서 성공 처리*
+
+```
+# eval → timeout=30
+$ unity command cheat_run --id item.clear
+{"ok":true,"serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":3},"execution":{"id":3,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Pending","done":false,"blocked":false,"message":null,"command":"item_clear","describe":"Item/Clear Inventory"}}
+# eval → off-thread returned True
+$ unity command cheat_status --execution 3
+{"ok":true,"serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"execution":{"id":3,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Succeeded","done":true,"blocked":false,"message":"ok from thread","command":"item_clear","describe":"Item/Clear Inventory"}}
+```
+
+해석 (확정):
+- 6·7: 러너의 `Tick`이 시간 초과를 처리해 큐를 멈추고, 그 뒤 실행은 `blocked:true`.
+- 8: 백그라운드 스레드의 `ReportServerResult`는 큐에 쌓이고(반환 true, 직후 아직 paused), 다음 `Tick`이 늦은 응답으로 버린 뒤 재개 → #2 전송 → 0.5초 뒤 #2 시간 초과 (`reason`이 `#2 timed out`으로 바뀜).
+- 9: 멈춘 상태에서 온 백그라운드 응답도 늦은 응답으로 버리고 재개 (`paused:false`). 제목의 "#2 성공"은 내 시나리오 실수(0.5초 시간 초과가 먼저 남)였고, 동작은 설계대로다.
+- 9b: 시간 초과를 30초로 늘려 백그라운드 스레드 응답이 `Tick`에서 `Succeeded`로 처리되는 것을 확인.
 
 **패널 히스토리 표시 (결정 4)** — 패널 Label 텍스트를 읽어 확인 (게임 뷰 스크린샷은 카메라 렌더라 UI Toolkit 오버레이가 찍히지 않음)
 
