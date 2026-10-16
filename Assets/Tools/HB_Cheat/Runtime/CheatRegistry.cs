@@ -42,6 +42,14 @@ namespace HB.Cheat
             Changed?.Invoke();
         }
 
+        /// <summary>테스트가 등록한 정의를 지운다</summary>
+        internal static void Unregister(string id)
+        {
+            if (id == null || !s_ById.Remove(id)) return;
+            s_Dirty = true;
+            Changed?.Invoke();
+        }
+
         public static bool TryGet(string id, out CheatDefinition definition)
         {
             if (id == null)
