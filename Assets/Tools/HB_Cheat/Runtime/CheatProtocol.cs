@@ -25,40 +25,44 @@ namespace HB.Cheat
             try
             {
                 var tokens = Tokenize(line);
-                if (tokens.Count == 0) return Error("Empty command");
+                if (tokens.Count == 0) return Error("Empty command", CheatErrorCode.EmptyCommand);
 
                 string verb = tokens[0].ToLowerInvariant();
+                Dictionary<string, string> pairs;
+                string pairError;
                 switch (verb)
                 {
                     case "list":
                         return List();
                     case "options":
-                        if (tokens.Count < 3) return Error("Usage: options <cheatId> <argName> [k=v ...]");
-                        var optionArgs = ParsePairs(tokens, 3);
-                        optionArgs.TryGetValue("query", out string query);
-                        int limit = optionArgs.TryGetValue("limit", out string limitText) && int.TryParse(limitText, out int l) ? l : 200;
-                        return Options(tokens[1], tokens[2], optionArgs, query, limit);
+                        if (tokens.Count < 3) return Error("Usage: options <cheatId> <argName> [k=v ...]", CheatErrorCode.InvalidUsage);
+                        if (!TryParsePairs(tokens, 3, out pairs, out pairError)) return Error(pairError, CheatErrorCode.MalformedArgument);
+                        pairs.TryGetValue("query", out string query);
+                        int limit = pairs.TryGetValue("limit", out string limitText) && int.TryParse(limitText, out int l) ? l : 200;
+                        return Options(tokens[1], tokens[2], pairs, query, limit);
                     case "run":
-                        if (tokens.Count < 2) return Error("Usage: run <cheatId> [k=v ...]");
-                        return Run(tokens[1], ParsePairs(tokens, 2), source);
+                        if (tokens.Count < 2) return Error("Usage: run <cheatId> [k=v ...]", CheatErrorCode.InvalidUsage);
+                        if (!TryParsePairs(tokens, 2, out pairs, out pairError)) return Error(pairError, CheatErrorCode.MalformedArgument);
+                        return Run(tokens[1], pairs, source);
                     case "raw":
-                        if (tokens.Count < 2) return Error("Usage: raw <command...>");
+                        if (tokens.Count < 2) return Error("Usage: raw <command...>", CheatErrorCode.InvalidUsage);
                         return Raw(line.Substring(line.IndexOf("raw", StringComparison.OrdinalIgnoreCase) + 3).Trim(), source);
                     case "status":
-                        if (tokens.Count < 2 || !int.TryParse(tokens[1], out int id)) return Error("Usage: status <executionId> [session=S]");
-                        ParsePairs(tokens, 2).TryGetValue("session", out string session);
+                        if (tokens.Count < 2 || !int.TryParse(tokens[1], out int id)) return Error("Usage: status <executionId> [session=S]", CheatErrorCode.InvalidUsage);
+                        if (!TryParsePairs(tokens, 2, out pairs, out pairError)) return Error(pairError, CheatErrorCode.MalformedArgument);
+                        pairs.TryGetValue("session", out string session);
                         return Status(id, session);
                     case "history":
-                        var historyArgs = ParsePairs(tokens, 1);
-                        int count = historyArgs.TryGetValue("limit", out string countText) && int.TryParse(countText, out int c) ? c : 20;
+                        if (!TryParsePairs(tokens, 1, out pairs, out pairError)) return Error(pairError, CheatErrorCode.MalformedArgument);
+                        int count = pairs.TryGetValue("limit", out string countText) && int.TryParse(countText, out int c) ? c : 20;
                         return History(count);
                     default:
-                        return Error($"Unknown command '{tokens[0]}'");
+                        return Error($"Unknown command '{tokens[0]}'", CheatErrorCode.UnknownCommand);
                 }
             }
             catch (Exception e)
             {
-                return Error(e.Message);
+                return Error(e.Message, CheatErrorCode.InternalError);
             }
         }
 
@@ -103,15 +107,15 @@ namespace HB.Cheat
 
         public static string Options(string cheatId, string argName, IReadOnlyDictionary<string, string> args, string query, int limit)
         {
-            if (!CheatRegistry.TryGet(cheatId, out var def)) return Error($"Unknown cheat '{cheatId}'");
+            if (!CheatRegistry.TryGet(cheatId, out var def)) return Error($"Unknown cheat '{cheatId}'", CheatErrorCode.UnknownCheat);
             int index = def.IndexOfArg(argName);
-            if (index < 0) return Error($"'{cheatId}' has no argument '{argName}'");
-            if (!def.Args[index].HasOptions) return Error($"'{argName}' has no option list");
+            if (index < 0) return Error($"'{cheatId}' has no argument '{argName}'", CheatErrorCode.UnknownArgument);
+            if (!def.Args[index].HasOptions) return Error($"'{argName}' has no option list", CheatErrorCode.ArgumentWithoutOptions);
 
-            if (!TryBuildValues(def, args, allowMissing: true, out var values, out string error)) return Error(error);
+            if (!TryBuildValues(def, args, allowMissing: true, out var values, out string error, out string code)) return Error(error, code);
 
             var options = CheatSystem.GetOptions(def, index, values, out string optionError);
-            if (optionError != null) return Error(optionError);
+            if (optionError != null) return Error(optionError, CheatErrorCode.OptionProviderFailed);
 
             var w = new CheatJsonWriter();
             w.BeginObject().Prop("ok", true).Prop("total", options.Count).Key("options").BeginArray();
@@ -135,8 +139,10 @@ namespace HB.Cheat
         public static string Run(string cheatId, IReadOnlyDictionary<string, string> args, CheatSource source = CheatSource.Code)
         {
             if (!CheatSystem.IsInitialized) return NotInitialized();
-            if (!CheatRegistry.TryGet(cheatId, out var def)) return Error($"Unknown cheat '{cheatId}'");
-            if (!TryBuildValues(def, args, allowMissing: false, out var values, out string error)) return Error(error);
+            if (!CheatRegistry.TryGet(cheatId, out var def)) return Error($"Unknown cheat '{cheatId}'", CheatErrorCode.UnknownCheat);
+            if (!TryBuildValues(def, args, allowMissing: false, out var values, out string error, out string code)) return Error(error, code);
+            // 인자 문제(범위 밖·목록에 없는 값 등)는 실행을 만들지 않고 ok:false로 돌려준다. 실행 결과 문제만 ok:true + Failed
+            if (!CheatSystem.Validate(def, values, out error, out code)) return Error(error, code);
 
             return ExecutionJson(CheatSystem.Execute(def, values, source));
         }
@@ -145,14 +151,14 @@ namespace HB.Cheat
         public static string Raw(string command, CheatSource source = CheatSource.Code)
         {
             if (IsAutomation(source) && !CheatSystem.Options.AllowRawFromAutomation)
-                return Error("Raw commands from automation are disabled (CheatRuntimeOptions.AllowRawFromAutomation, Tools > HB > Cheat)", "raw_disabled");
+                return Error("Raw commands from automation are disabled (CheatRuntimeOptions.AllowRawFromAutomation, Tools > HB > Cheat)", CheatErrorCode.RawDisabled);
             if (!CheatSystem.IsInitialized) return NotInitialized();
-            if (string.IsNullOrWhiteSpace(command)) return Error("Empty raw command");
+            if (string.IsNullOrWhiteSpace(command)) return Error("Empty raw command", CheatErrorCode.EmptyRawCommand);
             return ExecutionJson(CheatSystem.ExecuteRaw(command, source));
         }
 
         /// <summary>
-        /// 찾지 못하면 code로 구분한다: "evicted"(이번 세션에 실행됐지만 히스토리 용량으로 지워짐), "unknown"(발급된 적 없는 id).
+        /// 찾지 못하면 code로 구분한다: evicted_execution(현재 세션에서 실행됐지만 히스토리 용량으로 지워짐), unknown_execution(현재 세션에서 발급된 적 없는 id).
         /// 끝나지 않은 실행은 히스토리에서 지워지지 않으므로 둘 다 다시 조회할 필요가 없다.
         /// </summary>
         /// <remarks>
@@ -163,13 +169,13 @@ namespace HB.Cheat
         {
             string current = CheatSystem.SessionId;
             if (!string.IsNullOrEmpty(session) && session != current)
-                return Error($"Session changed ({session} -> {current}). Execution {executionId} belongs to a previous session", "session_changed");
+                return Error($"Session changed ({session} -> {current}). Execution {executionId} belongs to a previous session", CheatErrorCode.SessionChanged);
 
             var execution = CheatSystem.FindExecution(executionId);
             if (execution != null) return ExecutionJson(execution);
             if (CheatSystem.WasIssued(executionId))
-                return Error($"Execution {executionId} was removed from history (capacity {CheatSystem.HistoryCapacity})", "evicted");
-            return Error($"Unknown execution {executionId}", "unknown");
+                return Error($"Execution {executionId} was removed from history (capacity {CheatSystem.HistoryCapacity})", CheatErrorCode.EvictedExecution);
+            return Error($"Unknown execution {executionId}", CheatErrorCode.UnknownExecution);
         }
 
         public static string History(int limit)
@@ -194,8 +200,15 @@ namespace HB.Cheat
         /// </summary>
         public static bool TryBuildValues(CheatDefinition def, IReadOnlyDictionary<string, string> args, bool allowMissing, out object[] values, out string error)
         {
+            return TryBuildValues(def, args, allowMissing, out values, out error, out _);
+        }
+
+        /// <summary>실패 이유를 CheatErrorCode로도 돌려준다 (unknown_argument / unparsable_value / missing_argument).</summary>
+        public static bool TryBuildValues(CheatDefinition def, IReadOnlyDictionary<string, string> args, bool allowMissing, out object[] values, out string error, out string code)
+        {
             values = def.CreateDefaultValues();
             error = null;
+            code = null;
 
             if (args != null)
             {
@@ -207,10 +220,14 @@ namespace HB.Cheat
                     if (index < 0)
                     {
                         error = $"'{def.Id}' has no argument '{pair.Key}'";
+                        code = CheatErrorCode.UnknownArgument;
                         return false;
                     }
                     if (!CheatValueParser.TryParse(def.Args[index], pair.Value, out values[index], out error))
+                    {
+                        code = CheatErrorCode.UnparsableValue;
                         return false;
+                    }
                 }
             }
 
@@ -221,6 +238,7 @@ namespace HB.Cheat
                     if (values[i] == null)
                     {
                         error = $"Missing argument '{def.Args[i].Name}'";
+                        code = CheatErrorCode.MissingArgument;
                         return false;
                     }
                 }
@@ -275,16 +293,17 @@ namespace HB.Cheat
         }
 
         /// <summary>Play Mode가 아니거나 재컴파일 등으로 초기화가 풀렸다 → 자동화는 멈추고 사람에게 넘긴다</summary>
-        public static string NotInitialized() => Error("CheatSystem is not initialized (enter Play Mode)", "not_initialized");
+        public static string NotInitialized() => Error("CheatSystem is not initialized (enter Play Mode)", CheatErrorCode.NotInitialized);
 
         private static bool IsAutomation(CheatSource source) => source == CheatSource.Cli || source == CheatSource.Bridge;
 
+        /// <summary>code 없는 에러. 패키지 안에서는 쓰지 않는다 (자동화가 분기할 수 있도록 Error(message, code)를 쓴다).</summary>
         public static string Error(string message)
         {
             return new CheatJsonWriter().BeginObject().Prop("ok", false).Prop("error", message).EndObject().ToString();
         }
 
-        /// <summary>자동화가 문구 대신 분기할 수 있도록 code를 붙인 에러</summary>
+        /// <summary>자동화가 문구 대신 분기할 수 있도록 code(CheatErrorCode)를 붙인 에러</summary>
         public static string Error(string message, string code)
         {
             return new CheatJsonWriter().BeginObject().Prop("ok", false).Prop("error", message).Prop("code", code).EndObject().ToString();

@@ -80,9 +80,9 @@ namespace HB.Cheat.Tests
             CheatSystem.Execute(Def(LocalId), null);
             CheatSystem.Execute(Def(LocalId), null);
 
-            Assert.AreEqual("{\"ok\":false,\"error\":\"Execution 1 was removed from history (capacity 1)\",\"code\":\"evicted\"}", CheatProtocol.Status(1));
-            Assert.AreEqual("{\"ok\":false,\"error\":\"Unknown execution 99\",\"code\":\"unknown\"}", CheatProtocol.Status(99));
-            StringAssert.Contains("\"code\":\"unknown\"", CheatProtocol.Status(0));
+            Assert.AreEqual("{\"ok\":false,\"error\":\"Execution 1 was removed from history (capacity 1)\",\"code\":\"evicted_execution\"}", CheatProtocol.Status(1));
+            Assert.AreEqual("{\"ok\":false,\"error\":\"Unknown execution 99\",\"code\":\"unknown_execution\"}", CheatProtocol.Status(99));
+            StringAssert.Contains("\"code\":\"unknown_execution\"", CheatProtocol.Status(0));
         }
     }
 }

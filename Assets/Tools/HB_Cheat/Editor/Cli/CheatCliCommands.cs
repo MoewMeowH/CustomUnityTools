@@ -30,7 +30,7 @@ namespace HB.Cheat.Editor
             return Guard(() =>
             {
                 if (!TryRequirePlayMode(out string error)) return error;
-                if (!CheatProtocol.TryParsePairs(args ?? string.Empty, out var pairs, out error)) return CheatProtocol.Error(error);
+                if (!CheatProtocol.TryParsePairs(args ?? string.Empty, out var pairs, out error)) return CheatProtocol.Error(error, CheatErrorCode.MalformedArgument);
                 return CheatProtocol.Options(id, arg, pairs, query, limit);
             });
         }
@@ -43,7 +43,7 @@ namespace HB.Cheat.Editor
             return Guard(() =>
             {
                 if (!TryRequirePlayMode(out string error)) return error;
-                if (!CheatProtocol.TryParsePairs(args ?? string.Empty, out var pairs, out error)) return CheatProtocol.Error(error);
+                if (!CheatProtocol.TryParsePairs(args ?? string.Empty, out var pairs, out error)) return CheatProtocol.Error(error, CheatErrorCode.MalformedArgument);
                 return CheatProtocol.Run(id, pairs, CheatSource.Cli);
             });
         }
@@ -90,7 +90,7 @@ namespace HB.Cheat.Editor
             catch (Exception e)
             {
                 Debug.LogException(e);
-                return CheatProtocol.Error(e.Message);
+                return CheatProtocol.Error(e.Message, CheatErrorCode.InternalError);
             }
         }
 
