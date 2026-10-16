@@ -176,12 +176,12 @@ CheatSystem.ResumeServerQueue();
 unity command cheat_list
 unity command cheat_options --id item.enchant --arg level --args "itemId=1001"
 unity command cheat_run --id item.enchant --args "itemId=1001 level=15"
-unity command cheat_status --execution 3      # 서버 치트는 Pending → Succeeded / Failed / TimedOut
+unity command cheat_status --execution 3 --session 1a2b3c4d   # 서버 치트는 Pending → Succeeded / Failed / TimedOut
 unity command cheat_history --limit 10
 unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 raw 참고)
 ```
 
-실기기 연결(ADB, 로컬 소켓 등)은 `ICheatBridge`를 구현해 `CheatSystem.RegisterBridge`로 등록합니다. 받은 한 줄을 `CheatProtocol.Handle(line)`에 넘기고 결과 JSON을 돌려주면 됩니다(`list` / `options` / `run` / `raw` / `status` / `history`). `Handle`은 **메인 스레드에서** 부릅니다(소켓 스레드에서 받았다면 메인 스레드로 넘긴 뒤 호출).
+실기기 연결(ADB, 로컬 소켓 등)은 `ICheatBridge`를 구현해 `CheatSystem.RegisterBridge`로 등록합니다. 받은 한 줄을 `CheatProtocol.Handle(line)`에 넘기고 결과 JSON을 돌려주면 됩니다(`list` / `options` / `run` / `raw` / `status <id> [session=S]` / `history`). `Handle`은 **메인 스레드에서** 부릅니다(소켓 스레드에서 받았다면 메인 스레드로 넘긴 뒤 호출).
 
 ### 응답 JSON
 
@@ -190,26 +190,29 @@ unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 ra
   | code | 뜻 |
   |---|---|
   | `evicted` | 이번 세션에 실행됐지만 히스토리 용량으로 지워짐 |
-  | `unknown` | 발급된 적 없는 실행 id (Play Mode를 다시 시작하면 id가 1부터 다시 발급됩니다) |
+  | `unknown` | 발급된 적 없는 실행 id |
+  | `session_changed` | `--session`이 현재 세션과 다름 (Play Mode 재시작·재컴파일로 id가 1부터 다시 발급됨) |
+  | `not_initialized` | Play Mode가 아니거나 재컴파일 등으로 CheatSystem 초기화가 풀림 |
   | `raw_disabled` | 자동화 경로의 raw가 꺼져 있음 |
 
 - `run` / `raw` / `status` / `history` 응답에는 서버 큐 상태가 붙습니다.
 
   ```json
-  {"ok":true,
+  {"ok":true,"session":"1a2b3c4d",
    "serverQueue":{"paused":true,"reason":"#7 timed out","queued":1,"inFlight":null},
    "execution":{"id":8,"cheatId":"item.clear","target":"Server","source":"Cli",
                 "status":"Pending","done":false,"blocked":true,"message":"Paused: ...","command":"item_clear","describe":"..."}}
   ```
 
+  - `session`: 실행 id 공간의 식별자. Play Mode 재시작이나 Play Mode 중 재컴파일로 정적 상태가 초기화되면 id가 1부터 다시 발급되고 세션 값도 바뀝니다. 씬 전환에 따른 재초기화(`Shutdown` → `Initialize`)로는 바뀌지 않습니다.
   - `source`: 실행 주체 `Panel` / `Cli` / `Bridge` / `Code`. 패널 히스토리에도 패널이 아닌 실행은 `[CLI]`처럼 표시됩니다.
   - `blocked`: 끝나지 않았는데 서버 큐가 멈춰 **스스로는 진행되지 않는** 서버 실행.
 
 ### 자동화 폴링 규칙
 
-1. `cheat_run`의 `execution.id`로 `cheat_status`를 폴링합니다.
+1. `cheat_run` 응답의 `execution.id`와 `session`을 저장하고, `cheat_status --execution <id> --session <session>`으로 폴링합니다. **`--session`을 빼면** run과 status 사이에 초기화가 끼었을 때 다른 실행의 결과를 받을 수 있습니다.
 2. `done == true`면 끝(`Succeeded` / `Failed` / `TimedOut`).
-3. `blocked == true`면 **폴링을 멈추고 사람에게 넘깁니다.** 큐는 늦은 응답이 오거나 사람이 패널 History 탭의 Resume(또는 재접속 코드의 `CheatSystem.ResumeServerQueue`)을 눌러야 진행됩니다. 재접속 전에 재개하면 늦은 응답이 다음 결과로 붙기 때문에 자동화용 재개 명령은 일부러 두지 않았습니다.
+3. `blocked == true`, 또는 `code`가 `session_changed` / `not_initialized`면 **폴링을 멈추고 사람에게 넘깁니다.** 큐는 늦은 응답이 오거나 사람이 패널 History 탭의 Resume(또는 재접속 코드의 `CheatSystem.ResumeServerQueue`)을 눌러야 진행됩니다. 재접속 전에 재개하면 늦은 응답이 다음 결과로 붙기 때문에 자동화용 재개 명령은 일부러 두지 않았습니다.
 4. 끝나지 않은 실행은 히스토리에서 지워지지 않습니다(최근 `HistoryCapacity`건 + 끝나지 않은 실행을 남기므로 그만큼 용량을 넘을 수 있습니다). 끝난 실행은 새 실행이 용량 이상 쌓이기 전에 조회합니다.
 
 ### raw (자동화 경로는 기본 꺼짐)
@@ -233,6 +236,7 @@ unity command run_tests --mode EditMode --filter HB.Cheat.Tests   # 에디터가
 ## ⚠️ 제한
 
 - 자동 QA는 현재 에디터 Play Mode만 지원합니다. 기기는 브리지를 구현해야 합니다.
+- Play Mode 중 재컴파일되면 CheatSystem과 등록된 치트 목록이 함께 풀립니다(자동화에는 `not_initialized`). `Initialize`를 다시 불러도 치트 목록은 비어 있으니 Play Mode를 다시 시작하세요.
 - 치트를 지운 뒤 생성 레지스트리 때문에 컴파일 에러가 나면 `Delete Generated`를 누른 뒤 다시 생성하세요.
 - 프리셋(인자 조합 저장)은 아직 없습니다. 마지막으로 쓴 값, 즐겨찾기, 히스토리 재사용(`Edit`)은 지원합니다.
 - `[Flags]` enum은 정의된 단일 값 중 하나만 고를 수 있습니다.

@@ -227,3 +227,92 @@ hostedInConsole=True; #4  Failed | #3  Success  [CLI] | #2  Timeout  [CLI] | #1 
 - 에디터 어셈블리에 Unity 7 경고: `UAL0010/UAL0013`(`CheatEditorHooks`, `CheatSettings`에 AutoStaticsCleanup 특성 없음), `CS0108`(`CheatSettings.DontDestroyOnLoad`가 `Object.DontDestroyOnLoad`를 가림). 기존 경고, 손대지 않음.
 - 테스트 러너가 한 번 "Test execution timed out, cancelling..." 후 자동 재실행해 통과한 기록이 콘솔에 있음. 원인 미확인.
 - 자동화 실행도 `GetLastValues`(패널의 마지막 인자 값)를 갱신함. 기존 동작 그대로 둠.
+
+## 2026-10-17 HB_Cheat 실행 id 세션 구분 — com.hb.cheat 0.1.3 → 0.1.4
+
+계획서: [docs/plans/2026-10-17_hb-cheat-session-id.md](plans/2026-10-17_hb-cheat-session-id.md)
+
+### 커밋
+
+| 커밋 | 내용 |
+|---|---|
+| 38ddf7c | `SessionId` · `CheatExecution.Session`, 응답 `session`, `--session` → `session_changed`, `not_initialized`, 테스트 |
+| (이 커밋) | README · 버전 0.1.4 · 작업 로그 |
+
+### 계획과 달라진 것 (확정)
+
+- 세션 생성 시점: 계획은 첫 id 발급 때 → 사용자 결정으로 `SessionId` getter에서 null이면 생성. 재시작 직후(실행 0건)에도 이전 세션 값과 비교된다.
+- `ExecutionJson`의 `session`은 실행의 `Session`을 쓴다 (히스토리가 세션과 함께 비워지므로 현재 세션과 같다).
+- README `⚠️ 제한`에 "Play Mode 중 재컴파일 뒤에는 Play Mode를 다시 시작" 추가 (실제 확인 4에서 발견).
+- 외부 review 생략 (사용자 결정).
+
+### 테스트 (확정)
+
+- `CheatSessionTests` 7개 추가. 그중 `Status_AfterRestart_NoExecutionsYet_IsSessionChanged`가 사용자 요청 케이스(재시작 직후 실행 0건 + 이전 세션 값). `HB.Cheat.Tests` **40/40 통과**.
+- 기존 `HistoryJson_HasServerQueue`는 키 순서(`session`이 맨 앞)로 실패 → 기대값을 `StartsWith` → `Contains`로 고침. 동작 변경이 아니라 테스트가 키 순서에 묶여 있던 것.
+
+### 실제 확인 — Unity CLI, Play Mode (응답 원문)
+
+샘플을 `Assets/Samples/HB_Cheat/`로 다시 복사해 쓰고, 끝난 뒤 생성 레지스트리와 함께 지움 (커밋 안 함). `--result-only` 출력의 바깥 문자열 감싸기만 풀었다.
+
+*1. 첫 Play Mode*
+
+```
+# Entered play mode
+$ unity command cheat_run --id item.clear
+{"ok":true,"session":"66409b58","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":1},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Pending","done":false,"blocked":false,"message":null,"command":"item_clear","describe":"Item/Clear Inventory"}}
+# S1=66409b58
+$ unity command cheat_status --execution 1 --session 66409b58
+{"ok":true,"session":"66409b58","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Succeeded","done":true,"blocked":false,"message":"Success","command":"item_clear","describe":"Item/Clear Inventory"}}
+```
+
+*2. Play Mode 재시작 (AutoStaticsCleanup)*
+
+```
+# Exited play mode
+# Entered play mode
+# 2a. 재시작 직후 실행 0건, 이전 세션으로 조회
+$ unity command cheat_history
+{"ok":true,"session":"0f02c881","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"history":[]}
+$ unity command cheat_status --execution 1 --session 66409b58
+{"ok":false,"error":"Session changed (66409b58 -> 0f02c881). Execution 1 belongs to a previous session","code":"session_changed"}
+# 2b. 새 #1 발급 후 이전 세션으로 조회 / 세션 생략
+$ unity command cheat_run --id item.clear
+{"ok":true,"session":"0f02c881","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":1},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Pending","done":false,"blocked":false,"message":null,"command":"item_clear","describe":"Item/Clear Inventory"}}
+$ unity command cheat_status --execution 1 --session 66409b58
+{"ok":false,"error":"Session changed (66409b58 -> 0f02c881). Execution 1 belongs to a previous session","code":"session_changed"}
+$ unity command cheat_status --execution 1
+{"ok":true,"session":"0f02c881","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"execution":{"id":1,"cheatId":"item.clear","target":"Server","source":"Cli","status":"Succeeded","done":true,"blocked":false,"message":"Success","command":"item_clear","describe":"Item/Clear Inventory"}}
+# S2=0f02c881
+```
+
+*3. Play Mode 중 재컴파일 (샘플 사본에 주석 한 줄 추가 → Refresh)*
+
+```
+# eval → refreshed, isPlaying=True
+# eval → isPlaying=True initialized=False
+$ unity command cheat_status --execution 1 --session 0f02c881
+{"ok":false,"error":"CheatSystem is not initialized (enter Play Mode)","code":"not_initialized"}
+$ unity command cheat_run --id item.clear
+{"ok":false,"error":"CheatSystem is not initialized (enter Play Mode)","code":"not_initialized"}
+```
+
+*4. 재컴파일 뒤 다시 Initialize (run과 status 사이에 재초기화가 끼는 경우)*
+
+```
+# eval → initialized=True
+$ unity command cheat_run --id item.clear
+{"ok":false,"error":"Unknown cheat 'item.clear'"}
+$ unity command cheat_status --execution 1 --session 0f02c881
+{"ok":false,"error":"Session changed (0f02c881 -> 771cf2d9). Execution 1 belongs to a previous session","code":"session_changed"}
+$ unity command cheat_status --execution 1
+{"ok":false,"error":"Unknown execution 1","code":"unknown"}
+```
+
+해석 (확정):
+- **AutoStaticsCleanup이 세션을 되돌림 (사용자 요청 근거)**: 같은 에디터에서 Play Mode를 정지 → 재시작하자 세션이 `66409b58` → `0f02c881`로 바뀌고 히스토리가 비었다. 실행 0건 상태에서 이전 세션 값으로 조회하면 `session_changed`.
+  - 도메인 리로드가 아니라 AutoStaticsCleanup이 되돌렸다는 근거: 이 프로젝트는 Play Mode 진입 시 도메인 리로드를 끈다 (`eval → enabled=True options=DisableDomainReload, DisableSceneReload`, `ProjectSettings/EditorSettings.asset` `m_EnterPlayModeOptions: 3`). Unity 7에서는 `ResetStaticsOnDomainReload`가 `#if !(… || UNITY_6000_5_OR_NEWER)`로 컴파일에서 빠지므로 남은 리셋 경로는 `[AutoStaticsCleanup]`뿐이다.
+- 같은 id(#1)가 다시 발급된 뒤에도 이전 세션 값이면 `session_changed`. `--session`을 빼면 새 세션의 #1(`Succeeded`)을 돌려준다 → 자동화가 반드시 넘겨야 하는 이유.
+- Play Mode 중 재컴파일: `isPlaying=True initialized=False`, `status` · `run` 모두 `not_initialized`.
+- 재컴파일 뒤 `Initialize`를 다시 부르면(= run과 status 사이에 재초기화가 끼는 경우) 세션이 `0f02c881` → `771cf2d9`로 바뀌고, 이전 세션 값 조회는 `session_changed`.
+- 새로 발견 (범위 밖, 기록·README): 재컴파일 뒤 재초기화해도 치트 목록이 비어 있다(`Unknown cheat 'item.clear'`). 도메인 리로드로 레지스트리 정적 상태가 사라지고 `SubsystemRegistration`은 Play Mode 중에 다시 돌지 않기 때문으로 보임 (원인은 추정, 현상은 확정).
