@@ -240,8 +240,10 @@ namespace HB.Cheat
                 {
                     var inFlight = s_InFlight;
                     s_InFlight = null;
+                    // 상태를 먼저 확정한 뒤 알린다 (큐 변경 구독자가 끝난 실행을 Pending으로 보지 않도록)
+                    Finish(inFlight, CheatStatus.Failed, "Cheat system shut down", notify: false);
                     PauseServerQueue("The previous session was waiting for a server response");
-                    Finish(inFlight, CheatStatus.Failed, "Cheat system shut down", notify: true);
+                    RaiseExecutionChanged(inFlight);
                 }
                 while (s_ServerQueue.Count > 0)
                     Finish(s_ServerQueue.Dequeue(), CheatStatus.Failed, "Cheat system shut down", notify: true);
@@ -625,9 +627,11 @@ namespace HB.Cheat
 
             var execution = s_InFlight;
             s_InFlight = null;
-            // 응답에 요청 식별자가 없어 늦게 온 응답이 다음 요청에 붙을 수 있으므로, 다음 건을 보내지 않고 멈춘다
+            // 응답에 요청 식별자가 없어 늦게 온 응답이 다음 요청에 붙을 수 있으므로, 다음 건을 보내지 않고 멈춘다.
+            // 상태를 먼저 확정한 뒤 알린다 (큐 변경 구독자가 시간 초과된 실행을 Pending·blocked로 보지 않도록)
+            Finish(execution, CheatStatus.TimedOut, $"No server response in {timeout:0.#}s. Server queue paused", notify: false);
             PauseServerQueue($"#{execution.Id} timed out");
-            Finish(execution, CheatStatus.TimedOut, $"No server response in {timeout:0.#}s. Server queue paused", notify: true);
+            RaiseExecutionChanged(execution);
         }
 
         private static void Finish(CheatExecution execution, CheatStatus status, string message, bool notify)
@@ -672,19 +676,20 @@ namespace HB.Cheat
             RaiseExecutionChanged(execution);
         }
 
-        // 최근 용량만큼 + 끝나지 않은 실행을 남긴다. 끝나지 않은 실행을 지우면 결과를 조회할 곳이 없어진다
+        // 최근 발급된 용량만큼 + 끝나지 않은 실행을 남긴다. 끝나지 않은 실행을 지우면 결과를 조회할 곳이 없어진다
         // (자동화가 cheat_status로 폴링 중일 수 있다). 그만큼 용량을 넘을 수 있다.
+        // 범위는 추가 순서가 아니라 발급 id 기준이다 (로컬 치트 안에서 다른 치트를 실행하면 안쪽이 먼저 추가된다).
         // 실행이 끝날 때가 아니라 새 실행이 들어올 때만 정리한다 (끝나자마자 지워져 결과를 못 보는 일이 없도록).
         private static void TrimHistory()
         {
-            int windowStart = s_History.Count - HistoryCapacity;
-            if (windowStart <= 0) return;
+            if (s_History.Count <= HistoryCapacity) return;
 
+            int oldestKeptId = s_NextExecutionId - HistoryCapacity;
             int write = 0;
             for (int i = 0; i < s_History.Count; i++)
             {
                 var entry = s_History[i];
-                if (i >= windowStart || !entry.IsDone)
+                if (entry.Id >= oldestKeptId || !entry.IsDone)
                     s_History[write++] = entry;
             }
             s_History.RemoveRange(write, s_History.Count - write);

@@ -49,6 +49,31 @@ namespace HB.Cheat.Tests
         }
 
         [Test]
+        public void NestedLocal_KeepsNewestIssuedNotLastAdded()
+        {
+            const string outerId = "hb.test.outer";
+            CheatRegistry.Register(new CheatDefinition
+            {
+                Id = outerId,
+                Path = "Test/Outer",
+                Target = CheatTarget.Local,
+                // 안쪽 치트(#2)가 바깥(#1)보다 먼저 히스토리에 들어간다
+                LocalInvoker = _ => CheatResult.Ok(CheatSystem.Execute(Def(LocalId), null).Id.ToString())
+            });
+            try
+            {
+                CheatSystem.Options.HistoryCapacity = 1;
+                CheatSystem.Execute(Def(outerId), null);
+                CollectionAssert.AreEqual(new[] { 2 }, Ids());
+                StringAssert.Contains("\"status\":\"Succeeded\"", CheatProtocol.Status(2));
+            }
+            finally
+            {
+                CheatRegistry.Unregister(outerId);
+            }
+        }
+
+        [Test]
         public void Status_DistinguishesEvictedAndUnknown()
         {
             CheatSystem.Options.HistoryCapacity = 1;

@@ -255,7 +255,7 @@ namespace HB.Cheat
                 .Prop("status", e.Status.ToString())
                 .Prop("done", e.IsDone)
                 // 끝나지 않았는데 큐가 멈춰 스스로는 진행되지 않는다 → 자동화는 폴링을 멈추고 사람에게 넘긴다
-                .Prop("blocked", !e.IsDone && CheatSystem.IsServerQueuePaused)
+                .Prop("blocked", e.IsServer && !e.IsDone && CheatSystem.IsServerQueuePaused)
                 .Prop("message", e.Message)
                 .Prop("command", e.Command)
                 .Prop("describe", e.Describe())

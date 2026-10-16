@@ -48,6 +48,24 @@ namespace HB.Cheat.Tests
         }
 
         [Test]
+        public void QueueChangedSubscriber_SeesTimedOutAsDone()
+        {
+            var first = CheatSystem.Execute(Def(ServerId), null);
+            string seen = null;
+            void OnQueueChanged() => seen = CheatProtocol.Status(first.Id);
+            CheatSystem.ServerQueueChanged += OnQueueChanged;
+            try
+            {
+                ForceTimeout(first);
+            }
+            finally
+            {
+                CheatSystem.ServerQueueChanged -= OnQueueChanged;
+            }
+            StringAssert.Contains("\"status\":\"TimedOut\",\"done\":true,\"blocked\":false", seen);
+        }
+
+        [Test]
         public void HistoryJson_HasServerQueue()
         {
             ForceTimeout(CheatSystem.Execute(Def(ServerId), null));
