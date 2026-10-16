@@ -41,6 +41,19 @@ namespace HB.Cheat
         TimedOut
     }
 
+    /// <summary>실행 주체. 패널 히스토리와 자동화 JSON에 표시된다.</summary>
+    public enum CheatSource
+    {
+        /// <summary>프로젝트 코드 (CheatSystem.Execute를 직접 호출)</summary>
+        Code,
+        /// <summary>치트 패널 (사람)</summary>
+        Panel,
+        /// <summary>Unity CLI (unity command cheat_*)</summary>
+        Cli,
+        /// <summary>ICheatBridge (CheatProtocol.Handle)</summary>
+        Bridge
+    }
+
     public enum CheatInitMode
     {
         AutoOnGameStart = 0,

@@ -17,7 +17,10 @@ namespace HB.Cheat
     /// </summary>
     public static class CheatProtocol
     {
-        public static string Handle(string line)
+        /// <summary>브리지(ICheatBridge)용 진입점. 실행 주체는 Bridge로 기록된다.</summary>
+        public static string Handle(string line) => Handle(line, CheatSource.Bridge);
+
+        public static string Handle(string line, CheatSource source)
         {
             try
             {
@@ -37,10 +40,10 @@ namespace HB.Cheat
                         return Options(tokens[1], tokens[2], optionArgs, query, limit);
                     case "run":
                         if (tokens.Count < 2) return Error("Usage: run <cheatId> [k=v ...]");
-                        return Run(tokens[1], ParsePairs(tokens, 2));
+                        return Run(tokens[1], ParsePairs(tokens, 2), source);
                     case "raw":
                         if (tokens.Count < 2) return Error("Usage: raw <command...>");
-                        return Raw(line.Substring(line.IndexOf("raw", StringComparison.OrdinalIgnoreCase) + 3).Trim());
+                        return Raw(line.Substring(line.IndexOf("raw", StringComparison.OrdinalIgnoreCase) + 3).Trim(), source);
                     case "status":
                         if (tokens.Count < 2 || !int.TryParse(tokens[1], out int id)) return Error("Usage: status <executionId>");
                         return Status(id);
@@ -128,20 +131,20 @@ namespace HB.Cheat
             return w.ToString();
         }
 
-        public static string Run(string cheatId, IReadOnlyDictionary<string, string> args)
+        public static string Run(string cheatId, IReadOnlyDictionary<string, string> args, CheatSource source = CheatSource.Code)
         {
             if (!CheatSystem.IsInitialized) return Error("CheatSystem is not initialized (enter Play Mode)");
             if (!CheatRegistry.TryGet(cheatId, out var def)) return Error($"Unknown cheat '{cheatId}'");
             if (!TryBuildValues(def, args, allowMissing: false, out var values, out string error)) return Error(error);
 
-            return ExecutionJson(CheatSystem.Execute(def, values));
+            return ExecutionJson(CheatSystem.Execute(def, values, source));
         }
 
-        public static string Raw(string command)
+        public static string Raw(string command, CheatSource source = CheatSource.Code)
         {
             if (!CheatSystem.IsInitialized) return Error("CheatSystem is not initialized (enter Play Mode)");
             if (string.IsNullOrWhiteSpace(command)) return Error("Empty raw command");
-            return ExecutionJson(CheatSystem.ExecuteRaw(command));
+            return ExecutionJson(CheatSystem.ExecuteRaw(command, source));
         }
 
         public static string Status(int executionId)
@@ -219,6 +222,7 @@ namespace HB.Cheat
                 .Prop("id", e.Id)
                 .Prop("cheatId", e.Definition?.Id)
                 .Prop("target", e.IsServer ? "Server" : "Local")
+                .Prop("source", e.Source.ToString())
                 .Prop("status", e.Status.ToString())
                 .Prop("done", e.IsDone)
                 .Prop("message", e.Message)

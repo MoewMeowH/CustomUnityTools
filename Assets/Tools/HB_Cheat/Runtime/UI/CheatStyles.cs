@@ -185,6 +185,15 @@ namespace HB.Cheat.UI
             }
         }
 
+        public static string SourceText(CheatSource source)
+        {
+            switch (source)
+            {
+                case CheatSource.Cli: return "CLI";
+                default: return source.ToString();
+            }
+        }
+
         public static string StatusText(CheatStatus status)
         {
             switch (status)
