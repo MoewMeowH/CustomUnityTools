@@ -316,3 +316,173 @@ $ unity command cheat_status --execution 1
 - Play Mode 중 재컴파일: `isPlaying=True initialized=False`, `status` · `run` 모두 `not_initialized`.
 - 재컴파일 뒤 `Initialize`를 다시 부르면(= run과 status 사이에 재초기화가 끼는 경우) 세션이 `0f02c881` → `771cf2d9`로 바뀌고, 이전 세션 값 조회는 `session_changed`.
 - 새로 발견 (범위 밖, 기록·README): 재컴파일 뒤 재초기화해도 치트 목록이 비어 있다(`Unknown cheat 'item.clear'`). 도메인 리로드로 레지스트리 정적 상태가 사라지고 `SubsystemRegistration`은 Play Mode 중에 다시 돌지 않기 때문으로 보임 (원인은 추정, 현상은 확정).
+
+## 2026-10-17 HB_Cheat 에러 code 전수 부여 — com.hb.cheat 0.1.4 → 0.1.5
+
+계획서: [docs/plans/2026-10-17_hb-cheat-error-codes.md](plans/2026-10-17_hb-cheat-error-codes.md)
+
+### 커밋
+
+| 커밋 | 내용 |
+|---|---|
+| 712642b | `CheatErrorCode` 19개, 모든 `ok:false`에 code, 실행 전 검증(B안), 미배포 code 이름 변경, 테스트, 계획서·critique 원문 |
+| (이 커밋) | README code 표 · 버전 0.1.5 · 작업 로그 |
+
+### 계획과 달라진 것 (확정)
+
+- code 목록은 critique 반영 후의 "수정된 19개"로 확정 (사용자 결정). 판정은 계획서 `## 외부 검토 (critique)` 절.
+- README "자동화 폴링 규칙"(번호 붙은 처리 지시)을 "폴링" 절로 바꿈: 사실(`session`·`done`·`blocked`·히스토리 보존)은 남기고, 처리 방법은 "예: … 멈추고 사람에게 넘긴다" 한 줄만 둠 (사용자 지시).
+- `CheatProtocol.Error(string)`(code 없음)는 공개 API라 남기고 패키지 안에서는 쓰지 않음.
+- `Validate` 안의 도달 불가 분기(정의 null, 인자 수 불일치)는 `internal_error`.
+
+### critique 판정 집계 (계획 단계, 두 모델 따로 실행)
+
+| 누가 찾았나 | 건수 | 채택 | 기각 |
+|---|---|---|---|
+| 둘 다 | 1 (C1 포괄 catch에 형식 오류 혼입) | 1 | 0 |
+| gpt_mini_luna만 | 5 (C2 이름 대상, C3 값 오류 이름, C4 unknown 정의, C5 CLI 프레임워크 단계, C6 optionError 의미) | 5 (C5·C6은 직접 확인) | 0 |
+| gemini_mini_lite만 | 3 (C7 malformed/usage 경계, C8 not_initialized 일관성, C9 Provider 메시지 노출) | 1 | 2 (C8 사실과 다름, C9 의도) |
+| 지휘자만 | 1 ("목록에 없는 값"이 `ok:false`가 아니라 실행 실패라는 점 → Q1) | 1 | — |
+
+### 테스트 (확정)
+
+- `CheatErrorCodeTests` 4개 추가 → `HB.Cheat.Tests` **44/44 통과**.
+  - code별 유발 입력 28개, 모든 계약 code(19개)가 테스트로 나오고 그 밖의 code는 없음(리플렉션으로 `CheatErrorCode` 상수와 대조).
+  - 인자 문제는 실행 없음 / 실행 결과 문제는 `ok:true` + `Failed` / 패널 경로(`Execute` 직접)는 기존대로 `Failed` 기록.
+- 테스트 작성 중 내 설계 실수 2건: ① `FixedOptions` 인자는 기본값(0)이 생겨 `missing_argument`를 만들 수 없음 → Provider 목록 인자로 변경. ② 의도된 Provider 예외 로그를 테스트 프레임워크가 실패로 봄 → 해당 테스트에서 `LogAssert.ignoreFailingMessages`.
+- 기존 테스트 3개 기대값을 새 code 이름(`evicted_execution`, `unknown_execution`, `malformed_argument`)으로 갱신.
+
+### 실제 확인 — Unity CLI, Play Mode (응답 원문)
+
+샘플을 `Assets/Samples/HB_Cheat/`로 다시 복사해 쓰고, 끝난 뒤 생성 레지스트리와 함께 지움 (커밋 안 함). `--result-only` 출력의 바깥 문자열 감싸기만 풀었다. `option_provider_failed`·`internal_error`·브리지 전용 code(`empty_command`·`unknown_command`·`invalid_usage`)·`not_initialized`·`evicted_execution`은 샘플로 만들 수 없거나 앞선 작업에서 원문을 남겨 테스트로만 확인.
+
+*malformed_argument*
+
+```
+$ unity command cheat_run --id item.add --args "itemId=1001 count"
+{"ok":false,"error":"Expected k=v but got 'count'","code":"malformed_argument"}
+```
+
+*unknown_cheat*
+
+```
+$ unity command cheat_run --id no.such
+{"ok":false,"error":"Unknown cheat 'no.such'","code":"unknown_cheat"}
+```
+
+*unknown_argument (--args 키)*
+
+```
+$ unity command cheat_run --id item.add --args "itemId=1001 amount=3"
+{"ok":false,"error":"'item.add' has no argument 'amount'","code":"unknown_argument"}
+```
+
+*unknown_argument (--arg)*
+
+```
+$ unity command cheat_options --id item.add --arg amount
+{"ok":false,"error":"'item.add' has no argument 'amount'","code":"unknown_argument"}
+```
+
+*argument_without_options*
+
+```
+$ unity command cheat_options --id item.add --arg count
+{"ok":false,"error":"'count' has no option list","code":"argument_without_options"}
+```
+
+*unparsable_value*
+
+```
+$ unity command cheat_run --id item.add --args itemId=abc
+{"ok":false,"error":"'itemId': 'abc' is not a valid Int","code":"unparsable_value"}
+```
+
+*missing_argument*
+
+```
+$ unity command cheat_run --id item.add --args count=3
+{"ok":false,"error":"Missing argument 'itemId'","code":"missing_argument"}
+```
+
+*out_of_range_value*
+
+```
+$ unity command cheat_run --id item.add --args "itemId=1001 count=0"
+{"ok":false,"error":"'개수' must be in [1, 9999]","code":"out_of_range_value"}
+```
+
+*unlisted_value*
+
+```
+$ unity command cheat_run --id item.add --args "itemId=99999 count=1"
+{"ok":false,"error":"'아이템': 99999 is not in the option list","code":"unlisted_value"}
+```
+
+*인자 문제는 실행을 만들지 않음 (히스토리 0건)*
+
+```
+$ unity command cheat_history
+{"ok":true,"session":"b30bec36","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"history":[]}
+```
+
+*raw_disabled*
+
+```
+$ unity command cheat_raw --command "item_add 1001 1"
+{"ok":false,"error":"Raw commands from automation are disabled (CheatRuntimeOptions.AllowRawFromAutomation, Tools > HB > Cheat)","code":"raw_disabled"}
+```
+
+*empty_raw_command (AllowRawFromAutomation=true)*
+
+```
+# eval → AllowRawFromAutomation=true
+$ unity command cheat_raw --command "   "
+{"ok":false,"error":"Empty raw command","code":"empty_raw_command"}
+```
+
+*unknown_execution*
+
+```
+$ unity command cheat_status --execution 999
+{"ok":false,"error":"Unknown execution 999","code":"unknown_execution"}
+```
+
+*session_changed*
+
+```
+$ unity command cheat_status --execution 1 --session deadbeef
+{"ok":false,"error":"Session changed (deadbeef -> b30bec36). Execution 1 belongs to a previous session","code":"session_changed"}
+```
+
+*실행 결과 문제는 ok:true + Failed (가짜 네트워크가 모르는 명령으로 응답)*
+
+```
+$ unity command cheat_raw --command bogus_cmd
+{"ok":true,"session":"b30bec36","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":1},"execution":{"id":1,"cheatId":null,"target":"Server","source":"Cli","status":"Pending","done":false,"blocked":false,"message":null,"command":"bogus_cmd","describe":"bogus_cmd"}}
+$ unity command cheat_status --execution 1
+{"ok":true,"session":"b30bec36","serverQueue":{"paused":false,"reason":null,"queued":0,"inFlight":null},"execution":{"id":1,"cheatId":null,"target":"Server","source":"Cli","status":"Failed","done":true,"blocked":false,"message":"InvalidCommand","command":"bogus_cmd","describe":"bogus_cmd"}}
+```
+
+*CLI 봉투 단계 (패키지 code 없음)*
+
+```
+$ unity command cheat_status --execution abc --format json
+{
+  "success": false,
+  "command": "unity command cheat_status",
+  "data": null,
+  "errors": [
+    {
+      "code": "INVALID_COMMAND_ARGS",
+      "message": "cheat_status의 인수가 잘못되었습니다:\n  --execution에는 Int32이(가) 필요하지만 abc이(가) 지정되었습니다."
+    }
+  ],
+  "warnings": []
+}
+```
+
+### 관찰 (범위 밖, 추정 포함)
+
+- 컴파일 직후 첫 `unity command run_tests`가 2번 300초 시간 초과("Main thread operation timed out")로 끝났고, 바로 다시 돌리면 3~4초에 통과. 원인 미확인 (에디터 쪽 추정). 앞 작업에서도 "Test execution timed out, cancelling" 1회 기록.
+- `CheatProtocol.Options`에서 Provider가 `Label`이 null인 `CheatOption`을 주고 `query`가 있으면 `option.Label.IndexOf`에서 NullReferenceException → `internal_error`로 나감 (코드 읽기로 확인, 실행 확인 안 함). 고치지 않음.
