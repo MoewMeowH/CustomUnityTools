@@ -164,7 +164,9 @@ namespace HB.Cheat
         {
             var history = CheatSystem.History;
             var w = new CheatJsonWriter();
-            w.BeginObject().Prop("ok", true).Key("history").BeginArray();
+            w.BeginObject().Prop("ok", true);
+            WriteServerQueue(w);
+            w.Key("history").BeginArray();
             for (int i = Math.Max(0, history.Count - limit); i < history.Count; i++)
                 WriteExecution(w, history[i]);
             w.EndArray().EndObject();
@@ -214,13 +216,33 @@ namespace HB.Cheat
             return true;
         }
 
+        /// <summary>{"ok":true,"serverQueue":{...},"execution":{...}}</summary>
         public static string ExecutionJson(CheatExecution execution)
         {
             var w = new CheatJsonWriter();
-            w.BeginObject().Prop("ok", true).Key("execution");
+            w.BeginObject().Prop("ok", true);
+            WriteServerQueue(w);
+            w.Key("execution");
             WriteExecution(w, execution);
             w.EndObject();
             return w.ToString();
+        }
+
+        /// <summary>
+        /// "serverQueue":{"paused":bool,"reason":string|null,"queued":N,"inFlight":id|null}
+        /// paused면 늦은 응답 또는 ResumeServerQueue(사람·재접속 코드)가 있어야 대기 건이 진행된다.
+        /// </summary>
+        private static void WriteServerQueue(CheatJsonWriter w)
+        {
+            var inFlight = CheatSystem.InFlightServerExecution;
+            w.Key("serverQueue").BeginObject()
+                .Prop("paused", CheatSystem.IsServerQueuePaused)
+                .Prop("reason", CheatSystem.ServerQueuePauseReason)
+                .Prop("queued", CheatSystem.QueuedServerCount)
+                .Key("inFlight");
+            if (inFlight != null) w.Value(inFlight.Id);
+            else w.Value((string)null);
+            w.EndObject();
         }
 
         private static void WriteExecution(CheatJsonWriter w, CheatExecution e)
@@ -232,6 +254,8 @@ namespace HB.Cheat
                 .Prop("source", e.Source.ToString())
                 .Prop("status", e.Status.ToString())
                 .Prop("done", e.IsDone)
+                // 끝나지 않았는데 큐가 멈춰 스스로는 진행되지 않는다 → 자동화는 폴링을 멈추고 사람에게 넘긴다
+                .Prop("blocked", !e.IsDone && CheatSystem.IsServerQueuePaused)
                 .Prop("message", e.Message)
                 .Prop("command", e.Command)
                 .Prop("describe", e.Describe())
