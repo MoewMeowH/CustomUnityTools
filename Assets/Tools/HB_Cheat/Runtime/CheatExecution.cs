@@ -20,6 +20,9 @@ namespace HB.Cheat
         /// <summary>누가 실행했는지 (패널 / CLI / 브리지 / 코드)</summary>
         public CheatSource Source { get; }
 
+        /// <summary>id를 발급한 세션 (CheatSystem.SessionId). 정적 상태가 초기화되면 id가 1부터 다시 발급되므로 함께 봐야 같은 실행이다.</summary>
+        public string Session { get; }
+
         public CheatStatus Status { get; internal set; }
         public string Message { get; internal set; }
         public float StartedAt { get; }
@@ -34,6 +37,7 @@ namespace HB.Cheat
         internal CheatExecution(int id, CheatDefinition definition, object[] values, float startedAt, CheatSource source)
         {
             Id = id;
+            Session = CheatSystem.SessionId;
             Definition = definition;
             Values = values;
             StartedAt = startedAt;
