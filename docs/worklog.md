@@ -578,3 +578,7 @@ $ unity command cheat_status --execution abc --format json
 ## 2026-10-18 HB_Cheat 버전 1.0.0
 
 * 모든 도구 버전 1.0.0으로 통일 요청 — HB_Cheat package.json·루트 README 표 0.1.6 → 1.0.0. 나머지 도구는 이미 1.0.0.
+
+## 2026-10-18 HB_E2String 패키지 점검·수정
+
+* 상세: [docs/10_18/worklog_Estring.md](10_18/worklog_Estring.md) · 계획서: [docs/plans/2026-10-18_e2string-package-check.md](plans/2026-10-18_e2string-package-check.md)

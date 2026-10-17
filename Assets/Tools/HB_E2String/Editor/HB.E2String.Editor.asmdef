@@ -1,9 +1,7 @@
 ﻿{
     "name": "HB.E2String.Editor",
     "rootNamespace": "HB.E2String.Editor",
-    "references": [
-        "HB.E2String.Runtime"
-    ],
+    "references": [],
     "includePlatforms": [
         "Editor"
     ],
