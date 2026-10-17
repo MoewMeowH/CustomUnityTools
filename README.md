@@ -37,8 +37,6 @@ AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴�
 | **HB_ScreenRecorder** | 1.0.0 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRecorder` | Unity Recorder 기반 GameView 화면 녹화(MP4), 스크린샷 캡처 및 시스템 진단 데이터/로그 자동 덤프 QA 도구. | [상세 문서](Assets/Tools/HB_ScreenRecorder/README.md) |
 
 - 선택 연동: HB_Cheat는 `com.hb.ingameconsole`(콘솔 탭)과 `com.unity.pipeline`(Unity CLI 명령)이 설치돼 있으면 각 연동을 자동으로 켭니다. 없으면 해당 기능만 빠지고 나머지는 그대로 동작합니다.
-- HB_Cheat는 아직 정식 출시 전(0.x)입니다.
-  - 알려진 문제: `c451c74`(2026-10-16) 이전 커밋의 HB_InGameConsole과 함께 쓰면 연동 어셈블리가 컴파일되지 않습니다(`AddExternalView` 등 없음). HB_InGameConsole을 최신 커밋으로 올려서 쓰세요. 감지 하한은 다음 버전에서 고칩니다.
 
 ---
 
