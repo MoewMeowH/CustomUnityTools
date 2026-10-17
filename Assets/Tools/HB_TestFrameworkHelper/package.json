@@ -2,7 +2,7 @@
   "name": "com.hb.testframeworkhelper",
   "version": "1.0.0",
   "displayName": "HB_TestFrameworkHelper",
-  "description": "HeartBeat Test Framework Helper - Includes Inspector slot null validation ([NeedSlotNullCheck]) and expandable test utilities.",
+  "description": "Test Framework Helper - Includes Inspector slot null validation ([NeedSlotNullCheck]) and expandable test utilities.",
   "unity": "6000.3",
   "author": {
     "name": "HoBeenH",
