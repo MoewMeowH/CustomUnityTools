@@ -79,3 +79,8 @@
 ## 7. 남은 것
 - 창 UI(심각도 색, 취소 안내, 폴더 검증 대화상자)는 배치로 확인하지 않음 → 에디터에서 확인 필요.
 - 커밋 안 함: ToolCreate(패키지·docs), ToolWithCS(분석기·README).
+
+## 8. 사용자 테스트 후 수정
+- 사용자 보고: 배열 슬롯이 비었는데 검사가 연결된 것으로 판단하는 듯. 원인: 사용자 `Test.cs`의 `a4`가 `warnNullElements: true`라 빈 원소는 Warning, 테스트 실패 메시지에는 Error(`a1`·`a3`)만 적히고 Warning은 `Debug.LogWarning`(콘솔)에만 나와 Test Runner 결과 화면에서 안 보였음. 프리팹 YAML은 `a4`·`a5` 모두 `{fileID: 0}` ×3 (씬 오브젝트 링크는 프리팹에 저장되지 않음, 확인).
+- 수정: 테스트 결과 메시지에 Warning 목록을 함께 적음 (실패 시 "테스트 실패 사유 아님" 절, 통과 시 `Assert.Pass` 메시지). Warning이 테스트를 실패시키지 않는 규칙은 유지.
+- 확인: ToolCreate(7000.0.0a8) 배치 컴파일 exit 0, `HB.TestFrameworkHelper.Tests.Editor.dll` 생성. ToolTest6.3은 사용자가 열어 두어 실행하지 않음.
