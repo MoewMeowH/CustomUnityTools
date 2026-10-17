@@ -27,6 +27,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         External
     }
 
+#pragma warning disable 0414 // USE_HLOG가 없으면 일부 직렬화 필드를 쓰지 않는다 (씬·프리팹 직렬화 호환을 위해 유지)
     [Header("UI Toolkit")]
     [Tooltip("비워둘 경우 PanelRenderer/UIDocument의 VisualTreeAsset 또는 InGameConsoleSettings 설정을 자동으로 사용합니다.")]
     [SerializeField] private VisualTreeAsset consoleVisualTree;
@@ -38,6 +39,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
     [Header("Log List")]
     [Tooltip("맨 아래를 보고 있을 때 새 로그를 따라 자동으로 스크롤합니다.")]
     [SerializeField] private bool autoScroll = true;
+#pragma warning restore 0414
+
+#if USE_HLOG
 
     // 사용자가 맨 아래를 보고 있는지 여부. 위로 스크롤하면 false가 되어 새 로그를 따라가지 않는다
     private bool isStickToBottom = true;
@@ -122,7 +126,26 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private string currentTagFilter = string.Empty;
     private string currentSearchQuery = string.Empty;
 
-    private readonly List<VisualElement> createdLogRows = new List<VisualElement>();
+    // 오래된 행부터 지우므로 List.RemoveAt(0)의 배열 이동이 없는 Queue
+    private readonly Queue<VisualElement> createdLogRows = new Queue<VisualElement>();
+    private VisualElement lastLogRow;
+
+    // 콘솔이 닫혀 있는 동안은 UI를 만들지 않고 표시만 해 두었다가 열 때 반영한다.
+    // 한 번 만든 로그 행은 닫아도 유지한다 (자주 여닫으므로 다시 만드는 비용을 피함).
+    private bool hasEverOpened;
+    private bool isLogsDirty;
+    private bool isWatchesDirty;
+    private bool isTagsDirty;
+
+    // 개수 표시는 개수가 바뀔 때만 문자열을 만든다 (로그·Watch 이벤트마다 할당하지 않도록)
+    private int shownLogCount = -1;
+    private int shownWatchCount = -1;
+
+    // 검색어는 바뀔 때 한 번만 해석한다 ("!단어"는 제외 검색)
+    private bool isExcludeSearch;
+    private string searchTerm = string.Empty;
+
+    private Action<bool> onLogEnableChanged;
     private readonly Dictionary<string, (VisualElement row, Label valLabel, Label timeLabel)> watchRowMap =
         new Dictionary<string, (VisualElement row, Label valLabel, Label timeLabel)>(StringComparer.OrdinalIgnoreCase);
     private VisualElement selectedRow;
@@ -221,6 +244,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
         HLogCore.OnWatchUpdated += HandleWatchUpdated;
         HLogCore.OnWatchRemoved += HandleWatchRemoved;
         HLogCore.OnTagDiscovered += HandleTagDiscovered;
+        // 코드나 에디터 창에서 Log ON/OFF를 바꿔도 Settings 탭 표시가 따라오도록
+        onLogEnableChanged ??= _ => UpdateLogEnableButtonUI();
+        HLogCore.OnLogEnableChanged += onLogEnableChanged;
     }
 
 #if UNITY_6000_5_OR_NEWER
@@ -235,6 +261,9 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void InitializeWithRoot(VisualElement root)
     {
+        // 재초기화(패널 재로드 등) 때 이전 요소에 걸린 콜백이 남거나 두 번 걸리지 않도록 먼저 해제한다
+        UnregisterCallbacks();
+
         rootElement = root;
         if (rootElement == null) return;
 
@@ -245,9 +274,29 @@ public class HB_InGameConsoleUI : MonoBehaviour
         RegisterCallbacks();
         AttachAllExternalViews();
 
-        RefreshAllLogs();
-        RefreshAllWatches();
-        RefreshAllTags();
+        // 새 루트에는 이전 행·버튼이 없다
+        createdLogRows.Clear();
+        lastLogRow = null;
+        selectedRow = null;
+        watchRowMap.Clear();
+        createdTagButtons.Clear();
+        tagAllButton = null;
+        hasEverOpened = false;
+        shownLogCount = -1;
+        shownWatchCount = -1;
+
+        if (IsConsoleOpen)
+        {
+            SyncOnOpen();
+        }
+        else
+        {
+            isLogsDirty = true;
+            isWatchesDirty = true;
+            isTagsDirty = true;
+            UpdateOpenButtonText(HLogCore.HistoryCount);
+            UpdateWatchButtonCount();
+        }
 
         if (fpsGraphCanvas != null)
         {
@@ -381,6 +430,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         HLogCore.OnWatchUpdated -= HandleWatchUpdated;
         HLogCore.OnWatchRemoved -= HandleWatchRemoved;
         HLogCore.OnTagDiscovered -= HandleTagDiscovered;
+        if (onLogEnableChanged != null) HLogCore.OnLogEnableChanged -= onLogEnableChanged;
 
         if (fpsGraphCanvas != null)
         {
@@ -806,7 +856,12 @@ public class HB_InGameConsoleUI : MonoBehaviour
             viewWatchBtn?.AddToClassList("hb-filter-active");
             watchScrollView?.RemoveFromClassList("hb-hidden");
             detailPanel?.RemoveFromClassList("hb-hidden");
-            RefreshAllWatches();
+            // 열려 있는 동안 행은 Watch 이벤트로 최신 상태다. 닫혀 있던 동안 바뀐 경우만 맞춘다
+            if (isWatchesDirty)
+            {
+                SyncWatches();
+                isWatchesDirty = false;
+            }
         }
         else if (mode == ConsoleViewMode.Settings)
         {
@@ -1078,6 +1133,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
         UpdateWatchButtonCount();
 
         if (watchScrollView == null) return;
+        if (!IsConsoleOpen)
+        {
+            isWatchesDirty = true;
+            return;
+        }
 
         if (watchRowMap.TryGetValue(key, out var rowInfo))
         {
@@ -1092,7 +1152,21 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void HandleWatchRemoved(string key)
     {
-        RefreshAllWatches();
+        UpdateWatchButtonCount();
+
+        if (watchScrollView == null) return;
+        if (!IsConsoleOpen)
+        {
+            isWatchesDirty = true;
+            return;
+        }
+
+        // 지워진 키의 행만 제거 (owner 파괴로 여러 개가 한꺼번에 지워져도 전체를 다시 만들지 않음)
+        if (watchRowMap.TryGetValue(key, out var rowInfo))
+        {
+            rowInfo.row.RemoveFromHierarchy();
+            watchRowMap.Remove(key);
+        }
     }
 
     private void RefreshAllWatches()
@@ -1106,6 +1180,47 @@ public class HB_InGameConsoleUI : MonoBehaviour
         foreach (var kvp in map)
         {
             AddWatchElement(kvp.Key, kvp.Value.Value, kvp.Value.Timestamp);
+        }
+
+        UpdateWatchButtonCount();
+    }
+
+    /// <summary>
+    /// 남아 있는 Watch 행을 재사용해 코어 상태와 맞춘다: 없어진 키만 지우고, 바뀐 값만 고치고, 새 키만 추가한다.
+    /// </summary>
+    private void SyncWatches()
+    {
+        if (watchScrollView == null) return;
+
+        var map = HLogCore.Watches;
+        List<string> removed = null;
+        foreach (var kvp in watchRowMap)
+        {
+            if (!map.ContainsKey(kvp.Key)) (removed ??= new List<string>()).Add(kvp.Key);
+        }
+        if (removed != null)
+        {
+            foreach (var key in removed)
+            {
+                watchRowMap[key].row.RemoveFromHierarchy();
+                watchRowMap.Remove(key);
+            }
+        }
+
+        foreach (var kvp in map)
+        {
+            if (watchRowMap.TryGetValue(kvp.Key, out var rowInfo))
+            {
+                if (rowInfo.valLabel.text != kvp.Value.Value)
+                {
+                    rowInfo.valLabel.text = kvp.Value.Value;
+                    rowInfo.timeLabel.text = kvp.Value.Timestamp.ToString("HH:mm:ss");
+                }
+            }
+            else
+            {
+                AddWatchElement(kvp.Key, kvp.Value.Value, kvp.Value.Timestamp);
+            }
         }
 
         UpdateWatchButtonCount();
@@ -1135,10 +1250,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void UpdateWatchButtonCount()
     {
-        if (viewWatchBtn != null)
-        {
-            viewWatchBtn.text = $"Watch [{HLogCore.Watches.Count}]";
-        }
+        if (viewWatchBtn == null) return;
+        int count = HLogCore.WatchCount;
+        if (count == shownWatchCount) return;
+        shownWatchCount = count;
+        viewWatchBtn.text = $"Watch [{count}]";
     }
 
     #endregion
@@ -1168,8 +1284,30 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void HandleTagDiscovered(string tag)
     {
-        if (tagScrollView == null || createdTagButtons.ContainsKey(tag)) return;
+        if (tagScrollView == null) return;
+        if (!IsConsoleOpen)
+        {
+            isTagsDirty = true;
+            return;
+        }
+        if (createdTagButtons.ContainsKey(tag)) return;
         AddTagButton(tag);
+    }
+
+    /// <summary>닫혀 있는 동안 발견된 태그를 버튼으로 추가 (이미 있는 버튼은 그대로)</summary>
+    private void SyncTags()
+    {
+        if (tagScrollView == null) return;
+        if (tagAllButton == null || tagAllButton.parent != tagScrollView)
+        {
+            RefreshAllTags();
+            return;
+        }
+
+        foreach (var tag in HLogCore.KnownTags)
+        {
+            if (!createdTagButtons.ContainsKey(tag)) AddTagButton(tag);
+        }
     }
 
     private void AddTagButton(string tag)
@@ -1215,6 +1353,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
     private void OnSearchValueChanged(ChangeEvent<string> evt)
     {
         currentSearchQuery = evt.newValue != null ? evt.newValue.Trim() : string.Empty;
+        isExcludeSearch = currentSearchQuery.Length > 1 && currentSearchQuery[0] == '!';
+        searchTerm = isExcludeSearch ? currentSearchQuery.Substring(1) : currentSearchQuery;
         ApplyFilterToVisibleLogs();
     }
 
@@ -1224,9 +1364,36 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     public void OpenConsole()
     {
-        if (consoleWindow != null)
+        if (consoleWindow == null) return;
+
+        bool wasOpen = IsConsoleOpen;
+        consoleWindow.RemoveFromClassList("hb-hidden");
+        if (!wasOpen)
         {
-            consoleWindow.RemoveFromClassList("hb-hidden");
+            SyncOnOpen();
+        }
+    }
+
+    /// <summary>
+    /// 처음 열 때 행을 만들고, 이후에는 닫혀 있는 동안 바뀐 것만 반영한다.
+    /// </summary>
+    private void SyncOnOpen()
+    {
+        if (!hasEverOpened || isLogsDirty)
+        {
+            SyncLogsWithHistory();
+            hasEverOpened = true;
+            isLogsDirty = false;
+        }
+        if (isWatchesDirty)
+        {
+            SyncWatches();
+            isWatchesDirty = false;
+        }
+        if (isTagsDirty)
+        {
+            SyncTags();
+            isTagsDirty = false;
         }
     }
 
@@ -1361,13 +1528,58 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void RefreshAllLogs()
     {
+        RefreshAllLogs(HLogCore.History);
+    }
+
+    private void RefreshAllLogs(IReadOnlyList<HLogCore.LogEntry> history)
+    {
         if (logScrollView == null) return;
 
-        logScrollView.Clear();
-        createdLogRows.Clear();
+        ClearLogRows();
+        for (int i = 0; i < history.Count; i++)
+        {
+            AddLogElement(history[i]);
+        }
+
+        UpdateOpenButtonText(history.Count);
+    }
+
+    /// <summary>
+    /// 남아 있는 행을 재사용해 코어 기록과 맞춘다: 기록에서 밀려난 앞쪽 행만 지우고 새 로그만 뒤에 붙인다.
+    /// 마지막 행의 로그를 기록에서 찾지 못하면(Clear 등) 전부 다시 만든다.
+    /// </summary>
+    private void SyncLogsWithHistory()
+    {
+        if (logScrollView == null) return;
 
         var history = HLogCore.History;
-        for (int i = 0; i < history.Count; i++)
+        var lastEntry = lastLogRow != null ? lastLogRow.userData as HLogCore.LogEntry : null;
+
+        int lastIndex = -1;
+        if (lastEntry != null)
+        {
+            for (int i = history.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(history[i], lastEntry))
+                {
+                    lastIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (lastIndex < 0)
+        {
+            RefreshAllLogs(history);
+            return;
+        }
+
+        // 행은 history[..lastIndex]의 끝부분과 같으므로, 그 앞에서 밀려난 만큼만 지운다
+        while (createdLogRows.Count > lastIndex + 1)
+        {
+            RemoveOldestLogRow();
+        }
+        for (int i = lastIndex + 1; i < history.Count; i++)
         {
             AddLogElement(history[i]);
         }
@@ -1377,45 +1589,68 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void HandleLogAdded(HLogCore.LogEntry entry)
     {
+        UpdateOpenButtonText(HLogCore.HistoryCount);
+
         if (logScrollView == null) return;
+        if (!IsConsoleOpen)
+        {
+            isLogsDirty = true;
+            return;
+        }
 
         AddLogElement(entry);
-        UpdateOpenButtonText(HLogCore.HistoryCount);
     }
 
     private void HandleLogsCleared()
+    {
+        ClearLogRows();
+        isStickToBottom = true;
+        isLogsDirty = false;
+
+        if (IsConsoleOpen)
+            RefreshAllWatches();
+        else
+            isWatchesDirty = true;
+
+        UpdateOpenButtonText(0);
+    }
+
+    private void ClearLogRows()
     {
         if (logScrollView != null)
         {
             logScrollView.Clear();
         }
         createdLogRows.Clear();
+        lastLogRow = null;
         selectedRow = null;
-        isStickToBottom = true;
-        RefreshAllWatches();
-        UpdateOpenButtonText(0);
+    }
+
+    private void RemoveOldestLogRow()
+    {
+        var oldest = createdLogRows.Dequeue();
+        if (oldest == selectedRow) selectedRow = null;
+        if (oldest == lastLogRow) lastLogRow = null;
+
+        float removedHeight = oldest.resolvedStyle.display == DisplayStyle.None
+            ? 0f
+            : oldest.layout.height + oldest.resolvedStyle.marginTop + oldest.resolvedStyle.marginBottom;
+
+        logScrollView.Remove(oldest);
+
+        if (!isStickToBottom && removedHeight > 0f && !float.IsNaN(removedHeight))
+        {
+            isProgrammaticScroll = true;
+            logScrollView.verticalScroller.value = Mathf.Max(0f, logScrollView.verticalScroller.value - removedHeight);
+            isProgrammaticScroll = false;
+        }
     }
 
     private VisualElement AddLogElement(HLogCore.LogEntry entry)
     {
         if (createdLogRows.Count >= MaxUiLogCount)
         {
-            var oldest = createdLogRows[0];
-            if (oldest == selectedRow) selectedRow = null;
-
-            float removedHeight = oldest.resolvedStyle.display == DisplayStyle.None
-                ? 0f
-                : oldest.layout.height + oldest.resolvedStyle.marginTop + oldest.resolvedStyle.marginBottom;
-
-            logScrollView.Remove(oldest);
-            createdLogRows.RemoveAt(0);
-
-            if (!isStickToBottom && removedHeight > 0f && !float.IsNaN(removedHeight))
-            {
-                isProgrammaticScroll = true;
-                logScrollView.verticalScroller.value = Mathf.Max(0f, logScrollView.verticalScroller.value - removedHeight);
-                isProgrammaticScroll = false;
-            }
+            RemoveOldestLogRow();
         }
 
         var row = new VisualElement();
@@ -1500,7 +1735,8 @@ public class HB_InGameConsoleUI : MonoBehaviour
         bool isVisible = EvaluateLogVisibility(entry);
         row.style.display = isVisible ? DisplayStyle.Flex : DisplayStyle.None;
 
-        createdLogRows.Add(row);
+        createdLogRows.Enqueue(row);
+        lastLogRow = row;
         logScrollView.Add(row);
 
         return row;
@@ -1592,19 +1828,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
                 return false;
         }
 
-        if (!string.IsNullOrEmpty(currentSearchQuery))
+        if (!string.IsNullOrEmpty(searchTerm))
         {
-            if (currentSearchQuery.StartsWith("!") && currentSearchQuery.Length > 1)
-            {
-                string excludeWord = currentSearchQuery.Substring(1);
-                if (entry.RawMessage.IndexOf(excludeWord, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return false;
-            }
-            else
-            {
-                if (entry.RawMessage.IndexOf(currentSearchQuery, StringComparison.OrdinalIgnoreCase) < 0)
-                    return false;
-            }
+            bool contains = entry.RawMessage.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isExcludeSearch ? contains : !contains)
+                return false;
         }
 
         return true;
@@ -1621,11 +1849,41 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
     private void UpdateOpenButtonText(int count)
     {
-        if (openButton != null)
-        {
-            openButton.text = $"Logs [{count}]";
-        }
+        if (openButton == null || count == shownLogCount) return;
+        shownLogCount = count;
+        openButton.text = $"Logs [{count}]";
     }
 
     #endregion
+#else
+    // USE_HLOG가 없으면 콘솔은 동작하지 않는다. 씬·프리팹에 배치된 컴포넌트도 바로 꺼지고, 공개 API는 아무것도 하지 않는다.
+    public bool IsConsoleOpen => false;
+#if UNITY_6000_5_OR_NEWER
+    public PanelRenderer PanelRendererComponent => GetComponent<PanelRenderer>();
+#endif
+    public UIDocument Document => GetComponent<UIDocument>();
+    public VisualElement RootElement => null;
+
+    public bool AutoScroll
+    {
+        get => autoScroll;
+        set => autoScroll = value;
+    }
+
+    private void Awake()
+    {
+        enabled = false;
+    }
+
+    public void OpenConsole() { }
+    public void CloseConsole() { }
+    public void ToggleConsole() { }
+    public void ClearConsole() { }
+    public void ScrollToBottom() { }
+    public void SetFilter(int filterIndex) { }
+    public void AddExternalView(string viewName, VisualElement content) { }
+    public void RemoveExternalView(string viewName) { }
+    public void ShowExternalView(string viewName) { }
+    public bool IsExternalViewActive(string viewName) => false;
+#endif
 }

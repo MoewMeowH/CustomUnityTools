@@ -1,0 +1,297 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
+
+// 점검용 PlayMode 테스트 (HB_InGameConsole P4). 결과는 IGCCHECK 로그로도 남긴다.
+#if !USE_HLOG
+public class IGCCheckOffTests
+{
+    [UnityTest]
+    public IEnumerator T0_Off_EmptyBehaviour()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        InGameConsole.Initialize();
+        var ui = InGameConsole.EnsureUIInstance();
+        var ch = HLogCore.GetChannel("OffTag");
+        ch.Log("off log");
+        HLogCore.Watch("Off/Key", 1);
+        Debug.Log("off plain");
+        yield return null;
+        yield return null;
+        Debug.Log($"IGCCHECK T0 ui={(ui == null ? "null" : "obj")} uiObj={(Object.FindAnyObjectByType<HB_InGameConsoleUI>() == null ? "none" : "found")} init={InGameConsole.IsInitialized} history={HLogCore.History.Count} watches={HLogCore.WatchCount} tags={HLogCore.KnownTags.Count} ch={(ch == null ? "null" : ch.Tag)}");
+        Assert.IsNull(ui);
+        Assert.IsFalse(InGameConsole.IsInitialized);
+        Assert.AreEqual(0, HLogCore.History.Count);
+        Assert.AreEqual(0, HLogCore.WatchCount);
+        Assert.IsNotNull(ch);
+    }
+}
+#else
+public class IGCCheckTests
+{
+    private readonly List<string> m_Captured = new List<string>();
+    private readonly object m_CapturedGate = new object();
+
+    private void Capture(string condition, string stackTrace, LogType type)
+    {
+        lock (m_CapturedGate) m_Captured.Add($"{type}|{condition}");
+    }
+
+    [SetUp]
+    public void SetUp()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        HLogCore.Initialize();
+        lock (m_CapturedGate) m_Captured.Clear();
+        Application.logMessageReceivedThreaded += Capture;
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        Application.logMessageReceivedThreaded -= Capture;
+        var ui = Object.FindAnyObjectByType<HB_InGameConsoleUI>();
+        if (ui != null) Object.Destroy(ui.gameObject);
+    }
+
+    private static IEnumerator Frames(int n)
+    {
+        for (int i = 0; i < n; i++) yield return null;
+    }
+
+    private static IEnumerator Wait(Task task)
+    {
+        while (!task.IsCompleted) yield return null;
+        yield return null;
+        yield return null;
+    }
+
+    private int CountCaptured(string contains)
+    {
+        int n = 0;
+        lock (m_CapturedGate)
+        {
+            foreach (var s in m_Captured) if (s.Contains(contains)) n++;
+        }
+        return n;
+    }
+
+    private static int CountRows(HB_InGameConsoleUI ui)
+    {
+        var field = typeof(HB_InGameConsoleUI).GetField("createdLogRows", BindingFlags.NonPublic | BindingFlags.Instance);
+        return ((System.Collections.ICollection)field.GetValue(ui)).Count;
+    }
+
+    // 1. 백그라운드 새 채널: 예외 없음, 태그 이벤트는 메인 스레드
+    [UnityTest]
+    public IEnumerator T1_TagDiscovered_FromWorker()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        InGameConsole.EnsureUIInstance();
+        yield return Frames(2);
+
+        int main = Thread.CurrentThread.ManagedThreadId;
+        int raised = -1;
+        string tag = "Worker" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        Action<string> h = t => { if (t == tag) raised = Thread.CurrentThread.ManagedThreadId; };
+        HLogCore.OnTagDiscovered += h;
+
+        var task = Task.Run(() => HLogCore.GetChannel(tag));
+        yield return Wait(task);
+        HLogCore.OnTagDiscovered -= h;
+
+        Debug.Log($"IGCCHECK T1 main={main} raised={raised} faulted={task.IsFaulted} ex={task.Exception?.GetBaseException().Message}");
+        Assert.IsFalse(task.IsFaulted);
+        Assert.AreEqual(main, raised);
+    }
+
+    // 2. 메인 스레드 전용 API를 워커에서: 처리 안 함 + API별 첫 1회 에러
+    [UnityTest]
+    public IEnumerator T2_MainThreadOnly_FromWorker()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        int before = HLogCore.WatchCount;
+        var task = Task.Run(() =>
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                HLogCore.Watch("T2/Key" + i, i);
+                HLogCore.Clear();
+            }
+        });
+        yield return Wait(task);
+
+        int watchErrors = CountCaptured("Watch: 메인 스레드");
+        int clearErrors = CountCaptured("Clear: 메인 스레드");
+        Debug.Log($"IGCCHECK T2 watchCount {before}->{HLogCore.WatchCount} watchErrors={watchErrors} clearErrors={clearErrors}");
+        Assert.AreEqual(before, HLogCore.WatchCount);
+        Assert.LessOrEqual(watchErrors, 1);
+        Assert.LessOrEqual(clearErrors, 1);
+    }
+
+    // 3. Watch 재진입: 자기 해제 게터가 부활시키지 않음 / 값 Watch가 게터를 해제
+    [UnityTest]
+    public IEnumerator T3_Watch_Reentrancy_And_ValueReplacesGetter()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        int calls = 0;
+        HLogCore.Watch("T3/Self", () =>
+        {
+            calls++;
+            if (calls > 1) HLogCore.Unwatch("T3/Self");
+            return calls;
+        });
+        yield return Frames(3);
+        bool selfExists = HLogCore.Watches.ContainsKey("T3/Self");
+
+        int getterCalls = 0;
+        HLogCore.Watch("T3/Mixed", () => ++getterCalls);
+        HLogCore.Watch("T3/Mixed", (object)"value");
+        int callsAfterReplace = getterCalls;
+        yield return Frames(3);
+        string mixed = HLogCore.Watches.TryGetValue("T3/Mixed", out var e) ? e.Value : "<none>";
+
+        Debug.Log($"IGCCHECK T3 selfExists={selfExists} mixed={mixed} getterCallsAfterReplace={getterCalls - callsAfterReplace}");
+        Assert.IsFalse(selfExists);
+        Assert.AreEqual("value", mixed);
+        Assert.AreEqual(callsAfterReplace, getterCalls);
+        HLogCore.Unwatch("T3/Mixed");
+    }
+
+    // 4. UI 없이도 게터 평가 · owner 파괴 해제
+    [UnityTest]
+    public IEnumerator T4_Polling_WithoutUI_AndOwnerRelease()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        Assert.IsNull(Object.FindAnyObjectByType<HB_InGameConsoleUI>());
+        int counter = 0;
+        var owner = new GameObject("T4Owner");
+        HLogCore.Watch("T4/Counter", () => ++counter, owner);
+        yield return Frames(3);
+        int afterFrames = counter;
+
+        Object.Destroy(owner);
+        yield return Frames(3);
+        bool exists = HLogCore.Watches.ContainsKey("T4/Counter");
+
+        Debug.Log($"IGCCHECK T4 counterAfter3Frames={afterFrames} existsAfterOwnerDestroy={exists}");
+        Assert.GreaterOrEqual(afterFrames, 3);
+        Assert.IsFalse(exists);
+    }
+
+    // 5. 채널 Exception 태그 보존 (메인·워커), 다음 일반 로그에 오염 없음
+    [UnityTest]
+    public IEnumerator T5_ExceptionTag()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        var ch = HLogCore.GetChannel("T5Net");
+        ch.Exception(new InvalidOperationException("T5 main boom"));
+        var task = Task.Run(() => HLogCore.GetChannel("T5Net").Exception(new InvalidOperationException("T5 worker boom")));
+        yield return Wait(task);
+        Debug.Log("T5 plain after");
+        yield return Frames(3);
+
+        string mainTag = null, workerTag = null, plainTag = null;
+        foreach (var entry in HLogCore.History)
+        {
+            if (entry.RawMessage.Contains("T5 main boom")) mainTag = entry.Tag;
+            if (entry.RawMessage.Contains("T5 worker boom")) workerTag = entry.Tag;
+            if (entry.RawMessage.Contains("T5 plain after")) plainTag = entry.Tag;
+        }
+        Debug.Log($"IGCCHECK T5 mainTag={mainTag} workerTag={workerTag} plainTag='{plainTag}'");
+        Assert.AreEqual("T5Net", mainTag);
+        Assert.AreEqual("T5Net", workerTag);
+        Assert.IsTrue(string.IsNullOrEmpty(plainTag));
+    }
+
+    // 6. Clear는 처리 전 대기 로그도 버린다
+    [UnityTest]
+    public IEnumerator T6_ClearDropsPending()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        var task = Task.Run(() => { for (int i = 0; i < 50; i++) Debug.Log("T6 pending " + i); });
+        task.Wait();
+        HLogCore.Clear();
+        yield return Frames(3);
+
+        int remaining = 0;
+        foreach (var entry in HLogCore.History) if (entry.RawMessage.StartsWith("T6 pending")) remaining++;
+        Debug.Log($"IGCCHECK T6 remainingAfterClear={remaining}");
+        Assert.AreEqual(0, remaining);
+    }
+
+    // 7. 닫힌 콘솔: 행 지연 생성, 링 버퍼 순서, 닫아도 행 유지, 다시 열 때 동기화
+    [UnityTest]
+    public IEnumerator T7_ClosedConsoleRows_AndRing()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        HLogCore.Clear();
+        var ui = InGameConsole.EnsureUIInstance();
+        yield return Frames(2);
+        Assert.IsFalse(ui.IsConsoleOpen);
+
+        for (int i = 0; i < 1200; i++) Debug.Log("T7 log " + i);
+        yield return Frames(1);
+        int rowsClosed = CountRows(ui);
+        var history = HLogCore.History;
+        string first = history.Count > 0 ? history[0].RawMessage : "";
+        string last = history.Count > 0 ? history[history.Count - 1].RawMessage : "";
+
+        ui.OpenConsole();
+        yield return Frames(1);
+        int rowsOpen = CountRows(ui);
+
+        ui.CloseConsole();
+        for (int i = 0; i < 10; i++) Debug.Log("T7 more " + i);
+        yield return Frames(1);
+        int rowsAfterClose = CountRows(ui);
+
+        ui.OpenConsole();
+        yield return Frames(1);
+        int rowsReopen = CountRows(ui);
+        var h2 = HLogCore.History;
+
+        Debug.Log($"IGCCHECK T7 history={history.Count} first='{first}' last='{last}' rowsClosed={rowsClosed} rowsOpen={rowsOpen} rowsAfterClose={rowsAfterClose} rowsReopen={rowsReopen} lastAfter='{h2[h2.Count - 1].RawMessage}'");
+        Assert.AreEqual(1000, history.Count);
+        Assert.AreEqual("T7 log 1199", last);
+        Assert.AreEqual(0, rowsClosed);
+        Assert.AreEqual(1000, rowsOpen);
+        Assert.AreEqual(1000, rowsAfterClose);
+        Assert.AreEqual(1000, rowsReopen);
+    }
+
+    // 8. 로그 1줄당 GC 할당 (닫힌 콘솔 포함) — 측정만
+    private static IEnumerator MeasureFrame(string label, int n, Action<long> done)
+    {
+        var rec = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Memory, "GC Allocated In Frame", 4);
+        yield return null;
+        yield return null;
+        long idle = rec.LastValue;
+        for (int i = 0; i < n; i++) Debug.Log("IGC alloc probe");
+        yield return null;
+        long withLogs = rec.LastValue;
+        rec.Dispose();
+        done((withLogs - idle) / n);
+    }
+
+    [UnityTest]
+    public IEnumerator T8_AllocPerLog()
+    {
+        LogAssert.ignoreFailingMessages = true;
+        long coreOnly = 0, closedUI = 0;
+        yield return MeasureFrame("core", 200, v => coreOnly = v);
+        var ui = InGameConsole.EnsureUIInstance();
+        yield return Frames(2);
+        yield return MeasureFrame("closedUI", 200, v => closedUI = v);
+        Debug.Log($"IGCCHECK T8 alloc/log +HLogCore={coreOnly} +ConsoleUI(closed)={closedUI} uiOpen={ui.IsConsoleOpen}");
+        Assert.Pass();
+    }
+}
+#endif

@@ -93,6 +93,10 @@ namespace InGameConsoleSystem.Editor
         private readonly List<HLogCore.LogEntry> filteredLogs = new List<HLogCore.LogEntry>();
         private bool isDirty = true;
 
+        // Watch 탭은 리페인트마다 그리므로, 값이 바뀌었을 때만 코어 스냅샷(복사)을 다시 가져온다
+        private IReadOnlyDictionary<string, HLogCore.WatchEntry> cachedWatches;
+        private bool isWatchesDirty = true;
+
         // Watch Triggers
         private int watchSubTab = 0; // 0: Watch Values, 1: Condition Triggers
         private readonly List<WatchTrigger> watchTriggers = new List<WatchTrigger>();
@@ -197,6 +201,14 @@ namespace InGameConsoleSystem.Editor
 
         private void OnPlayModeChanged(PlayModeStateChange state)
         {
+            // 플레이 진입 때 코어 정적 상태가 초기화되므로(도메인 리로드를 꺼도) 창의 목록 캐시도 버린다
+            if (state == PlayModeStateChange.EnteredPlayMode || state == PlayModeStateChange.EnteredEditMode)
+            {
+                isDirty = true;
+                isWatchesDirty = true;
+                Repaint();
+            }
+
             if (state == PlayModeStateChange.EnteredPlayMode)
             {
                 for (int i = 0; i < watchTriggers.Count; i++)
@@ -258,6 +270,7 @@ namespace InGameConsoleSystem.Editor
 
         private void OnLogsCleared()
         {
+            isWatchesDirty = true;
             isStickToBottom = true;
             isScrollToBottomPending = true;
             selectedEntry = null;
@@ -267,6 +280,7 @@ namespace InGameConsoleSystem.Editor
 
         private void OnWatchRemoved(string key)
         {
+            isWatchesDirty = true;
             if (currentTab == ConsoleTab.Watch)
             {
                 Repaint();
@@ -275,6 +289,7 @@ namespace InGameConsoleSystem.Editor
 
         private void OnWatchUpdated(string key, string value)
         {
+            isWatchesDirty = true;
             CheckWatchTriggers(key, value);
 
             if (currentTab == ConsoleTab.Watch)
@@ -471,6 +486,11 @@ namespace InGameConsoleSystem.Editor
             }
 
             DrawMainToolbar();
+#if !USE_HLOG
+            EditorGUILayout.HelpBox(
+                $"{LogChannelGeneratorSettings.ConditionalSymbol} 심볼이 꺼져 있어 HLog 수집 · Watch가 동작하지 않습니다 (에디터 포함). " +
+                "툴바의 심볼 버튼으로 켜세요.", MessageType.Warning);
+#endif
             DrawSubToolbar();
 
             if (currentTab == ConsoleTab.Logs)
@@ -489,6 +509,10 @@ namespace InGameConsoleSystem.Editor
         {
             filteredLogs.Clear();
             var history = HLogCore.History;
+
+            // 검색어는 한 번만 해석한다 ("!단어"는 제외 검색)
+            bool isExclude = searchQuery.Length > 1 && searchQuery[0] == '!';
+            string term = isExclude ? searchQuery.Substring(1) : searchQuery;
 
             for (int i = 0; i < history.Count; i++)
             {
@@ -516,19 +540,11 @@ namespace InGameConsoleSystem.Editor
                 }
 
                 // 3. Search Query Filter
-                if (!string.IsNullOrEmpty(searchQuery))
+                if (!string.IsNullOrEmpty(term))
                 {
-                    if (searchQuery.StartsWith("!") && searchQuery.Length > 1)
-                    {
-                        string exclude = searchQuery.Substring(1);
-                        if (entry.RawMessage.IndexOf(exclude, StringComparison.OrdinalIgnoreCase) >= 0)
-                            continue;
-                    }
-                    else
-                    {
-                        if (entry.RawMessage.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) < 0)
-                            continue;
-                    }
+                    bool contains = entry.RawMessage.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (isExclude ? contains : !contains)
+                        continue;
                 }
 
                 filteredLogs.Add(entry);
@@ -557,7 +573,7 @@ namespace InGameConsoleSystem.Editor
                 currentTab = ConsoleTab.Logs;
             }
 
-            int watchCount = HLogCore.Watches.Count;
+            int watchCount = HLogCore.WatchCount;
             int triggerCount = watchTriggers.Count;
             string watchLabel = triggerCount > 0 ? $"Watch [{watchCount} / Triggers: {triggerCount}]" : $"Watch [{watchCount}]";
             if (GUILayout.Toggle(isWatch, watchLabel, EditorStyles.toolbarButton, GUILayout.Width(140)) != isWatch)
@@ -589,7 +605,7 @@ namespace InGameConsoleSystem.Editor
             GUI.color = Color.white;
 
             // Scripting Define Symbol Toggle
-            string condSymbol = LogChannelGeneratorSettings.FindSettings()?.ConditionalSymbol ?? "USE_HLOG";
+            string condSymbol = LogChannelGeneratorSettings.ConditionalSymbol;
             bool isSymbolDefined = IsScriptingDefineSymbolDefined(condSymbol);
             GUI.color = isSymbolDefined ? new Color(0.35f, 0.8f, 1f) : new Color(0.7f, 0.7f, 0.7f);
             if (GUILayout.Button(isSymbolDefined ? $"{condSymbol}: ON" : $"{condSymbol}: OFF", EditorStyles.toolbarButton, GUILayout.Width(105)))
@@ -1245,7 +1261,12 @@ namespace InGameConsoleSystem.Editor
 
         private void DrawWatchValuesSubView()
         {
-            var map = HLogCore.Watches;
+            if (isWatchesDirty || cachedWatches == null)
+            {
+                cachedWatches = HLogCore.Watches;
+                isWatchesDirty = false;
+            }
+            var map = cachedWatches;
 
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
             EditorGUILayout.LabelField("Watch Key", EditorStyles.boldLabel, GUILayout.Width(220));
@@ -1280,9 +1301,15 @@ namespace InGameConsoleSystem.Editor
                 GUI.Label(new Rect(x, y, 210, 18), entry.Key, EditorStyles.boldLabel);
                 x += 220;
 
-                // 2. Value (null인 경우 붉은색 강조)
+                // 2. Value (null 또는 발동한 조건은 붉은색 강조)
                 bool isNull = string.Equals(entry.Value, "null", StringComparison.OrdinalIgnoreCase);
-                if (isNull)
+                bool isCondition = IsConditionValue(entry.Value);
+                if (isCondition && entry.Value.IndexOf(" · Hit ", StringComparison.Ordinal) >= 0)
+                {
+                    GUI.color = new Color(1f, 0.45f, 0.45f);
+                    GUI.Label(new Rect(x, y, rowRect.width - x - 170 + rowRect.x, 18), entry.Value, EditorStyles.boldLabel);
+                }
+                else if (isNull)
                 {
                     GUI.color = new Color(1f, 0.45f, 0.45f);
                     GUI.Label(new Rect(x, y, rowRect.width - x - 170 + rowRect.x, 18), "null", EditorStyles.boldLabel);
@@ -1297,9 +1324,16 @@ namespace InGameConsoleSystem.Editor
                 GUI.color = new Color(0.6f, 0.65f, 0.75f);
                 GUI.Label(new Rect(rowRect.width - 165 + rowRect.x, y, 80, 18), entry.Timestamp.ToString("HH:mm:ss"), EditorStyles.miniLabel);
 
-                // 4. Trigger Quick Add
+                // 4. Trigger Quick Add (코드 조건은 이미 조건이 있으므로 대신 Reset: 발동한 조건을 다시 대기)
                 GUI.color = Color.white;
-                if (GUI.Button(new Rect(rowRect.width - 75 + rowRect.x, y, 68, 18), "+ Trigger", EditorStyles.miniButton))
+                if (isCondition)
+                {
+                    if (GUI.Button(new Rect(rowRect.width - 75 + rowRect.x, y, 68, 18), "Reset", EditorStyles.miniButton))
+                    {
+                        HLogCore.ResetCondition(entry.Key);
+                    }
+                }
+                else if (GUI.Button(new Rect(rowRect.width - 75 + rowRect.x, y, 68, 18), "+ Trigger", EditorStyles.miniButton))
                 {
                     watchTriggers.Add(new WatchTrigger(entry.Key));
                     SaveWatchTriggers();
@@ -1310,6 +1344,12 @@ namespace InGameConsoleSystem.Editor
             }
 
             EditorGUILayout.EndScrollView();
+        }
+
+        /// <summary>코드에서 등록한 조건(BreakWhen / ReportWhen)의 Watch 값인지 ("[Break] …" / "[Report] …")</summary>
+        private static bool IsConditionValue(string value)
+        {
+            return value != null && (value.StartsWith("[Break] ", StringComparison.Ordinal) || value.StartsWith("[Report] ", StringComparison.Ordinal));
         }
 
         private void DrawWatchTriggersSubView()

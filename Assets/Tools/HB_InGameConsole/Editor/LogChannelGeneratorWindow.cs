@@ -23,10 +23,15 @@ namespace InGameConsoleSystem.Editor
             window.Show();
         }
 
+        /// <summary>
+        /// 자동 생성을 이미 했다는 표시. 비-YAML 텍스트라 Git으로 공유되어, 지운 LogChannels.cs가 팀원 PC·CI에서 다시 생기지 않는다.
+        /// </summary>
+        public const string BootstrapMarkerPath = "ProjectSettings/HB_InGameConsole.LogChannels.generated.txt";
+
         [InitializeOnLoadMethod]
         private static void CheckAndBootstrapChannels()
         {
-            // UPM 패키지 임포트 직후 신규 프로젝트일 때, 프로젝트 폴더에 LogChannels.cs 가 없으면 기본 채널 파일 1회 자동 생성
+            // UPM 패키지를 처음 설치한 프로젝트에서 한 번만 기본 채널 파일을 만든다
             EditorApplication.delayCall += () =>
             {
                 EnsureLogChannelsExists();
@@ -34,16 +39,24 @@ namespace InGameConsoleSystem.Editor
         }
 
         /// <summary>
-        /// 프로젝트 폴더에 LogChannels.cs가 없을 경우(예: UPM 패키지 신규 설치 시) 기본 HLog 확장 클래스 파일을 자동 생성합니다.
+        /// 프로젝트에서 처음 한 번만 기본 HLog 확장 클래스 파일(LogChannels.cs)을 자동 생성합니다.
+        /// 이미 파일이 있거나 생성에 성공한 뒤에 마커를 남기며, 마커가 있으면 파일을 지워도 다시 만들지 않습니다
+        /// (다시 만들려면 Generator 창의 스크립트 파일 갱신).
         /// </summary>
         public static void EnsureLogChannelsExists()
         {
             try
             {
+                if (File.Exists(BootstrapMarkerPath))
+                {
+                    return;
+                }
+
                 string[] guids = AssetDatabase.FindAssets("LogChannels t:MonoScript");
                 if (guids != null && guids.Length > 0)
                 {
-                    return; // 이미 프로젝트 내에 존재함
+                    WriteBootstrapMarker(); // 이미 프로젝트 내에 존재함
+                    return;
                 }
 
                 var currentSettings = LogChannelGeneratorSettings.FindSettings();
@@ -57,16 +70,34 @@ namespace InGameConsoleSystem.Editor
 
                 if (File.Exists(filePath))
                 {
+                    WriteBootstrapMarker();
                     return;
                 }
 
                 Debug.Log($"[HLog] First-time setup detected. Automatically generating '{filePath}' for UPM integration...");
                 SaveCodeToFile(currentSettings, silent: true);
+
+                // 생성에 성공한 경우에만 기록 (실패하면 다음 리로드에서 다시 시도)
+                if (File.Exists(filePath))
+                {
+                    WriteBootstrapMarker();
+                }
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[HLog] Failed to auto-bootstrap LogChannels.cs: {ex.Message}");
             }
+        }
+
+        private static void WriteBootstrapMarker()
+        {
+            // 쓰다가 실패해도 반쯤 쓴 마커가 남지 않도록 임시 파일에 쓴 뒤 옮긴다
+            string tempPath = BootstrapMarkerPath + ".tmp";
+            File.WriteAllText(tempPath,
+                "HB_InGameConsole: LogChannels.cs auto-generation has been done for this project.\n" +
+                "Delete this file to allow auto-generation again.\n", new UTF8Encoding(false));
+            if (File.Exists(BootstrapMarkerPath)) File.Delete(BootstrapMarkerPath);
+            File.Move(tempPath, BootstrapMarkerPath);
         }
 
         private void OnEnable()
@@ -81,7 +112,7 @@ namespace InGameConsoleSystem.Editor
         {
             if (settings != null)
             {
-                EditorUtility.SetDirty(settings);
+                // 편집할 때마다 SetDirty를 하므로 여기서는 저장만 (바뀐 게 없으면 쓰지 않음)
                 AssetDatabase.SaveAssets();
 
                 if (settings.AutoGenerateOnSave)
@@ -169,7 +200,10 @@ namespace InGameConsoleSystem.Editor
                 EditorGUI.BeginChangeCheck();
                 string newDir = EditorGUILayout.TextField("생성 경로", settings.OutputDirectory);
                 string newFile = EditorGUILayout.TextField("파일명", settings.OutputFileName);
-                string newCond = EditorGUILayout.TextField("Conditional 심볼", settings.ConditionalSymbol);
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    EditorGUILayout.TextField("Conditional 심볼 (고정)", LogChannelGeneratorSettings.ConditionalSymbol);
+                }
                 bool newUseSame = EditorGUILayout.Toggle("변수명과 태그명을 동일하게 사용", settings.UseSameName);
                 bool newAutoSave = EditorGUILayout.Toggle("에디터 변경 시 자동 코드 갱신", settings.AutoGenerateOnSave);
 
@@ -178,7 +212,6 @@ namespace InGameConsoleSystem.Editor
                     Undo.RecordObject(settings, "Modify Log Channel Generator Settings");
                     settings.OutputDirectory = newDir;
                     settings.OutputFileName = newFile;
-                    settings.ConditionalSymbol = newCond;
                     settings.UseSameName = newUseSame;
                     settings.AutoGenerateOnSave = newAutoSave;
 
@@ -361,12 +394,15 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER");
             sb.AppendLine("[NoAutoStaticsCleanup]");
             sb.AppendLine("#endif");
+            sb.AppendLine("// HLog 호출은 USE_HLOG 심볼이 있을 때만 컴파일됩니다 (에디터 포함). 심볼이 없으면 호출과 인자 계산이 모두 사라집니다.");
             sb.AppendLine("public static partial class HLog");
             sb.AppendLine("{");
-            sb.AppendLine("    public static void Watch(string key, object value) => HLogCore.Watch(key, value);");
-            sb.AppendLine("    public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => HLogCore.Watch(key, getter, owner);");
-            sb.AppendLine("    public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => HLogCore.Watch<T>(key, getter, owner);");
-            sb.AppendLine("    public static void Unwatch(string key) => HLogCore.Unwatch(key);");
+            sb.AppendLine($"    private const string Cond = \"{LogChannelGeneratorSettings.ConditionalSymbol}\";");
+            sb.AppendLine();
+            sb.AppendLine("    [Conditional(Cond)] public static void Watch(string key, object value) => HLogCore.Watch(key, value);");
+            sb.AppendLine("    [Conditional(Cond)] public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => HLogCore.Watch(key, getter, owner);");
+            sb.AppendLine("    [Conditional(Cond)] public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => HLogCore.Watch<T>(key, getter, owner);");
+            sb.AppendLine("    [Conditional(Cond)] public static void Unwatch(string key) => HLogCore.Unwatch(key);");
             sb.AppendLine("    public static void Clear() => HLogCore.Clear();");
             sb.AppendLine();
             sb.AppendLine("    /// <summary>");
@@ -389,20 +425,16 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("        public static void Initialize() => HLogCore.Initialize();");
             sb.AppendLine("        public static void Shutdown() => HLogCore.Shutdown();");
             sb.AppendLine("        public static void Clear() => HLogCore.Clear();");
-            sb.AppendLine("        public static void Watch(string key, object value) => HLogCore.Watch(key, value);");
-            sb.AppendLine("        public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => HLogCore.Watch(key, getter, owner);");
-            sb.AppendLine("        public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => HLogCore.Watch<T>(key, getter, owner);");
-            sb.AppendLine("        public static void Unwatch(string key) => HLogCore.Unwatch(key);");
+            sb.AppendLine("        [Conditional(Cond)] public static void Watch(string key, object value) => HLogCore.Watch(key, value);");
+            sb.AppendLine("        [Conditional(Cond)] public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => HLogCore.Watch(key, getter, owner);");
+            sb.AppendLine("        [Conditional(Cond)] public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => HLogCore.Watch<T>(key, getter, owner);");
+            sb.AppendLine("        [Conditional(Cond)] public static void Unwatch(string key) => HLogCore.Unwatch(key);");
             sb.AppendLine("    }");
             sb.AppendLine();
 
-            string cond = settings != null && !string.IsNullOrWhiteSpace(settings.ConditionalSymbol) 
-                ? settings.ConditionalSymbol.Trim() 
-                : "USE_HLOG";
-
-            AppendChannelClass(sb, "Common", "Common", cond);
+            AppendChannelClass(sb, "Common", "Common");
             sb.AppendLine();
-            AppendChannelClass(sb, "System", "System", cond);
+            AppendChannelClass(sb, "System", "System");
 
             var channels = settings != null ? settings.Channels : new List<LogChannelGeneratorSettings.ChannelItem>();
             for (int i = 0; i < channels.Count; i++)
@@ -415,64 +447,46 @@ namespace InGameConsoleSystem.Editor
                 if (vName == "Common" || vName == "System" || vName == "Core") continue;
 
                 sb.AppendLine();
-                AppendChannelClass(sb, vName, tName, cond);
+                AppendChannelClass(sb, vName, tName);
             }
 
             sb.AppendLine("}");
             return sb.ToString();
         }
 
-        private static void AppendChannelClass(StringBuilder sb, string className, string tagName, string cond)
+        private static void AppendChannelClass(StringBuilder sb, string className, string tagName)
         {
             sb.AppendLine("    #if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER");
             sb.AppendLine("    [NoAutoStaticsCleanup]");
             sb.AppendLine("    #endif");
             sb.AppendLine($"    public static class {className}");
             sb.AppendLine("    {");
-            sb.AppendLine($"        public static readonly LogChannel Channel = new LogChannel(\"{tagName}\");");
-            sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);");
-            sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);");
-            sb.AppendLine();
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Error(object message, UnityEngine.Object context = null) => Channel.Error(message, context);");
-            sb.AppendLine();
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void LogException(Exception exception, UnityEngine.Object context = null) => Channel.LogException(exception, context);");
-            sb.AppendLine();
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Exception(Exception exception, UnityEngine.Object context = null) => Channel.Exception(exception, context);");
-            sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Watch(string key, object value) => Channel.Watch(key, value);");
-            sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => Channel.Watch(key, getter, owner);");
-            sb.AppendLine();
-            sb.AppendLine($"        [Conditional(\"UNITY_EDITOR\"), Conditional(\"{cond}\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => Channel.Watch<T>(key, getter, owner);");
-            sb.AppendLine("        public static void Unwatch(string key) => Channel.Unwatch(key);");
-            sb.AppendLine();
-            sb.AppendLine("        [Conditional(\"UNITY_EDITOR\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void BreakIf(bool condition, object message, UnityEngine.Object context = null) => Channel.BreakIf(condition, message, context);");
-            sb.AppendLine();
-            sb.AppendLine("        [Conditional(\"UNITY_EDITOR\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void Assert(bool condition, object message, UnityEngine.Object context = null) => Channel.Assert(condition, message, context);");
-            sb.AppendLine();
-            sb.AppendLine("        [Conditional(\"UNITY_EDITOR\")]");
-            sb.AppendLine("        [HideInCallstack]");
-            sb.AppendLine("        public static void ReportIf(bool condition, string reason, params (string Key, object Value)[] extraVariables) => Channel.ReportIf(condition, reason, extraVariables);");
+            // GetChannel로 가져와야 HLog.Get("태그")·콘솔 채널 On/Off와 같은 인스턴스가 된다
+            sb.AppendLine($"        public static readonly LogChannel Channel = HLogCore.GetChannel(\"{tagName}\");");
+            AppendForward(sb, "public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);");
+            AppendForward(sb, "public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);");
+            AppendForward(sb, "public static void Error(object message, UnityEngine.Object context = null) => Channel.Error(message, context);");
+            AppendForward(sb, "public static void LogError(object message, UnityEngine.Object context = null) => Channel.LogError(message, context);");
+            AppendForward(sb, "public static void LogException(Exception exception, UnityEngine.Object context = null) => Channel.LogException(exception, context);");
+            AppendForward(sb, "public static void Exception(Exception exception, UnityEngine.Object context = null) => Channel.Exception(exception, context);");
+            AppendForward(sb, "public static void Watch(string key, object value) => Channel.Watch(key, value);");
+            AppendForward(sb, "public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => Channel.Watch(key, getter, owner);");
+            AppendForward(sb, "public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => Channel.Watch<T>(key, getter, owner);");
+            AppendForward(sb, "public static void Unwatch(string key) => Channel.Unwatch(key);");
+            AppendForward(sb, "public static void BreakIf(bool condition, object message, UnityEngine.Object context = null) => Channel.BreakIf(condition, message, context);");
+            AppendForward(sb, "public static void Assert(bool condition, object message, UnityEngine.Object context = null) => Channel.Assert(condition, message, context);");
+            AppendForward(sb, "public static void ReportIf(bool condition, string reason, params (string Key, object Value)[] extraVariables) => Channel.ReportIf(condition, reason, extraVariables);");
+            AppendForward(sb, "public static void BreakWhen(string key, Func<bool> condition, object message, UnityEngine.Object owner = null, bool once = true) => Channel.BreakWhen(key, condition, message, owner, once);");
+            AppendForward(sb, "public static void ReportWhen(string key, Func<bool> condition, string reason, UnityEngine.Object owner = null, bool once = true) => Channel.ReportWhen(key, condition, reason, owner, once);");
             sb.AppendLine("    }");
+        }
+
+        private static void AppendForward(StringBuilder sb, string declaration)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        [Conditional(Cond)]");
+            sb.AppendLine("        [HideInCallstack]");
+            sb.AppendLine($"        {declaration}");
         }
 
         public static void SaveCodeToFile(LogChannelGeneratorSettings settings, bool silent = false)
@@ -492,7 +506,18 @@ namespace InGameConsoleSystem.Editor
             string filePath = Path.Combine(dir, fileName);
             string code = GenerateCode(settings);
 
-            File.WriteAllText(filePath, code, Encoding.UTF8);
+            // 내용이 같으면 쓰지 않는다 (불필요한 임포트·재컴파일 방지)
+            bool unchanged = File.Exists(filePath) && File.ReadAllText(filePath) == code;
+            if (unchanged)
+            {
+                if (!silent)
+                {
+                    EditorUtility.DisplayDialog("저장 완료", $"이미 최신 상태입니다:\n{filePath}", "확인");
+                }
+                return;
+            }
+
+            File.WriteAllText(filePath, code, new UTF8Encoding(true));
 
             if (settings != null)
             {

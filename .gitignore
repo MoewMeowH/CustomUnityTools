@@ -63,3 +63,6 @@ ProjectSettings/TimelineSettings.asset
 # Unity 크래시 복구 씬. 에디터가 자동 생성한다
 /[Aa]ssets/_Recovery/
 /[Aa]ssets/_Recovery.meta
+
+# HB_InGameConsole 자동 생성 마커. 사용 프로젝트에서는 커밋하는 파일이지만 이 작업 프로젝트에서는 무시
+/ProjectSettings/HB_InGameConsole.LogChannels.generated.txt

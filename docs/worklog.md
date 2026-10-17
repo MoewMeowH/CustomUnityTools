@@ -586,3 +586,7 @@ $ unity command cheat_status --execution abc --format json
 ## 2026-10-18 HB_TestFrameworkHelper 패키지 점검·수정
 
 * 상세: [docs/10_18/worklog_TestFrameworkHelper.md](10_18/worklog_TestFrameworkHelper.md) · 계획서: [docs/plans/2026-10-18_testframeworkhelper-package-check.md](plans/2026-10-18_testframeworkhelper-package-check.md)
+
+## 2026-10-18 HB_InGameConsole 점검·수정 (preflight)
+
+* 상세: [docs/10_18/worklog_InGameConsole.md](10_18/worklog_InGameConsole.md) · 계획서: [docs/plans/2026-10-18_ingameconsole-package-fix.md](plans/2026-10-18_ingameconsole-package-fix.md) · preflight: `docs/preflight/2026-10-18_ingameconsole/`
