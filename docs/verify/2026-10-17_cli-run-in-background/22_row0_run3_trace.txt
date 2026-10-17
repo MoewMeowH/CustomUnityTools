@@ -1,0 +1,3 @@
+21:32:40.489 T (메시지 수신 시각 기준)
+21:32:40.524 reg:  ForegroundLockTimeout REG_DWORD 0x30d40
+21:32:40.572 1 before: "app=False ps=False playing=False active=False" disk: 89: runInBackground: 0 | fg=rider64 '터미널'

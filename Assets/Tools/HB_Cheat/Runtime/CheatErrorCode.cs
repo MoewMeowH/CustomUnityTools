@@ -63,5 +63,14 @@ namespace HB.Cheat
 
         /// <summary>값이 선택 목록에 없음</summary>
         public const string UnlistedValue = "unlisted_value";
+
+        /// <summary>CLI cheat_play를 Play Mode 중에 호출</summary>
+        public const string AlreadyPlaying = "already_playing";
+
+        /// <summary>CLI cheat_stop을 에디트 모드에서 호출</summary>
+        public const string NotPlaying = "not_playing";
+
+        /// <summary>Play Mode 전환 중이거나 컴파일·에셋 갱신 중이라 Play Mode를 바꿀 수 없음</summary>
+        public const string PlayModeUnavailable = "play_mode_unavailable";
     }
 }

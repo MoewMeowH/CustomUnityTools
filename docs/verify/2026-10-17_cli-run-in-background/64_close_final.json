@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "command": "close",
+  "data": {
+    "project": "F:\\TTESTT",
+    "pid": 4212,
+    "closed": true,
+    "method": "graceful",
+    "reason": "closed"
+  },
+  "errors": [],
+  "warnings": []
+}

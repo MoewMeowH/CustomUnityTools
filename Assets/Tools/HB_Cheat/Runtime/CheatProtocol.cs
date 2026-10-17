@@ -295,6 +295,50 @@ namespace HB.Cheat
         /// <summary>Play Mode가 아니거나 재컴파일 등으로 초기화가 풀렸다 → 자동화는 멈추고 사람에게 넘긴다</summary>
         public static string NotInitialized() => Error("CheatSystem is not initialized (enter Play Mode)", CheatErrorCode.NotInitialized);
 
+        /// <summary>
+        /// CLI cheat_play(enterPlay) / cheat_stop 요청 판정. 에디터 상태는 호출부가 넘긴다 (이 어셈블리는 UnityEditor를 참조하지 않는다).
+        /// changing: Play Mode 전환 중이거나 컴파일·에셋 갱신 중. 문제가 없으면 null.
+        /// </summary>
+        public static string PlayModeRequestError(bool enterPlay, bool isPlaying, bool changing)
+        {
+            if (changing) return Error("Play Mode is changing or the editor is compiling/updating. Retry after it settles", CheatErrorCode.PlayModeUnavailable);
+            if (enterPlay && isPlaying) return Error("Already in Play Mode", CheatErrorCode.AlreadyPlaying);
+            if (!enterPlay && !isPlaying) return Error("Not in Play Mode", CheatErrorCode.NotPlaying);
+            return null;
+        }
+
+        /// <summary>
+        /// cheat_play 응답. runInBackgroundOverride.active가 false면 reason에 이유 (disabled / already_true / pipeline_driver / pipeline_config_unreadable).
+        /// original은 읽지 않았으면 null. pipeline: 설정 파일 판정 (none / disabled / enabled / unreadable)과 읽은 값.
+        /// </summary>
+        public static string PlayEntering(bool active, bool? original, string reason, string pipelineConfig, bool? pipelineEnableInBuilds, bool? pipelineAutoStart)
+        {
+            var w = new CheatJsonWriter().BeginObject()
+                .Prop("ok", true)
+                .Prop("playMode", "entering")
+                .Key("runInBackgroundOverride").BeginObject()
+                .Prop("active", active);
+            NullableProp(w, "original", original);
+            w.Prop("reason", reason)
+                .Key("pipeline").BeginObject()
+                .Prop("config", pipelineConfig);
+            NullableProp(w, "enableInBuilds", pipelineEnableInBuilds);
+            NullableProp(w, "autoStart", pipelineAutoStart);
+            return w.EndObject().EndObject().EndObject().ToString();
+        }
+
+        /// <summary>cheat_stop 응답. runInBackground 복원은 에디트 모드에 들어간 뒤라 응답 시점에는 아직 켜져 있을 수 있다.</summary>
+        public static string PlayExiting()
+        {
+            return new CheatJsonWriter().BeginObject().Prop("ok", true).Prop("playMode", "exiting").EndObject().ToString();
+        }
+
+        private static void NullableProp(CheatJsonWriter w, string key, bool? value)
+        {
+            if (value.HasValue) w.Prop(key, value.Value);
+            else w.Prop(key, (string)null);
+        }
+
         private static bool IsAutomation(CheatSource source) => source == CheatSource.Cli || source == CheatSource.Bridge;
 
         /// <summary>code 없는 에러. 패키지 안에서는 쓰지 않는다 (자동화가 분기할 수 있도록 Error(message, code)를 쓴다).</summary>

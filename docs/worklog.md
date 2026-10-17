@@ -486,3 +486,51 @@ $ unity command cheat_status --execution abc --format json
 
 - 컴파일 직후 첫 `unity command run_tests`가 2번 300초 시간 초과("Main thread operation timed out")로 끝났고, 바로 다시 돌리면 3~4초에 통과. 원인 미확인 (에디터 쪽 추정). 앞 작업에서도 "Test execution timed out, cancelling" 1회 기록.
 - `CheatProtocol.Options`에서 Provider가 `Label`이 null인 `CheatOption`을 주고 `query`가 있으면 `option.Label.IndexOf`에서 NullReferenceException → `internal_error`로 나감 (코드 읽기로 확인, 실행 확인 안 함). 고치지 않음.
+
+## 2026-10-17 HB_Cheat CLI Play 동안만 runInBackground — com.hb.cheat 0.1.5 → 0.1.6
+계획서: [docs/plans/2026-10-17_hb-cheat-cli-run-in-background.md](plans/2026-10-17_hb-cheat-cli-run-in-background.md) · 지시서: [docs/work-orders/2026-10-17_2042_HB_Cheat-CLI-Play-runInBackground-남은-확인-11-15.md](work-orders/2026-10-17_2042_HB_Cheat-CLI-Play-runInBackground-남은-확인-11-15.md) (A 부분) · 실제 확인 기록: [docs/verify/2026-10-17_cli-run-in-background/README.md](verify/2026-10-17_cli-run-in-background/README.md)
+
+### 변경 (확정)
+- `cheat_play` / `cheat_stop` CLI 명령. `cheat_play`로 시작한 Play 동안만 `Application.runInBackground`를 메모리에서 켜고, 에디트 모드로 돌아오면 원래 값으로 되돌린다. 원래 true면 아무것도 하지 않는다. 디스크에 쓰지 않는다.
+- `Editor/CliPlayRunInBackground.cs` (HB.Cheat.Editor, 심볼 조건 없음): SessionState에 소유·원래 값·대기. 복원 경로: EnteredEditMode(ExitingPlayMode에서 한 번 재적용), 정적 생성자(리로드 뒤 에디트 모드에서 남은 상태), Play 진입 실패(update 10회 유예), quitting, 다음 cheat_play 전 잔여 상태.
+- `Editor/PipelineRuntimeConfigProbe.cs`: `RuntimePipelineConfig.json`만 읽어 Pipeline 런타임 드라이버 활성 판정 (없음 / disabled / enabled → `pipeline_driver` / 읽기 실패 → `pipeline_config_unreadable`). Pipeline 0.8.0-exp.1 기준 형식.
+- `CheatSettings.runInBackgroundDuringCliPlay` (기본 켬). code 계약 3개 추가 (`already_playing`, `not_playing`, `play_mode_unavailable`, 19 → 22). README, package.json 0.1.6.
+- `docs/todo.md` 신설: Play 동안만 Game 뷰 Play Unfocused 옵션 (A 범위 밖).
+
+### 계획과 달라진 것 (확정)
+- `CheatProtocol`(HB.Cheat 런타임, HB_CHEAT 조건)에 `PlayModeRequestError`·`PlayEntering`·`PlayExiting`을 두었다. HB.Cheat.Editor는 런타임을 참조할 수 없어(심볼 조건) code·JSON은 런타임 쪽, 판정은 에디터 쪽으로 나눴다.
+- `HB.Cheat.Editor`에 `AssemblyInfo.cs`(InternalsVisibleTo: Cli, Tests) 추가. CLI·테스트 asmdef에 `HB.Cheat.Editor` 참조 추가.
+- Pipeline 판정: `enableInBuilds`가 true면 `autoStart`와 무관하게 `pipeline_driver` (드라이버가 코드 리로드 푸시에 runInBackground를 켜기 때문).
+- 실제 확인: frame은 `eval`로 `Time.frameCount` (TTESTT에 `boid.status` 없음), 0행은 `editor_play` (설정 에셋이 없어 끌 수 없음, 같은 경로), 4행 예외는 `eval`, 3행 재컴파일은 `RequestScriptCompilation` — 모두 사용자 승인.
+- 0행 재현 조건: 회차 1~6에서 정지가 재현되지 않거나 1 → 2로 기준 불통과. 회차 7(Play Unfocused + 다른 모니터 메모장에서 계속 타이핑, ready 뒤 3초 대기)에서 통과. 정지는 "Play 동안 Unity가 OS 맨 앞에 오지 않을 때" 생긴다(관측). 조건에 따라 생기며 조건은 완전히 확정되지 않았다.
+
+### 테스트 (확정)
+- ToolCreate EditMode `--filter HB.Cheat`: 66개 통과 (새 22개: 컨트롤러 수명주기, Pipeline 판정 세 갈래, 응답 JSON, code 계약 22).
+- 첫 실행에서 컴파일 오류 1건(public 테스트 인자에 internal enum, CS0051) → 문자열로 받도록 수정.
+
+### 실제 확인 (TTESTT, Unity 6000.3.23f1, com.hb.cheat를 `file:` 경로로 잠시 설치)
+| 행 | 판정 |
+|---|---|
+| 0 기준선 (editor_play, 창 뒤) | 회차 7 통과 (1 → 1) |
+| 1 cheat_play (창 뒤) | 통과 (358 → 1566, Play 중 True/True/0, 종료 후 False/False/0, 로그 2줄). 응답 항목은 기록 실수로 미확인 → 3·4행에서 대체 확인 |
+| 2 사람 툴바 Play | 통과 (값 변화 없음, 로그 0줄) |
+| 3 Play 중 재컴파일 | 통과 |
+| 4 Play 중 예외 | 통과 |
+| 5 켠 채 정상 종료 → 다시 열기 | 통과 (`editor quitting` 경로, ProjectSettings 해시 같음) |
+| 6 원래 true | 통과 (`already_true`, 쓰기 없음) |
+| 7 설정 끔 | 미실시 / 대체 확인(EditMode `Disabled_DoesNothing`). 결정 수정 A로 0행으로 옮겼고, 0행은 설정 에셋이 없어 `editor_play`로 함(같은 경로). 설정 끔 상태의 cheat_play 자체는 실제 에디터에서 실행 안 함 |
+| 8 도메인 리로드 끔 (1·3·6) | 통과 |
+| 9 켠 채 SaveAssets | 통과 (디스크 0) |
+| 10 정리 | TTESTT git status·27개 해시 = 시작 전, ToolCreate HB_Cheat 116개 해시 같음 |
+
+- 관측 (추정 포함): 창 뒤 + cheat_play는 초당 약 129프레임으로 창 앞(600 안팎)보다 낮다 — runInBackground는 멈춤을 막지만 백그라운드 속도 제한은 남는다(추정). `editor_focus`는 이번에는 Unity를 실제로 맨 앞으로 가져왔지만, 사람이 다른 창에 입력 중이면 곧 포커스를 잃었다. 드롭다운 값은 메모리에만 있다가 에디터 종료 때 레이아웃에 저장됐다.
+- 사건: 8행에서 Enter Play Mode Options를 바꾸기 전에 메모리 값을 읽지 않았다(지휘자 누락). Unity 6.3은 API로 `enabled 1 / options 0` 표현을 되살릴 수 없다. 결과적으로 디스크는 바뀌지 않았고(M5에서 git restore), 다시 연 뒤 메모리 값은 같은 `enabled=False options=None`이었다.
+- 마무리에서 에디터가 바꾼 파일(lock·ProjectSettings·EditorBuildSettings 줄바꿈, Mobile_RPAsset URP 버전)은 사용자가 미리 고정한 규칙대로 git restore.
+
+### 외부 리뷰 (review, runId 0aa25a710f, gpt_main_sol)
+- 기각: 빈 설정 파일이 Disabled로 판정된다 (major) — Pipeline `RuntimePipelineConfig.Load`도 같은 `FromJsonOverwrite`로 기본값 → 드라이버 없음 (확정). 판정기의 목적이 "드라이버가 생기는가"라 Pipeline과 같게 둔다. 빈 파일 테스트 추가, 주석으로 근거.
+- 기각: 접근 권한 없으면 `File.Exists` false → NoFile (major) — Pipeline도 같은 `File.Exists` → config null → 드라이버 없음 (확정).
+
+### 규칙서 문안 후보 (반영은 사용자 결정, 계획서 결정·결정 2 참조)
+- Play 모드 자동화 절 (계획서 "결정"의 최종 문안) + "AI 실행 전 Game 뷰 Play 모드 드롭다운 값을 읽어 기록한다. Unfocused가 아니면 사람에게 바꿔 달라고 요청한다. 지휘자가 직접 바꾸지 않는다." + "창이 뒤에 있는 동안의 성능 수치는 앞에 있을 때와 다를 수 있다" + "에디터 설정을 시험 때문에 바꿀 때는 바꾸기 전에 디스크 값과 메모리 값을 둘 다 기록한다. API로 원래 표현을 되살릴 수 없는 설정도 있으니, 되돌리기는 git 기준으로 한다."
+- 0행 결과로 문안의 "`editor_play`로 시작하면 … 멈출 수 있다 (7장 관찰)"은 "조건에 따라 멈출 수 있다"로 맞는다.

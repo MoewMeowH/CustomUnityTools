@@ -3,6 +3,7 @@
     "rootNamespace": "HB.Cheat.Editor",
     "references": [
         "HB.Cheat",
+        "HB.Cheat.Editor",
         "Unity.Pipeline.Attributes"
     ],
     "includePlatforms": [

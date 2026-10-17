@@ -1,0 +1,12 @@
+ M .claude/commands/cross-review.md
+ M .claude/commands/mode.md
+ M .claude/commands/unity-test.md
+ M .claude/commands/work-order.md
+ M .claude/scripts/xlsx_dump.py
+ M CLAUDE.md
+ M Packages/manifest.json
+ M Packages/packages-lock.json
+ M REVIEW_GUIDELINES.md
+?? .claude/commands/preflight.md
+?? _notion_appendix_all/
+?? _notion_bom/

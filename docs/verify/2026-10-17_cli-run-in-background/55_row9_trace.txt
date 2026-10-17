@@ -1,0 +1,19 @@
+22:03:37.694 9행 전: EditorSettings 1542f5afa07e387e… mtime 2026-10-17 06:50:08.000000000 +0900 |  m_EnterPlayModeOptionsEnabled: 1  m_EnterPlayModeOptions: 0 
+22:03:37.858 9행 전: ProjectSettings 4311030dba40a43f… mtime 2026-10-17 19:26:20.307060800 +0900
+22:03:37.950 9행 전 메모리: enabled=False options=None
+22:03:40.084 before: app=False ps=False playing=False | 89: runInBackground: 0
+22:03:42.238 cheat_play: {"ok":true,"playMode":"entering","runInBackgroundOverride":{"active":true,"original":false,"reason":null,"pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}}}
+22:03:50.165 during: app=True ps=True playing=True | 89: runInBackground: 0
+22:03:53.563 SaveAssets: saved
+22:03:57.694 SaveAssets 직후: 89: runInBackground: 0
+22:03:57.766 SaveAssets 직후: EditorSettings 1542f5afa07e387e… mtime 2026-10-17 06:50:08.000000000 +0900 |  m_EnterPlayModeOptionsEnabled: 1  m_EnterPlayModeOptions: 0 
+22:03:57.907 SaveAssets 직후: ProjectSettings 4311030dba40a43f… mtime 2026-10-17 19:26:20.307060800 +0900
+22:03:58.102 cheat_stop: {"ok":true,"playMode":"exiting"}
+22:04:05.205 after: app=False ps=False playing=False | 89: runInBackground: 0
+22:04:07.387 after: EditorSettings 1542f5afa07e387e… mtime 2026-10-17 06:50:08.000000000 +0900 |  m_EnterPlayModeOptionsEnabled: 1  m_EnterPlayModeOptions: 0 
+22:04:07.550 log:
+[HB_Cheat] runInBackground on for this CLI Play (original: false)
+Reloading assemblies for play mode.
+Reloading assemblies after forced synchronous recompile.
+Domain Reload Profiling: 4193ms
+[HB_Cheat] runInBackground restored to false (CLI Play ended)

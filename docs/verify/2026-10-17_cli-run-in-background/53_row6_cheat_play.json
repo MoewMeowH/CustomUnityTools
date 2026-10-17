@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "command": "command cheat_play",
+  "data": {
+    "command": "cheat_play",
+    "parameters": {},
+    "result": "{\"ok\":true,\"playMode\":\"entering\",\"runInBackgroundOverride\":{\"active\":false,\"original\":true,\"reason\":\"already_true\",\"pipeline\":{\"config\":\"none\",\"enableInBuilds\":null,\"autoStart\":null}}}",
+    "target": {
+      "host": "127.0.0.1",
+      "port": 7800,
+      "projectPath": "F:\\TTESTT"
+    }
+  },
+  "errors": [],
+  "warnings": []
+}

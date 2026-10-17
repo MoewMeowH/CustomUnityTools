@@ -179,6 +179,8 @@ unity command cheat_run --id item.enchant --args "itemId=1001 level=15"
 unity command cheat_status --execution 3 --session 1a2b3c4d   # 서버 치트는 Pending → Succeeded / Failed / TimedOut
 unity command cheat_history --limit 10
 unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 raw 참고)
+unity command cheat_play   # Play 시작. 이 Play 동안만 runInBackground (아래 참고)
+unity command cheat_stop   # Play 종료
 ```
 
 실기기 연결(ADB, 로컬 소켓 등)은 `ICheatBridge`를 구현해 `CheatSystem.RegisterBridge`로 등록합니다. 받은 한 줄을 `CheatProtocol.Handle(line)`에 넘기고 결과 JSON을 돌려주면 됩니다(`list` / `options` / `run` / `raw` / `status <id> [session=S]` / `history`). `Handle`은 **메인 스레드에서** 부릅니다(소켓 스레드에서 받았다면 메인 스레드로 넘긴 뒤 호출).
@@ -210,6 +212,9 @@ unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 ra
   | `option_provider_failed` | 선택 목록 Provider가 예외를 냄 |
   | `empty_raw_command` | raw 명령이 비어 있음 |
   | `internal_error` | 예상하지 못한 예외 |
+  | `already_playing` | `cheat_play`를 Play Mode 중에 호출 |
+  | `not_playing` | `cheat_stop`을 에디트 모드에서 호출 |
+  | `play_mode_unavailable` | Play Mode 전환 중이거나 컴파일·에셋 갱신 중이라 Play Mode를 바꿀 수 없음 (가라앉은 뒤 다시) |
 
   처리는 쓰는 쪽이 정합니다. 예: 자동화는 `ok:false`면 `code`를 기록하고 멈춘 뒤 사람에게 넘긴다.
 
@@ -239,6 +244,28 @@ unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (아래 ra
 - `cheat_run` 응답의 `execution.id`와 `session`을 저장하고 `cheat_status --execution <id> --session <session>`으로 조회합니다. **`--session`을 빼면** run과 status 사이에 초기화가 끼었을 때 다른 실행의 결과를 받을 수 있습니다.
 - 끝나지 않은 실행은 히스토리에서 지워지지 않습니다(최근 `HistoryCapacity`건 + 끝나지 않은 실행을 남기므로 그만큼 용량을 넘을 수 있습니다). 끝난 실행은 새 실행이 용량 이상 쌓이기 전에 조회합니다.
 - 예: 자동화는 `done`이면 결과를 읽고, `blocked`이거나 `ok:false`면 멈추고 사람에게 넘긴다.
+
+### cheat_play / cheat_stop (Play 동안만 runInBackground)
+
+에디터는 Unity 창이 OS 맨 앞에 없으면 Play 프레임이 1~2에서 멈출 수 있습니다(관찰). `editor_focus`가 성공을 돌려줘도 창이 앞에 오지 않을 수 있습니다. `cheat_play`로 Play를 시작하면 **그 Play 동안만** `Application.runInBackground`를 켜고, 에디트 모드로 돌아오면 원래 값으로 되돌립니다.
+
+- **설치된 프로젝트의 설정을 존중하고 강제하지 않습니다.** 메모리상 값만 바꾸고 `ProjectSettings.asset`·PlayerSettings를 디스크에 쓰지 않습니다. 원래 값이 이미 true면 아무것도 하지 않습니다.
+- 사람이 누른 Play와 `editor_play`로 시작한 Play에는 영향이 없습니다.
+- 되돌리는 경로: 정상 종료, Play 중 재컴파일·도메인 리로드 뒤(에디트 모드에서 남은 상태를 발견하면), Play 진입 실패(컴파일 에러 등), 에디터 종료. 상태는 `SessionState`에 둡니다.
+- Play 중에 사용자가 직접 바꾼 runInBackground도 종료 때 원래 값으로 덮입니다.
+- 설정: `Tools > HB > Cheat` 설정의 **Run In Background During Cli Play** (기본 켬). 끄면 `cheat_play`는 Play만 시작합니다.
+- Pipeline 런타임 드라이버도 runInBackground를 켜고 되돌립니다. 소유자를 하나로 두기 위해, `ProjectSettings/Packages/com.unity.pipeline/RuntimePipelineConfig.json`이 있고 `enableInBuilds`가 true면 HB_Cheat는 아무것도 하지 않습니다. 이 판정은 Pipeline API가 아니라 파일만 읽습니다 (**Pipeline 0.8.0-exp.1 기준 형식, 추정**).
+
+```json
+{"ok":true,"playMode":"entering",
+ "runInBackgroundOverride":{"active":true,"original":false,"reason":null,
+                            "pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}}}
+```
+
+- `active`가 false면 `reason`: `disabled`(설정 꺼짐) / `already_true`(원래 true) / `pipeline_driver` / `pipeline_config_unreadable`(파일은 있는데 읽지 못함). `original`은 읽지 않았으면 null.
+- `pipeline.config`: `none`(파일 없음) / `disabled` / `enabled` / `unreadable`.
+- `cheat_stop` 응답은 `{"ok":true,"playMode":"exiting"}`입니다. 복원은 에디트 모드에 들어간 뒤라 응답 시점에는 아직 켜져 있을 수 있습니다.
+- 켜고 되돌릴 때 Console에 `[HB_Cheat] runInBackground ...` 한 줄씩 남깁니다.
 
 ### raw (자동화 경로는 기본 꺼짐)
 

@@ -1,0 +1,51 @@
+1542f5afa07e387e04e72bda4fd9d1f34b68544b23c95ff11e3b0de9a486e2a4 */f/TTESTT/ProjectSettings/EditorSettings.asset
+27:  m_EnterPlayModeOptionsEnabled: 1
+28:  m_EnterPlayModeOptions: 0
+21:57:38.482 [옵션 변경] enabled=True options=DisableDomainReload
+1542f5afa07e387e04e72bda4fd9d1f34b68544b23c95ff11e3b0de9a486e2a4 */f/TTESTT/ProjectSettings/EditorSettings.asset
+27:  m_EnterPlayModeOptionsEnabled: 1
+28:  m_EnterPlayModeOptions: 0
+21:57:40.617 8-1 before: app=False ps=False playing=False | 89: runInBackground: 0
+21:57:42.756 8-1 cheat_play: {"ok":true,"playMode":"entering","runInBackgroundOverride":{"active":true,"original":false,"reason":null,"pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}}}
+21:57:51.870 8-1 frame#1 957
+21:57:59.920 8-1 frame#2 2165
+21:57:59.939 8-1 during: app=True ps=True playing=True | 89: runInBackground: 0
+21:58:02.028 8-1 cheat_stop: {"ok":true,"playMode":"exiting"}
+21:58:09.071 8-1 after: app=False ps=False playing=False | 89: runInBackground: 0
+21:58:11.163 8-1 log:
+[HB_Cheat] runInBackground on for this CLI Play (original: false)
+[HB_Cheat] runInBackground restored to false (CLI Play ended)
+21:58:23.792 8-3 before: app=False ps=False playing=False | 89: runInBackground: 0
+21:58:25.790 8-3 cheat_play: {"ok":true,"playMode":"entering","runInBackgroundOverride":{"active":true,"original":false,"reason":null,"pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}}}
+21:58:31.874 8-3 during: app=True ps=True playing=True | 89: runInBackground: 0
+21:58:33.972 8-3 RequestScriptCompilation: requested
+21:59:49.963 8-3 settled (False/False): app=True ps=True playing=True | 89: runInBackground: 0 | failed=False
+21:59:56.361 8-3 cheat_stop: {"ok":true,"playMode":"exiting"}
+22:00:03.446 8-3 final: app=False ps=False playing=False | 89: runInBackground: 0
+22:00:05.552 8-3 log:
+[HB_Cheat] runInBackground on for this CLI Play (original: false)
+Reloading assemblies after finishing script compilation.
+Reloading assemblies after forced synchronous recompile.
+Domain Reload Profiling: 4478ms
+[HB_Cheat] runInBackground restored to false (CLI Play ended)
+22:00:06.037 8-6 [시험 준비] set true: app=True | 89: runInBackground: 0
+22:00:08.133 8-6 cheat_play: {"ok":true,"playMode":"entering","runInBackgroundOverride":{"active":false,"original":true,"reason":"already_true","pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}}}
+22:00:14.412 8-6 during: app=True ps=True playing=True | 89: runInBackground: 0
+22:00:16.589 8-6 cheat_stop: {"ok":true,"playMode":"exiting"}
+22:00:23.729 8-6 after stop: app=True ps=True playing=False | 89: runInBackground: 0
+22:00:25.927 8-6 [준비 복구] set false: app=False ps=False | 89: runInBackground: 0
+22:00:28.107 8-6 HB_Cheat log (없어야 함):
+(없음)
+22:00:34.243 [옵션 복구] enabled=False options=None
+1542f5afa07e387e04e72bda4fd9d1f34b68544b23c95ff11e3b0de9a486e2a4 */f/TTESTT/ProjectSettings/EditorSettings.asset
+27:  m_EnterPlayModeOptionsEnabled: 1
+28:  m_EnterPlayModeOptions: 0
+1542f5afa07e387e04e72bda4fd9d1f34b68544b23c95ff11e3b0de9a486e2a4 *ProjectSettings/EditorSettings.asset
+-rw-r--r-- 1 whdms 197609 1635 2026-10-17 06:50:08.000000000 +0900 /f/TTESTT/ProjectSettings/EditorSettings.asset
+22:00:45.524 [옵션 복구 2] enabled=True options=DisableDomainReload, DisableSceneReload
+22:00:47.605 [재확인] enabled=True options=DisableDomainReload, DisableSceneReload
+1542f5afa07e387e04e72bda4fd9d1f34b68544b23c95ff11e3b0de9a486e2a4 */f/TTESTT/ProjectSettings/EditorSettings.asset
+22:01:05.962 [옵션 복구 3: 동작 기준] enabled=False options=None
+1542f5afa07e387e04e72bda4fd9d1f34b68544b23c95ff11e3b0de9a486e2a4 */f/TTESTT/ProjectSettings/EditorSettings.asset
+27:  m_EnterPlayModeOptionsEnabled: 1
+28:  m_EnterPlayModeOptions: 0

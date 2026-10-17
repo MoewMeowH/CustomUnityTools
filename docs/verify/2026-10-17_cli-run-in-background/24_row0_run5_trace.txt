@@ -1,0 +1,14 @@
+21:37:47.706 T (메시지 수신: "방금 테스트는 내가 메모장을 에디터와 같은 모니터로 해서 메모장이 가려져서 테스트가 잘 안된거같아 / 동일하게 한번더 해줘 메모장의 위치는 다른 모니터에서 할게")
+21:37:52.739 1 T+5s before: "app=False ps=False playing=False active=False" disk: 89: runInBackground: 0 | fg=Notepad '*qqqqq.txt - 메모장'
+21:38:17.631 1b T+30s pre-play | fg=Notepad '*qqqqq.txt - 메모장'
+21:38:18.578 2 T+31s editor_play: "result": "Entered play mode"
+21:38:20.526 2b after editor_play | fg=Notepad '*qqqqq.txt - 메모장'
+21:38:24.051 3 status ready
+21:38:24.066 4 frame#1 "frame=1 paused=False active=True" | fg=Unity 'TTESTT - Sample2_BoidSystem - Windows, Mac, Linux - Unity 6.3 LTS (6000.3.23f1) <DX12>'
+21:38:30.168 5 frame#2 "frame=171 paused=False active=False" | fg=Notepad '*qqqqq.txt - 메모장'
+21:38:33.146 6 editor_focus: "result": "Editor focused via DockArea" | fg=Unity 'TTESTT - Sample2_BoidSystem - Windows, Mac, Linux - Unity 6.3 LTS (6000.3.23f1) <DX12>'
+21:38:36.161 7 frame#3 "frame=613 paused=False active=True" | fg=Notepad '*qqqqq.txt - 메모장'
+21:38:40.209 8 frame#4 "frame=841 paused=False active=True" | fg=Notepad '*qqqqq.txt - 메모장'
+21:38:43.221 9 during: "app=False ps=False playing=True active=False" disk: 89: runInBackground: 0
+21:38:45.307 10 T+58s editor_stop: "result": "Exited play mode"
+21:38:49.307 11 after: "app=False ps=False playing=False active=False" disk: 89: runInBackground: 0 | fg=Notepad '*todo.txt - 메모장'

@@ -1,0 +1,23 @@
+21:48:41.714 T (메시지 수신: "시작") 조건: Play Unfocused + 다른 모니터 메모장 타이핑
+21:48:44.759 T+3s before: "app=False ps=False playing=False active=False" disk: 89: runInBackground: 0
+21:49:11.136 T+30s R0 editor_play: "result": "Entered play mode"
+21:49:16.544 T+35s R0 status ready
+21:49:22.969 T+41s R0 frame#1 "1 active=False"
+21:49:30.970 T+49s R0 frame#2 "1 active=False"
+21:49:31.076 R0 fps(기록만)=0.0
+21:49:31.135 R0 during: "app=False ps=False playing=True active=False" disk: 89: runInBackground: 0
+21:49:33.069 R0 판정: 통과 (frame #2 == #1)
+21:49:33.084 T+52s R0 editor_stop: "result": "Exited play mode"
+21:49:38.106 T+57s R0 after: "app=False ps=False playing=False active=False" disk: 89: runInBackground: 0
+21:49:56.143 T+75s R1 cheat_play: "result": "{\"
+21:50:01.090 T+80s R1 status ready
+21:50:07.476 T+86s R1 frame#1 "358 active=False"
+21:50:15.511 T+94s R1 frame#2 "1566 active=False"
+21:50:15.632 R1 fps(기록만)=128.7
+21:50:15.691 T+94s R1 during: "app=True ps=True playing=True active=False" disk: 89: runInBackground: 0
+21:50:17.808 T+96s R1 cheat_stop: "result": "{\"
+21:50:23.867 T+102s R1 after: "app=False ps=False playing=False active=False" disk: 89: runInBackground: 0
+21:50:25.996 R1 Editor.log [HB_Cheat] runInBackground 줄:
+[HB_Cheat] runInBackground on for this CLI Play (original: false)
+[HB_Cheat] runInBackground restored to false (CLI Play ended)
+21:50:26.434 T+105s 끝

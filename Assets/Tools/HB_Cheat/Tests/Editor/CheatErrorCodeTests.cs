@@ -130,6 +130,10 @@ namespace HB.Cheat.Tests
                 return CheatProtocol.Status(1);
             });
             yield return (CheatErrorCode.SessionChanged, () => CheatProtocol.Status(1, "deadbeef"));
+            yield return (CheatErrorCode.AlreadyPlaying, () => CheatProtocol.PlayModeRequestError(true, true, false));
+            yield return (CheatErrorCode.NotPlaying, () => CheatProtocol.PlayModeRequestError(false, false, false));
+            yield return (CheatErrorCode.PlayModeUnavailable, () => CheatProtocol.PlayModeRequestError(true, false, true));
+            yield return (CheatErrorCode.PlayModeUnavailable, () => CheatProtocol.PlayModeRequestError(false, true, true));
             yield return (CheatErrorCode.InternalError, () =>
             {
                 // 깨진 정의(Args null)로 예상하지 못한 예외를 만든다 → Handle 보호막
@@ -164,7 +168,7 @@ namespace HB.Cheat.Tests
                 produced.Add(code);
             }
             CollectionAssert.AreEquivalent(contract, produced, "테스트로 나오지 않는 계약 code가 있음");
-            Assert.AreEqual(19, contract.Count, "계약 code 수가 바뀌었다 (README 표와 함께 갱신)");
+            Assert.AreEqual(22, contract.Count, "계약 code 수가 바뀌었다 (README 표와 함께 갱신)");
         }
 
         [Test]

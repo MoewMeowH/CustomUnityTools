@@ -1,0 +1,12 @@
+21:29:13.844 0 user: "가로 진행할게 아까랑 똑같아" (메모장 최대화로 Unity를 가린 것으로 이해)
+21:29:13.860 1 before: "app=False ps=False playing=False active=False" disk: 89: runInBackground: 0 | 
+21:29:16.978 2 editor_play: "result": "Entered play mode"
+21:29:22.525 3 status ready
+21:29:22.541 4 frame#1 "frame=1 paused=False active=True" | 
+21:29:28.491 5 frame#2 "frame=579 paused=False active=True" | 
+21:29:31.596 6 editor_focus: "result": "Editor focused via DockArea" | 
+21:29:34.620 7 frame#3 "frame=1475 paused=False active=True" | 
+21:29:38.780 8 frame#4 "frame=2074 paused=False active=True" | 
+21:29:41.891 9 during: "app=False ps=False playing=True active=True" disk: 89: runInBackground: 0
+21:29:44.014 10 editor_stop: "result": "Exited play mode"
+21:29:47.961 11 after: "app=False ps=False playing=False active=True" disk: 89: runInBackground: 0 | 

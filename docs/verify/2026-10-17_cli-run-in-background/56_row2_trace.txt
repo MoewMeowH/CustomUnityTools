@@ -1,0 +1,8 @@
+22:06:50.643 사용자: "Play 눌렀어, 지금"
+22:06:54.937 during: app=False ps=False playing=True frame=1148 | 89: runInBackground: 0
+22:07:02.231 during 2: app=False ps=False playing=True frame=2047 | 89: runInBackground: 0
+22:07:06.385 log (HB_Cheat runInBackground 줄):
+22:07:06.959 SessionState: owned=False
+22:07:28.810 사용자: "지금 눌렀어"
+22:07:32.848 after: app=False ps=False playing=False | 89: runInBackground: 0
+22:07:35.556 HB_Cheat runInBackground 줄 수 (Play 누른 뒤): 0

@@ -1,0 +1,21 @@
+ M Assets/Tools/HB_Cheat/Editor/CheatSettings.cs
+ M Assets/Tools/HB_Cheat/Editor/Cli/CheatCliCommands.cs
+ M Assets/Tools/HB_Cheat/Editor/Cli/HB.Cheat.Editor.Cli.asmdef
+ M Assets/Tools/HB_Cheat/README.md
+ M Assets/Tools/HB_Cheat/Runtime/CheatErrorCode.cs
+ M Assets/Tools/HB_Cheat/Runtime/CheatProtocol.cs
+ M Assets/Tools/HB_Cheat/Tests/Editor/CheatErrorCodeTests.cs
+ M Assets/Tools/HB_Cheat/Tests/Editor/HB.Cheat.Tests.Editor.asmdef
+ M Assets/Tools/HB_Cheat/package.json
+ M CLAUDE.md
+?? .claude/commands/preflight.md
+?? Assets/Tools/HB_Cheat/Editor/AssemblyInfo.cs
+?? Assets/Tools/HB_Cheat/Editor/AssemblyInfo.cs.meta
+?? Assets/Tools/HB_Cheat/Editor/CliPlayRunInBackground.cs
+?? Assets/Tools/HB_Cheat/Editor/CliPlayRunInBackground.cs.meta
+?? Assets/Tools/HB_Cheat/Editor/PipelineRuntimeConfigProbe.cs
+?? Assets/Tools/HB_Cheat/Editor/PipelineRuntimeConfigProbe.cs.meta
+?? Assets/Tools/HB_Cheat/Tests/Editor/CliPlayRunInBackgroundTests.cs
+?? Assets/Tools/HB_Cheat/Tests/Editor/CliPlayRunInBackgroundTests.cs.meta
+?? docs/plans/2026-10-17_hb-cheat-cli-run-in-background.md
+?? "docs/work-orders/2026-10-17_2042_HB_Cheat-CLI-Play-runInBackground-\353\202\250\354\235\200-\355\231\225\354\235\270-11-15.md"
