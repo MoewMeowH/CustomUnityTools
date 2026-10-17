@@ -22,17 +22,24 @@ namespace HB.TestFrameworkHelper.Editor
             var issues = SlotValidatorEngine.ScanPrefabs(new[] { "Assets" });
             if (issues.Count > 0)
             {
-                string msg = $"[Inspector Validation 경고] 총 {issues.Count}개의 필수 슬롯/스크립트 누락이 발견되었습니다!";
+                // 경고(배열 · List의 빈 원소)는 로그만, 에러(빈 슬롯 · Missing 스크립트)만 LIVE 빌드를 막는다
+                int errorCount = 0;
+                foreach (var issue in issues)
+                {
+                    if (issue.Severity == EValidationSeverity.Error) errorCount++;
+                }
+
+                string msg = $"[Inspector Validation 경고] 총 {issues.Count}개(에러 {errorCount}개)의 필수 슬롯/스크립트 문제가 발견되었습니다!";
                 BuildHelper.LogWarning(msg);
 
                 foreach (var issue in issues)
                 {
-                    BuildHelper.LogWarning($"  ↳ [{issue.IssueType}] {issue.AssetPath} > {issue.ComponentName}.{issue.FieldName}");
+                    BuildHelper.LogWarning($"  ↳ [{issue.Severity}][{issue.IssueType}] {issue.AssetPath} > {issue.ComponentName}.{issue.FieldName}");
                 }
 
-                if (context.BuildType == EBuildType.LIVE)
+                if (errorCount > 0 && context.BuildType == EBuildType.LIVE)
                 {
-                    throw BuildHelper.ThrowError($"LIVE 배포 빌드 차단: {issues.Count}개의 인스펙터 슬롯 누락이 존재합니다. 빌드 전 수정하세요.");
+                    throw BuildHelper.ThrowError($"LIVE 배포 빌드 차단: {errorCount}개의 인스펙터 슬롯 누락이 존재합니다. 빌드 전 수정하세요.");
                 }
             }
             else

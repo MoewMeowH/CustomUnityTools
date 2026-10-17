@@ -1,11 +1,14 @@
-﻿using System.Text;
+﻿using System.Linq;
+using System.Text;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace HB.TestFrameworkHelper.Editor
 {
     /// <summary>
     /// Unity Test Framework (UTF) EditMode 테스트 러너 연동
     /// Window > General > Test Runner 또는 Jenkins CI/CD에서 자동 실행됩니다.
+    /// 에러(빈 슬롯 · Missing 스크립트)만 실패로 보고, 경고(배열 · List의 빈 원소)는 로그로만 남깁니다.
     /// </summary>
     public class SlotValidationTests
     {
@@ -14,12 +17,18 @@ namespace HB.TestFrameworkHelper.Editor
         {
             var issues = SlotValidatorEngine.ScanPrefabs(new[] { "Assets" });
 
-            if (issues.Count > 0)
+            foreach (var warning in issues.Where(i => i.Severity == EValidationSeverity.Warning))
+            {
+                Debug.LogWarning($"[NeedSlotNullCheck 경고] {warning}");
+            }
+
+            var errors = issues.Where(i => i.Severity == EValidationSeverity.Error).ToList();
+            if (errors.Count > 0)
             {
                 var sb = new StringBuilder();
-                sb.AppendLine($"[NeedSlotNullCheck 검증 실패] 총 {issues.Count}개의 필수 슬롯/스크립트 누락이 발견되었습니다:\n");
+                sb.AppendLine($"[NeedSlotNullCheck 검증 실패] 총 {errors.Count}개의 필수 슬롯/스크립트 누락이 발견되었습니다:\n");
 
-                foreach (var issue in issues)
+                foreach (var issue in errors)
                 {
                     sb.AppendLine($"  - [{issue.IssueType}] {issue.AssetPath} > {issue.ComponentName}.{issue.FieldName}");
                     if (!string.IsNullOrEmpty(issue.Description))

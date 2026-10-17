@@ -582,3 +582,7 @@ $ unity command cheat_status --execution abc --format json
 ## 2026-10-18 HB_E2String 패키지 점검·수정
 
 * 상세: [docs/10_18/worklog_Estring.md](10_18/worklog_Estring.md) · 계획서: [docs/plans/2026-10-18_e2string-package-check.md](plans/2026-10-18_e2string-package-check.md)
+
+## 2026-10-18 HB_TestFrameworkHelper 패키지 점검·수정
+
+* 상세: [docs/10_18/worklog_TestFrameworkHelper.md](10_18/worklog_TestFrameworkHelper.md) · 계획서: [docs/plans/2026-10-18_testframeworkhelper-package-check.md](plans/2026-10-18_testframeworkhelper-package-check.md)

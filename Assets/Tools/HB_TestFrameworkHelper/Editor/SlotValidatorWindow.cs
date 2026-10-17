@@ -10,6 +10,7 @@ namespace HB.TestFrameworkHelper.Editor
         private Vector2 m_ScrollPosition;
         private string m_SearchFolder = "Assets";
         private bool m_HasScanned = false;
+        private bool m_ScanCanceled = false;
 
         [MenuItem("Tools/HB/Test Framework Helper")]
         public static void ShowWindow()
@@ -73,7 +74,15 @@ namespace HB.TestFrameworkHelper.Editor
 
         private void ExecuteScan()
         {
-            m_Issues = SlotValidatorEngine.ScanPrefabs(new[] { m_SearchFolder });
+            // 없는 폴더면 FindAssets 동작에 맡기지 않고 바로 알린다
+            string folder = (m_SearchFolder ?? string.Empty).Trim().TrimEnd('/');
+            if (!AssetDatabase.IsValidFolder(folder))
+            {
+                EditorUtility.DisplayDialog("알림", $"프로젝트에 없는 폴더입니다: {m_SearchFolder}", "확인");
+                return;
+            }
+
+            m_Issues = SlotValidatorEngine.ScanPrefabs(new[] { folder }, true, out m_ScanCanceled);
             m_HasScanned = true;
             Repaint();
         }
@@ -86,6 +95,11 @@ namespace HB.TestFrameworkHelper.Editor
                 return;
             }
 
+            if (m_ScanCanceled)
+            {
+                EditorGUILayout.HelpBox("검사를 취소했습니다. 아래 결과는 취소 전까지 검사한 프리팹만 포함합니다.", MessageType.Warning);
+            }
+
             if (m_Issues.Count == 0)
             {
                 GUI.color = Color.green;
@@ -96,7 +110,12 @@ namespace HB.TestFrameworkHelper.Editor
 
             EditorGUILayout.BeginHorizontal();
             GUI.color = new Color(1f, 0.4f, 0.4f);
-            GUILayout.Label($"총 {m_Issues.Count}개의 슬롯/컴포넌트 누락이 발견되었습니다.", EditorStyles.boldLabel);
+            int errorCount = 0;
+            foreach (var issue in m_Issues)
+            {
+                if (issue.Severity == EValidationSeverity.Error) errorCount++;
+            }
+            GUILayout.Label($"총 {m_Issues.Count}개의 슬롯/컴포넌트 문제가 발견되었습니다. (에러 {errorCount} · 경고 {m_Issues.Count - errorCount})", EditorStyles.boldLabel);
             GUI.color = Color.white;
             EditorGUILayout.EndHorizontal();
 
@@ -116,10 +135,11 @@ namespace HB.TestFrameworkHelper.Editor
                     EValidationIssueType.NullSlot => "[빈 슬롯 (Null)]",
                     EValidationIssueType.MissingReference => "[Missing 참조]",
                     EValidationIssueType.MissingComponent => "[Missing 스크립트]",
+                    EValidationIssueType.NullElement => "[빈 원소 (경고)]",
                     _ => "[이슈]"
                 };
 
-                GUI.color = new Color(1f, 0.5f, 0.5f);
+                GUI.color = issue.Severity == EValidationSeverity.Warning ? new Color(1f, 0.85f, 0.4f) : new Color(1f, 0.5f, 0.5f);
                 GUILayout.Label(typeLabel, EditorStyles.boldLabel, GUILayout.Width(120));
                 GUI.color = Color.white;
 
