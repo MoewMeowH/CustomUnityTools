@@ -1,0 +1,17 @@
+수신 22:43:28: "(가)로 진행, 디파인 켰어" / 확인 22:43:33
+defines:  scriptingDefineSymbols:  Standalone: SENTIS_ANALYTICS_ENABLED;APP_UI_EDITOR_ONLY  additionalCompilerArguments: {} 
+ProjectSettings.asset mtime: 2026-10-15 12:25:39.524043200 +0900
+log since offset 5366826: error CS=12 / compiler errors=0
+2388:Library\PackageCache\com.hb.cheat@e0d44ad8b766\Integration\InGameConsole\InGameConsoleCheatHost.cs(33,32): error CS0117: 'InGameConsole' does not contain a definition for 'AddExternalView'
+2390:Library\PackageCache\com.hb.cheat@e0d44ad8b766\Integration\InGameConsole\InGameConsoleCheatHost.cs(39,45): error CS0117: 'InGameConsole' does not contain a definition for 'ShowExternalView'
+2392:Library\PackageCache\com.hb.cheat@e0d44ad8b766\Integration\InGameConsole\InGameConsoleCheatHost.cs(43,45): error CS0117: 'InGameConsole' does not contain a definition for 'IsExternalViewActive'
+2394:Library\PackageCache\com.hb.cheat@e0d44ad8b766\Integration\InGameConsole\InGameConsoleCheatHost.cs(45,47): error CS0117: 'InGameConsole' does not contain a definition for 'RemoveExternalView'
+2396:## Script Compilation Error for: Csc Library/Bee/artifacts/1900b0aEDbg.dag/HB.Cheat.InGameConsole.dll (+2 others)
+2399:Library\PackageCache\com.hb.cheat@e0d44ad8b766\Integration\InGameConsole\InGameConsoleCheatHost.cs(33,32): error CS0117: 'InGameConsole' does not contain a definition for 'AddExternalView'
+2400:Library\PackageCache\com.hb.cheat@e0d44ad8b766\Integration\InGameConsole\InGameConsoleCheatHost.cs(39,45): error CS0117: 'InGameConsole' does not contain a definition for 'ShowExternalView'
+2401:Library\PackageCache\com.hb.cheat@e0d44ad8b766\Integration\InGameConsole\InGameConsoleCheatHost.cs(43,45): error CS0117: 'InGameConsole' does not contain a definition for 'IsExternalViewActive'
+ScriptAssemblies HB.Cheat*:
+22:43:22.344450100 /f/AI/ToolTest6.3/ToolTest6.3/Library/ScriptAssemblies/HB.Cheat.Editor.Generator.dll
+22:43:22.343449900 /f/AI/ToolTest6.3/ToolTest6.3/Library/ScriptAssemblies/HB.Cheat.Editor.dll
+22:43:22.295244800 /f/AI/ToolTest6.3/ToolTest6.3/Library/ScriptAssemblies/HB.Cheat.dll
+HB.Cheat.Editor.Cli.dll: 없음

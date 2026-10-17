@@ -1,0 +1,4 @@
+833-    Standalone: SENTIS_ANALYTICS_ENABLED;APP_UI_EDITOR_ONLY
+  scriptingDefineSymbols:
+    Standalone: SENTIS_ANALYTICS_ENABLED;APP_UI_EDITOR_ONLY
+  additionalCompilerArguments: {}

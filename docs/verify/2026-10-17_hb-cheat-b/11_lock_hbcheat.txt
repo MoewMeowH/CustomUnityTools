@@ -1,0 +1,8 @@
+3:    "com.hb.cheat": {
+4-      "version": "https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Cheat#869e2614fca423e4d327eefed7abe954a765d772",
+5-      "depth": 0,
+6-      "source": "git",
+7-      "dependencies": {},
+8-      "hash": "869e2614fca423e4d327eefed7abe954a765d772"
+9-    },
+10-    "com.hb.ingameconsole": {

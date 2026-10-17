@@ -1,0 +1,11 @@
+15-3 꺼짐 (manifest 수정 23:01:48, 로그 오프셋 6130319)
+lock ingameconsole 항목: 0
+error CS=0 / compiler errors=0 / "compilationFailed": false
+ScriptAssemblies HB.*:
+22:55:42.276563500 Library/ScriptAssemblies/HB.Cheat.Editor.Cli.dll
+22:55:42.262988300 Library/ScriptAssemblies/HB.Cheat.Editor.Generator.dll
+22:55:42.261987100 Library/ScriptAssemblies/HB.Cheat.Editor.dll
+22:55:42.213200100 Library/ScriptAssemblies/HB.Cheat.dll
+22:55:42.260988100 Library/ScriptAssemblies/HB.ScreenRecorder.Editor.dll
+loaded HB.Cheat.InGameConsole? not loaded
+  off 구간 로그: 1회 리로드

@@ -1,0 +1,4 @@
+ M CLAUDE.md
+?? .claude/commands/preflight.md
+?? docs/plans/2026-10-17_hb-cheat-remaining-checks.md
+?? docs/verify/2026-10-17_hb-cheat-b/

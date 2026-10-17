@@ -1,0 +1,14 @@
+판정 22:56:08, 로그 오프셋 5583691 이후
+error CS=0 / compiler errors=0
+"compilationFailed": false "compiling": false 
+22:55:42.276563500 Library/ScriptAssemblies/HB.Cheat.Editor.Cli.dll
+22:55:42.262988300 Library/ScriptAssemblies/HB.Cheat.Editor.Generator.dll
+22:55:42.261987100 Library/ScriptAssemblies/HB.Cheat.Editor.dll
+22:55:42.214206800 Library/ScriptAssemblies/HB.Cheat.InGameConsole.dll
+22:55:42.213200100 Library/ScriptAssemblies/HB.Cheat.dll
+cheat 명령:
+"cheat_history" "cheat_list" "cheat_options" "cheat_play" "cheat_raw" "cheat_run" "cheat_status" "cheat_stop" 
+cheat_list 응답:
+{"ok":true,"cheats":[]}
+eval 디파인: "result": "APP_UI_EDITOR_ONLY;DEV_CHEAT;HB_CHEAT;SENTIS_ANALYTICS_ENABLED"
+디스크 디파인:  Standalone: SENTIS_ANALYTICS_ENABLED;APP_UI_EDITOR_ONLY

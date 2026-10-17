@@ -534,3 +534,43 @@ $ unity command cheat_status --execution abc --format json
 ### 규칙서 문안 후보 (반영은 사용자 결정, 계획서 결정·결정 2 참조)
 - Play 모드 자동화 절 (계획서 "결정"의 최종 문안) + "AI 실행 전 Game 뷰 Play 모드 드롭다운 값을 읽어 기록한다. Unfocused가 아니면 사람에게 바꿔 달라고 요청한다. 지휘자가 직접 바꾸지 않는다." + "창이 뒤에 있는 동안의 성능 수치는 앞에 있을 때와 다를 수 있다" + "에디터 설정을 시험 때문에 바꿀 때는 바꾸기 전에 디스크 값과 메모리 값을 둘 다 기록한다. API로 원래 표현을 되살릴 수 없는 설정도 있으니, 되돌리기는 git 기준으로 한다."
 - 0행 결과로 문안의 "`editor_play`로 시작하면 … 멈출 수 있다 (7장 관찰)"은 "조건에 따라 멈출 수 있다"로 맞는다.
+
+## 2026-10-17 HB_Cheat 남은 확인 11~15 (B) — com.hb.cheat 0.1.6, ToolTest6.3 (6000.3.23f1)
+계획서: [docs/plans/2026-10-17_hb-cheat-remaining-checks.md](plans/2026-10-17_hb-cheat-remaining-checks.md) · 실제 확인 기록: [docs/verify/2026-10-17_hb-cheat-b/README.md](verify/2026-10-17_hb-cheat-b/README.md) · 14 순서표: [14_mobile_checklist.md](verify/2026-10-17_hb-cheat-b/14_mobile_checklist.md)
+
+코드 변경 없음 (관찰·기록). 결함은 고치지 않고 todo.
+
+### 결과
+| 항목 | 판정 |
+|---|---|
+| 11 6.3 컴파일 | 0.1.6 회차: 11 본체 컴파일 통과, InGameConsole 연동 컴파일 실패(결함, 원인 확정), 15-1 판정 보류 → InGameConsole HEAD로 올린 뒤 통과 |
+| 15 Samples Import / pipeline 감지 / InGameConsole 감지 | 통과 / 통과 (꺼짐·켜짐) / 통과 (꺼짐·켜짐) |
+| 12 서버 큐 멈춤 UI | 통과 |
+| 13 마우스 클릭·드래그 | 통과 (터치 미확인 → 14) |
+| 14 모바일 | 미실시, 순서표만 |
+
+### 결함 (todo, 고치지 않음)
+- InGameConsole 외부 탭 API를 추가하면서(`c451c74`) 버전을 1.0.0에서 올리지 않았고, HB_Cheat 감지 하한도 1.0.0 → 오래된 InGameConsole(`bfd6415a`)에서 연동 컴파일 에러 (`CS0117 AddExternalView` 등 4종).
+- 런타임 설정(Prefer Console Tab)을 바꿔도 레지스트리가 다시 생성되지 않아 반영되지 않음. 설정 에셋도 디스크에 저장되지 않음.
+- README에 "콘솔 탭 모드에서는 CHEAT 버튼이 없음" 안내 없음.
+
+### 계획과 달라진 것 (확정)
+- 설치 기준 `#84016a8`(0.1.5) → A 커밋 `869e2614…`(0.1.6), 전체 해시 (짧은 해시는 UPM이 거부).
+- InGameConsole을 HEAD(`43f1f105…`)로 올려 진행 (기준선과 다름, 정리에서 `bfd6415a`로 되돌림).
+- pipeline이 없는 동안 CLI 대신 Editor.log와 `Library/ScriptAssemblies`로 관측.
+- 순서: 샘플 Import를 pipeline 뒤로.
+- 15-3을 위해 InGameConsole을 쓰는 프로젝트 파일 3개를 `F:/AI/ToolTest6.3/_B_moved/`로 옮김 (되돌리지 않음).
+- 13을 13-A(콘솔 탭)·13-B(독립 패널, Prefer Console Tab 끔 + Generate Registry)로 나눔.
+- 지휘자 누락: 기준선에서 원본 사본을 남기지 않아, 정리 때 manifest·lock·디파인 줄을 재구성해 해시로 원본과 같음을 확인.
+
+### 관측 (추정 포함)
+- UPM git URL은 짧은 해시를 받지 않는다 (에러 원문 확정) → README 설치 안내 보강 후보.
+- Unity Hub가 꺼져 있으면 패키지 추가 resolve가 멈춘다 (`hubIPCService` IPC 시간 초과, Hub를 켜자 진행).
+- 창이 뒤에 있으면 manifest 변경 뒤 resolve는 되지만 스크립트 컴파일이 미뤄졌다 (사람 클릭 뒤 진행).
+- Pipeline `screenshot`은 카메라 렌더만 담고 UI Toolkit 오버레이를 담지 않는다 (추정).
+- 에디터 종료 때 Unity가 디파인 순서를 바꿔 저장했다.
+- 정리 뒤 기준선 대비 차이: 레이아웃 파일 2개뿐 (`CurrentMaximizeLayout.dwlt`의 드롭다운 값 0 → 2).
+
+### 규칙서 문안 후보 (추가)
+- "패키지에 공개 API를 추가하면 버전을 올리고, 쓰는 쪽 감지 하한도 맞춘다".
+- "확인 0단계에서 해시와 함께 원본 파일 사본도 남긴다 (git이 없는 프로젝트는 특히). 정리 때 해시가 다르면 사본으로 되돌린다." (사용자, B 기준선 누락 뒤)
