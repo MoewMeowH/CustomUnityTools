@@ -49,6 +49,8 @@ namespace HB.Cheat.Editor
         [Header("Automation")]
         [Tooltip("Unity CLI cheat_raw / 브리지 raw로 서버에 임의 문자열을 보내도록 허용 (기본 꺼짐). 패널 Raw 탭은 항상 허용.")]
         [SerializeField] private bool allowRawFromAutomation;
+        [Tooltip("Unity CLI cheat_play로 시작한 Play 동안만 Application.runInBackground를 켜고 끝나면 되돌린다 (창이 뒤에 있어도 프레임 진행). 디스크 설정은 쓰지 않고, 원래 true면 아무것도 하지 않는다. editor_play와 사람이 누른 Play에는 영향 없음.")]
+        [SerializeField] private bool runInBackgroundDuringCliPlay = true;
 
         [Header("Release Guard")]
         [Tooltip("Development Build가 아닌 빌드를 릴리즈로 본다 (치트 심볼이 켜져 있으면 빌드 실패)")]
@@ -73,6 +75,7 @@ namespace HB.Cheat.Editor
         public int HistoryCapacity => Mathf.Max(1, historyCapacity);
         public bool DontDestroyOnLoad => dontDestroyOnLoad;
         public bool AllowRawFromAutomation => allowRawFromAutomation;
+        public bool RunInBackgroundDuringCliPlay => runInBackgroundDuringCliPlay;
 
         public bool TreatNonDevelopmentAsRelease => treatNonDevelopmentAsRelease;
         public IReadOnlyList<string> ReleaseDefines => releaseDefines;

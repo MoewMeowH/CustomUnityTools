@@ -11,7 +11,9 @@ namespace HB.Cheat.Editor
     ///   unity command cheat_options --id item.enchant --arg level --args "itemId=1001"
     ///   unity command cheat_run --id item.enchant --args "itemId=1001 level=15"
     ///   unity command cheat_status --execution 3 --session 1a2b3c4d
+    ///   unity command cheat_play / cheat_stop
     /// 서버 치트는 Pending으로 시작하므로 cheat_status로 결과를 확인한다.
+    /// cheat_play로 시작한 Play 동안만 runInBackground를 켠다 (CliPlayRunInBackground).
     /// 실패는 예외가 아니라 항상 {"ok":false,"error":"..."} JSON으로 돌려준다.
     /// </summary>
     internal static class CheatCliCommands
@@ -70,6 +72,35 @@ namespace HB.Cheat.Editor
             });
         }
 
+        [CliCommand("cheat_play", "Enter Play Mode. Keeps Application.runInBackground on during this Play only and restores it afterwards; settings on disk are not written (JSON)")]
+        public static string Play()
+        {
+            return Guard(() =>
+            {
+                string error = CheatProtocol.PlayModeRequestError(true, EditorApplication.isPlaying, IsPlayModeChanging());
+                if (error != null) return error;
+
+                var decision = CliPlayRunInBackgroundHook.Begin(CheatSettings.Load().RunInBackgroundDuringCliPlay);
+                EditorApplication.isPlaying = true;
+                var pipeline = decision.Pipeline;
+                return CheatProtocol.PlayEntering(decision.Active, decision.Original, decision.Reason,
+                    PipelineConfigName(pipeline.State), pipeline.EnableInBuilds, pipeline.AutoStart);
+            });
+        }
+
+        [CliCommand("cheat_stop", "Exit Play Mode. runInBackground set by cheat_play is restored after returning to Edit Mode (JSON)")]
+        public static string Stop()
+        {
+            return Guard(() =>
+            {
+                string error = CheatProtocol.PlayModeRequestError(false, EditorApplication.isPlaying, IsPlayModeChanging());
+                if (error != null) return error;
+
+                EditorApplication.isPlaying = false;
+                return CheatProtocol.PlayExiting();
+            });
+        }
+
         [CliCommand("cheat_history", "Recent cheat executions (JSON)")]
         public static string History([CliArg("limit", "Number of entries (default 20)")] int limit = 20)
         {
@@ -91,6 +122,23 @@ namespace HB.Cheat.Editor
             {
                 Debug.LogException(e);
                 return CheatProtocol.Error(e.Message, CheatErrorCode.InternalError);
+            }
+        }
+
+        private static bool IsPlayModeChanging()
+        {
+            return EditorApplication.isCompiling || EditorApplication.isUpdating
+                || EditorApplication.isPlayingOrWillChangePlaymode != EditorApplication.isPlaying;
+        }
+
+        private static string PipelineConfigName(PipelineRuntimeConfigProbe.State state)
+        {
+            switch (state)
+            {
+                case PipelineRuntimeConfigProbe.State.NoFile: return "none";
+                case PipelineRuntimeConfigProbe.State.Disabled: return "disabled";
+                case PipelineRuntimeConfigProbe.State.DriverEnabled: return "enabled";
+                default: return "unreadable";
             }
         }
 

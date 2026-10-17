@@ -3,6 +3,7 @@
     "rootNamespace": "HB.Cheat.Tests",
     "references": [
         "HB.Cheat",
+        "HB.Cheat.Editor",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
