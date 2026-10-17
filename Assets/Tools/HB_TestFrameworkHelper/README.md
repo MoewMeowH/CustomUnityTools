@@ -15,7 +15,9 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
 ## 주요 구성 및 기능
 1. **`[NeedSlotNullCheck]` 어트리뷰트**: 필수 연결이 필요한 직렬화 필드에 선언하여 검증 대상으로 등록합니다.
 2. **Roslyn Analyzer & CodeFix (`HB_TestFrameworkHelper.dll`)**:
-   - `private` 필드에 `[NeedSlotNullCheck]`를 선언하고 `[SerializeField]`를 누락한 경우 IDE에서 컴파일 경고를 표시하며, CodeFix 액션으로 `[SerializeField]`를 자동 추가합니다.
+   - public이 아닌 필드(`private` · `protected` · `internal`)에 `[NeedSlotNullCheck]`를 선언하고 `[SerializeField]`를 누락한 경우 IDE에서 컴파일 경고를 표시하며, CodeFix 액션으로 `[SerializeField]`를 자동 추가합니다.
+   - `static` · `readonly` · `const` · `[NonSerialized]` 필드처럼 Unity가 직렬화하지 않는 필드에 `[NeedSlotNullCheck]`를 선언하면 경고를 표시합니다 (`[SerializeField]`로도 해결되지 않음).
+   - 필드 타입이 `UnityEngine.Object` 계열(또는 그 배열 · `List`)이 아니면 컴파일 에러를 표시합니다.
 3. **프리팹 스캐너 엔진 (`SlotValidatorEngine`)**:
    - `TypeCache.GetFieldsWithAttribute<NeedSlotNullCheckAttribute>()`를 사용해 대상 필드를 수집하고, 프리팹 내 미할당 슬롯(`NullSlot`)과 끊어진 컴포넌트(`MissingComponent`)를 검사합니다.
 4. **에디터 검증 윈도우 (`Tools > HB > Test Framework Helper`)**:
