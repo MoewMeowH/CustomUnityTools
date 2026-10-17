@@ -7,117 +7,223 @@ using UnityEngine;
 
 /// <summary>
 /// 특정 서브시스템 단위로 독립적인 로그 필터링과 On/Off 제어를 지원하는 로깅 채널 클래스입니다.
+/// 로그·Watch·진단 메서드는 모두 [Conditional("USE_HLOG")]라 심볼이 없으면 호출과 인자 계산까지 컴파일에서 사라집니다.
+/// 로그 출력은 어느 스레드에서나 호출할 수 있고, Watch 계열은 메인 스레드 전용입니다.
 /// </summary>
 public class LogChannel
 {
     public readonly string Tag;
+    private readonly bool _defaultEnabled;
+    private readonly LogType _defaultFilterLevel;
+#if USE_HLOG
     private readonly UnityEngine.Logger _logger;
+#else
+    private bool _enabled;
+    private LogType _filterLevel;
+#endif
 
+    /// <summary>
+    /// 같은 태그의 채널이 이미 있으면 HLog.Get(태그)은 먼저 만들어진 쪽을 돌려줍니다.
+    /// 생성 코드(LogChannels.cs)는 HLogCore.GetChannel로 채널을 가져오므로 HLog.Common과 HLog.Get("Common")은 같은 인스턴스입니다.
+    /// </summary>
     public LogChannel(string tag, bool enabled = true, LogType filterLevel = LogType.Log)
     {
         Tag = tag;
+        _defaultEnabled = enabled;
+        _defaultFilterLevel = filterLevel;
+#if USE_HLOG
         _logger = new UnityEngine.Logger(UnityEngine.Debug.unityLogger.logHandler)
         {
             logEnabled = enabled,
             filterLogType = filterLevel
         };
         HLogCore.RegisterTag(tag);
+#else
+        _enabled = enabled;
+        _filterLevel = filterLevel;
+#endif
+        HLogCore.RegisterChannelInstance(this);
+    }
+
+    /// <summary>플레이 모드에 들어갈 때 처음 상태(생성자 인자)로 되돌린다 (도메인 리로드를 꺼도 같은 시작 상태)</summary>
+    internal void ResetToDefaults()
+    {
+        Enabled = _defaultEnabled;
+        FilterLevel = _defaultFilterLevel;
     }
 
     public bool Enabled
     {
+#if USE_HLOG
         get => _logger.logEnabled;
         set => _logger.logEnabled = value;
+#else
+        get => _enabled;
+        set => _enabled = value;
+#endif
     }
 
     public LogType FilterLevel
     {
+#if USE_HLOG
         get => _logger.filterLogType;
         set => _logger.filterLogType = value;
+#else
+        get => _filterLevel;
+        set => _filterLevel = value;
+#endif
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Log(object message, UnityEngine.Object context = null)
     {
+#if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Log, Tag, message, context);
+#endif
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Warning(object message, UnityEngine.Object context = null)
     {
+#if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Warning, Tag, message, context);
+#endif
     }
 
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Error(object message, UnityEngine.Object context = null)
     {
+#if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Error, Tag, message, context);
+#endif
     }
 
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void LogError(object message, UnityEngine.Object context = null)
     {
+#if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
         _logger.Log(LogType.Error, Tag, message, context);
+#endif
     }
 
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Exception(Exception exception, UnityEngine.Object context = null)
     {
-        if (!HLogCore.IsLogEnabled || !Enabled) return;
-        _logger.LogException(exception, context);
+#if USE_HLOG
+        LogExceptionWithTag(exception, context);
+#endif
     }
 
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void LogException(Exception exception, UnityEngine.Object context = null)
     {
-        if (!HLogCore.IsLogEnabled || !Enabled) return;
-        _logger.LogException(exception, context);
+#if USE_HLOG
+        LogExceptionWithTag(exception, context);
+#endif
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
+#if USE_HLOG
+    /// <summary>
+    /// Logger.LogException에는 태그 인자가 없으므로, 출력하는 동안 채널 태그를 코어에 알려 이 채널 로그로 분류되게 한다.
+    /// (원본 예외와 스택 출력은 그대로)
+    /// </summary>
+    [HideInCallstack]
+    private void LogExceptionWithTag(Exception exception, UnityEngine.Object context)
+    {
+        if (!HLogCore.IsLogEnabled || !Enabled) return;
+
+        string previous = HLogCore.PushChannelTag(Tag);
+        try
+        {
+            _logger.LogException(exception, context);
+        }
+        finally
+        {
+            HLogCore.PopChannelTag(previous);
+        }
+    }
+#endif
+
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Watch(string key, object value)
     {
+#if USE_HLOG
         HLogCore.Watch($"{Tag}/{key}", value);
+#endif
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Watch(string key, Func<object> getter, UnityEngine.Object owner = null)
     {
+#if USE_HLOG
         HLogCore.Watch($"{Tag}/{key}", getter, owner);
+#endif
     }
 
-    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null)
     {
+#if USE_HLOG
         HLogCore.Watch<T>($"{Tag}/{key}", getter, owner);
+#endif
     }
 
     /// <summary>
     /// 이 채널에 등록한 Watch 항목을 제거합니다.
     /// </summary>
-    [Conditional("UNITY_EDITOR"), Conditional("USE_HLOG")]
+    [Conditional("USE_HLOG")]
     public void Unwatch(string key)
     {
+#if USE_HLOG
         HLogCore.Unwatch($"{Tag}/{key}");
+#endif
     }
 
     /// <summary>
-    /// 조건이 참일 경우 에러 로그를 출력하고 유니티 에디터를 일시 정지(Pause)합니다.
+    /// 조건을 등록해 매 프레임 감시하고, 거짓에서 참으로 바뀌는 순간 에러 로그 + 에디터 일시정지(빌드는 에러 로그만). 메인 스레드 전용.
+    /// 예: HLog.Common.BreakWhen("HpNegative", () => hp &lt; 0 &amp;&amp; !isDead, "체력 이상", this);
+    /// Watch 목록에 함께 보이고 Unwatch(key) 또는 owner 파괴로 해제됩니다. once면 한 번 발동 후 멈춤.
     /// </summary>
-    [Conditional("UNITY_EDITOR")]
+    [Conditional("USE_HLOG")]
+    public void BreakWhen(string key, Func<bool> condition, object message, UnityEngine.Object owner = null, bool once = true)
+    {
+#if USE_HLOG
+        HLogCore.WatchCondition($"{Tag}/{key}", condition, HLogCore.WatchConditionKind.Break, message == null ? null : message.ToString(), owner, once, Tag);
+#endif
+    }
+
+    /// <summary>
+    /// 조건을 등록해 매 프레임 감시하고, 거짓에서 참으로 바뀌는 순간 리포트 파일 + 에러 로그 + 에디터 일시정지(빌드는 에러 로그만). 메인 스레드 전용.
+    /// </summary>
+    [Conditional("USE_HLOG")]
+    public void ReportWhen(string key, Func<bool> condition, string reason, UnityEngine.Object owner = null, bool once = true)
+    {
+#if USE_HLOG
+        HLogCore.WatchCondition($"{Tag}/{key}", condition, HLogCore.WatchConditionKind.Report, reason, owner, once, Tag);
+#endif
+    }
+
+    /// <summary>
+    /// 조건이 참일 경우 에러 로그를 출력하고 유니티 에디터를 일시 정지(Pause)합니다. (에디터에서만 동작)
+    /// </summary>
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void BreakIf(bool condition, object message, UnityEngine.Object context = null)
     {
-#if UNITY_EDITOR
+#if USE_HLOG && UNITY_EDITOR
         if (condition)
         {
             _logger.Log(LogType.Error, Tag, $"[BreakIf Hit] {message}", context);
@@ -127,13 +233,13 @@ public class LogChannel
     }
 
     /// <summary>
-    /// 조건이 거짓일 경우 Assertion 실패 로그를 출력하고 유니티 에디터를 일시 정지(Pause)합니다.
+    /// 조건이 거짓일 경우 Assertion 실패 로그를 출력하고 유니티 에디터를 일시 정지(Pause)합니다. (에디터에서만 동작)
     /// </summary>
-    [Conditional("UNITY_EDITOR")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Assert(bool condition, object message, UnityEngine.Object context = null)
     {
-#if UNITY_EDITOR
+#if USE_HLOG && UNITY_EDITOR
         if (!condition)
         {
             _logger.Log(LogType.Assert, Tag, $"[Assertion Failed] {message}", context);
@@ -143,13 +249,13 @@ public class LogChannel
     }
 
     /// <summary>
-    /// 조건이 참일 경우 Watch 변수 현황 및 지정된 추가 정보들을 텍스트 파일(Report)로 프로젝트 경로에 저장하고 에디터를 일시정지합니다.
+    /// 조건이 참일 경우 Watch 변수 현황 및 지정된 추가 정보들을 텍스트 파일(Report)로 프로젝트 경로에 저장하고 에디터를 일시정지합니다. (에디터에서만 동작)
     /// </summary>
-    [Conditional("UNITY_EDITOR")]
+    [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void ReportIf(bool condition, string reason, params (string Key, object Value)[] extraVariables)
     {
-#if UNITY_EDITOR
+#if USE_HLOG && UNITY_EDITOR
         if (condition)
         {
             string filePath = ExportReportFile(reason, extraVariables);
@@ -159,7 +265,7 @@ public class LogChannel
 #endif
     }
 
-#if UNITY_EDITOR
+#if USE_HLOG && UNITY_EDITOR
     private string ExportReportFile(string reason, (string Key, object Value)[] extraVars)
     {
         try

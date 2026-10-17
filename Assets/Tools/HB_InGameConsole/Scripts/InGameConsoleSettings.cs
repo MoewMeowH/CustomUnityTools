@@ -97,17 +97,13 @@ namespace InGameConsoleSystem
             {
                 if (s_Instance == null)
                 {
-                    // 사용자 설정이 없으면 코드 기본값 (패키지에 .asset을 두지 않음: 상위 Unity 버전 직렬화 호환 문제)
+                    // 사용자 설정이 없으면 코드 기본값 (패키지에 .asset을 두지 않음: 상위 Unity 버전 직렬화 호환 문제).
+                    // 에디터도 빌드와 같은 경로(Resources)만 읽는다. 다른 위치의 에셋을 에디터에서만 쓰면 빌드 동작이 달라진다.
                     s_Instance = Resources.Load<InGameConsoleSettings>(UserResourcePath);
 #if UNITY_EDITOR
                     if (s_Instance == null)
                     {
-                        string[] sGuids = UnityEditor.AssetDatabase.FindAssets("t:InGameConsoleSettings");
-                        if (sGuids != null && sGuids.Length > 0)
-                        {
-                            string path = UnityEditor.AssetDatabase.GUIDToAssetPath(sGuids[0]);
-                            s_Instance = UnityEditor.AssetDatabase.LoadAssetAtPath<InGameConsoleSettings>(path);
-                        }
+                        WarnMisplacedSettingsOnce();
                     }
 #endif
                     if (s_Instance == null)
@@ -120,6 +116,23 @@ namespace InGameConsoleSystem
                 return s_Instance;
             }
         }
+
+#if UNITY_EDITOR
+        private static bool s_WarnedMisplaced;
+
+        private static void WarnMisplacedSettingsOnce()
+        {
+            if (s_WarnedMisplaced) return;
+            s_WarnedMisplaced = true;
+
+            string[] guids = UnityEditor.AssetDatabase.FindAssets("t:InGameConsoleSettings");
+            if (guids == null || guids.Length == 0) return;
+
+            string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+            Debug.LogWarning($"[InGameConsole] 설정 에셋 '{path}'은(는) 빌드에서 읽히지 않는 위치라 사용하지 않습니다. " +
+                             $"'{UserAssetPath}'로 옮기세요 (Tools > HB > In-Game Console > Settings).");
+        }
+#endif
 
         /// <summary>
         /// 캐시된 설정을 버리고 다음 접근 시 다시 로드합니다. (사용자 설정 에셋을 새로 만든 뒤 호출)

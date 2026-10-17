@@ -36,7 +36,6 @@ namespace InGameConsoleSystem.Editor
 
         [SerializeField] private string outputDirectory = "Assets/Scripts";
         [SerializeField] private string outputFileName = "LogChannels.cs";
-        [SerializeField] private string conditionalSymbol = "USE_HLOG";
         [SerializeField] private bool useSameName = true;
         [SerializeField] private bool autoGenerateOnSave = true;
         [SerializeField] private List<ChannelItem> channels = new List<ChannelItem>();
@@ -53,11 +52,10 @@ namespace InGameConsoleSystem.Editor
             set => outputFileName = value;
         }
 
-        public string ConditionalSymbol
-        {
-            get => string.IsNullOrWhiteSpace(conditionalSymbol) ? "USE_HLOG" : conditionalSymbol.Trim();
-            set => conditionalSymbol = string.IsNullOrWhiteSpace(value) ? "USE_HLOG" : value.Trim();
-        }
+        /// <summary>
+        /// HLog 동작 심볼. 고정값 (커스텀 심볼은 지원하지 않음: Conditional은 OR 조건이라 심볼을 늘리면 끄는 수단이 사라진다)
+        /// </summary>
+        public const string ConditionalSymbol = "USE_HLOG";
 
         public bool UseSameName
         {

@@ -6,21 +6,36 @@ using InGameConsoleSystem;
 using UnityEngine;
 using UnityEngine.UIElements;
 
+/// <summary>
+/// 인게임 콘솔 진입점. USE_HLOG 심볼이 있을 때만 동작하며(에디터 포함), 없으면 모든 API가 아무것도 하지 않습니다.
+/// 공개 API는 메인 스레드 전용입니다 (다른 스레드에서 호출하면 처리하지 않고 처음 한 번만 에러 로그).
+/// </summary>
 #if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
 [AutoStaticsCleanup]
 #endif
 public static partial class InGameConsole
 {
+#if USE_HLOG
     private static HB_InGameConsoleUI s_UIInstance;
     private static PanelSettings s_DefaultPanelSettings;
     private static bool s_IsInitialized = false;
+#endif
 
-    public static bool IsInitialized => s_IsInitialized;
+    public static bool IsInitialized
+    {
+#if USE_HLOG
+        get => s_IsInitialized;
+#else
+        get => false;
+#endif
+    }
 
     public static HB_InGameConsoleUI Instance
     {
         get
         {
+#if USE_HLOG
+            if (!HLogCore.RequireMainThread(HLogCore.MainThreadApi.ConsoleUI)) return null;
             if (s_UIInstance == null)
             {
 #if UNITY_2023_1_OR_NEWER
@@ -30,9 +45,13 @@ public static partial class InGameConsole
 #endif
             }
             return s_UIInstance;
+#else
+            return null;
+#endif
         }
     }
 
+#if USE_HLOG
 #if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER)
 #if UNITY_EDITOR
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -54,9 +73,12 @@ public static partial class InGameConsole
             Initialize();
         }
     }
+#endif
 
     public static void Initialize()
     {
+#if USE_HLOG
+        if (!HLogCore.RequireMainThread(HLogCore.MainThreadApi.ConsoleUI)) return;
         if (s_IsInitialized) return;
 
         HLogCore.Initialize();
@@ -68,10 +90,13 @@ public static partial class InGameConsole
         }
 
         s_IsInitialized = true;
+#endif
     }
 
     public static HB_InGameConsoleUI EnsureUIInstance()
     {
+#if USE_HLOG
+        if (!HLogCore.RequireMainThread(HLogCore.MainThreadApi.ConsoleUI)) return null;
         if (Instance != null)
         {
             return s_UIInstance;
@@ -106,8 +131,12 @@ public static partial class InGameConsole
         }
 
         return s_UIInstance;
+#else
+        return null;
+#endif
     }
 
+#if USE_HLOG
     /// <summary>
     /// 사용할 PanelSettings를 결정합니다. 설정에 지정된 것이 없으면 코드로 만든 기본 PanelSettings를 씁니다.
     /// (패키지에 .asset을 두면 상위 Unity 버전에서 저장된 직렬화 형식을 하위 버전이 읽지 못하므로 코드로 생성)
@@ -154,13 +183,17 @@ public static partial class InGameConsole
         panelSettings.sortingOrder = 1000;
         EnsureThemeStyleSheet(panelSettings);
 
-        // 테마를 못 찾은 경우에도 경고가 반복되지 않도록 (코드로 만든 기본 객체에만 적용)
+        // 테마를 못 찾은 경우에도 경고가 반복되지 않도록 (코드로 만든 기본 객체에만 적용).
+        // 비공개 필드라 Unity 버전에 따라 없을 수 있으며, 없으면 경고 억제만 빠진다.
         try
         {
             var field = typeof(PanelSettings).GetField("m_DisableNoThemeWarning", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             field?.SetValue(panelSettings, true);
         }
-        catch { }
+        catch (System.Exception)
+        {
+            // 경고 억제 실패는 동작에 영향이 없다
+        }
 
         s_DefaultPanelSettings = panelSettings;
         return panelSettings;
@@ -185,10 +218,32 @@ public static partial class InGameConsole
         if (theme != null)
             panelSettings.themeStyleSheet = theme;
     }
+#endif
 
-    public static void Open() => Instance?.OpenConsole();
-    public static void Close() => Instance?.CloseConsole();
-    public static void Toggle() => Instance?.ToggleConsole();
+    public static void Open()
+    {
+#if USE_HLOG
+        var ui = Instance;
+        if (ui != null) ui.OpenConsole();
+#endif
+    }
+
+    public static void Close()
+    {
+#if USE_HLOG
+        var ui = Instance;
+        if (ui != null) ui.CloseConsole();
+#endif
+    }
+
+    public static void Toggle()
+    {
+#if USE_HLOG
+        var ui = Instance;
+        if (ui != null) ui.ToggleConsole();
+#endif
+    }
+
     public static void ClearLogs() => HLogCore.Clear();
 
     /// <summary>
@@ -196,27 +251,39 @@ public static partial class InGameConsole
     /// </summary>
     public static bool AddExternalView(string viewName, VisualElement content)
     {
+#if USE_HLOG
         var ui = Instance;
         if (ui == null) return false;
         ui.AddExternalView(viewName, content);
         return true;
+#else
+        return false;
+#endif
     }
 
     public static void RemoveExternalView(string viewName)
     {
+#if USE_HLOG
         var ui = Instance;
         if (ui != null) ui.RemoveExternalView(viewName);
+#endif
     }
 
     public static void ShowExternalView(string viewName)
     {
+#if USE_HLOG
         var ui = Instance;
         if (ui != null) ui.ShowExternalView(viewName);
+#endif
     }
 
     public static bool IsExternalViewActive(string viewName)
     {
+#if USE_HLOG
         var ui = Instance;
         return ui != null && ui.IsExternalViewActive(viewName);
+#else
+        return false;
+#endif
     }
 }
