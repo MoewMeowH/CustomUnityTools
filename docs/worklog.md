@@ -590,3 +590,7 @@ $ unity command cheat_status --execution abc --format json
 ## 2026-10-18 HB_InGameConsole 점검·수정 (preflight)
 
 * 상세: [docs/10_18/worklog_InGameConsole.md](10_18/worklog_InGameConsole.md) · 계획서: [docs/plans/2026-10-18_ingameconsole-package-fix.md](plans/2026-10-18_ingameconsole-package-fix.md) · preflight: `docs/preflight/2026-10-18_ingameconsole/`
+
+## 2026-10-18 todo 통합
+
+* 바탕화면 `todo.txt`(2026-10-16 갱신본)를 `docs/todo.md`로 합침. 이후 할 일은 `docs/todo.md` 하나로 관리 (사용자 결정). 오늘 확인해 끝난 항목은 "끝난 항목" 절로, 미점검 패키지(HB_Build · HB_Cheat · HB_ScreenRecorder) 점검 항목 추가.
