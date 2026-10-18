@@ -1,5 +1,8 @@
 # todo
 
+> **2026-10-18: Notion으로 옮김.** 앞으로는 Notion `Getting Started › Todo › Tools`의 **Tools Todo** 데이터베이스를 기준으로 관리한다 (상태 · 도구 · 분류로 정리, 끝난 항목은 "완료"). https://app.notion.com/p/c0c1911d910b43a0bc800d6c79ff2935
+> 아래 내용은 옮길 때의 사본이다. 여기서 고치지 말고 Notion에서 고친다.
+
 > 2026-10-18: 바탕화면 `todo.txt`(2026-10-16 갱신본)를 이 파일로 합쳤다. Unity 프로젝트 `F:\AI\ToolCreate`, C# 저장소 `F:\AI\ToolWithCS`.
 
 ## 패키지 점검 (2026-10-18 기준 미점검)
