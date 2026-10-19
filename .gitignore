@@ -66,3 +66,6 @@ ProjectSettings/TimelineSettings.asset
 
 # HB_InGameConsole 자동 생성 마커. 사용 프로젝트에서는 커밋하는 파일이지만 이 작업 프로젝트에서는 무시
 /ProjectSettings/HB_InGameConsole.LogChannels.generated.txt
+/subagent_in/
+# 기획서 시안 이미지 (사내 시안, image_prep.py collect 결과). CLAUDE.md "이미지 첨부" 규칙
+/docs/image/
