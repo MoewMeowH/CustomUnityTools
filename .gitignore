@@ -69,3 +69,5 @@ ProjectSettings/TimelineSettings.asset
 /subagent_in/
 # 기획서 시안 이미지 (사내 시안, image_prep.py collect 결과). CLAUDE.md "이미지 첨부" 규칙
 /docs/image/
+# push_guard 개인 값 (훅 H2, 이 PC에만)
+/.claude/push_guard.local.txt

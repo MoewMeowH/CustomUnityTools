@@ -98,6 +98,11 @@
    * 구조화된 결과(지적 ID `1-F2` 형식)면 `findingIds`를 쓴다. `findingKey`는 첫 ID, `summary`·`steps`·`file`·`severity`는 비워도 서버가 채운다.
    * 결과 끝의 `겹침 후보`는 위치만 가까운 것이다. 같은 문제인지 확인해 같으면 한 판정에 `findingIds`로 묶고, 다르면 따로 남긴다.
    * 결과에 `[경고] 구조화 출력 해석 실패`가 있으면 지금처럼 원문을 잘라 `steps`로 남긴다.
+6. **자료 요청 처리** — 결과의 `자료 요청 1-N1: …`은 빠뜨리지 않는다.
+   * 판단에 필요하면 로컬에서 찾아(Grep·Read) 보낼 범위를 고르고 `run_mode`의 `followUp`(`{runId, step, requests}`)으로 같은 에이전트에게 1회 다시 묻는다. 찾은 코드는 `context`, 설명·보내지 않는 이유는 `input`. 실행 한도는 차감되지 않고 실행마다 1회다. 결과는 같은 runId의 새 단계 번호다.
+   * 사내 코드·비밀처럼 보내면 안 되는 것, 판단에 필요 없는 것은 보내지 않는다. **범위를 줄였거나 보내지 않은 요청이 있으면 종합에서 사용자에게 그 사실과 이유를 알린다.**
+   * `record_verdicts`에 요청 ID로 처리를 남긴다: `supplied`(보충) · `declined`(보내지 않음, `reason` 필수) · `deferred`. 지적 판정과 섞지 않는다 (채택률에 들어가지 않음). followUp으로 보낸 요청은 기록하지 않아도 보충으로 센다.
+   * followUp 결과는 원래 지적을 다시 쓴 전체본이다. **판정은 보충 단계의 지적으로 하고**, 원래 단계의 같은 지적은 `duplicate`로 남긴다 (결과 끝 `겹침 후보`를 본다). 보충 단계가 새로 낸 요청은 다시 보충할 수 없다 — 필요하면 새 `run_mode`.
 
 ### 결과 저장
 
@@ -139,6 +144,16 @@
 * 폴더 삭제(`rm -rf` 등) 같은 정리 명령은 복구·빌드·테스트 명령에 이어 붙이지 않는다. 별도 호출로, 셸의 현재 폴더 밖(프로젝트 루트 등)에서 절대 경로로 실행한다.
   * 이유: 셸의 현재 폴더가 지울 폴더 안이면 Claude Code가 "Dangerous rm operation on working directory or its ancestor"로 승인을 띄우고, 자리를 비운 세션이면 자동 거절된다 (2026-10-19).
   * Git Bash에서 "Device or resource busy"면 현재 폴더가 그 안이라는 뜻이다 → 다른 폴더에서 다시 하거나 PowerShell `Remove-Item`.
+
+## 훅이 막는 규칙 (`.claude/settings.json` PreToolUse)
+
+규칙을 어기면 훅이 이유와 함께 막는다. 메시지대로 고쳐 다시 한다. 우회하지 않는다 (사람이 직접 할 때는 `!` 명령). 검사 중 오류도 막는다.
+* H1 `cleanup_guard.py`: 재귀 삭제가 다른 명령과 묶였거나 `cd`·명령 치환과 함께 있거나, 대상이 절대 경로가 아니거나 루트이거나, **셸의 현재 폴더가 대상 안**이면 ("명령 실행"). `git rm -r`은 해당 없음.
+* H2 `push_guard.py`: `git push`는 **단독 명령**으로 `git [-C 경로] push [--dry-run] [-u] [원격 [브랜치]]` 형식만 (commit과 묶으면 훅이 그 커밋을 못 본다). 대상 원격에 없는 커밋의 추가된 줄에 비밀 값 모양, 또는 `docs/image/`·`GoldenSet/`·`subagent_in/`·`review_tmp/` 아래 파일이 있으면 막는다. 커밋이 300개를 넘으면 사람이 확인한다.
+  * 개인 값(이메일·로컬 사용자 경로)은 `.claude/push_guard.local.txt`(한 줄에 정규식, `allow:`는 예외)에만 둔다. 프로젝트마다 `.gitignore`에 등록한다. 파일이 저장소에 추적되면 그 자체로 막는다.
+* H3 `run_mode_guard.py`: review·panel 전에 `docs/plans/`에 오늘 날짜 이름이거나 오늘 고친 계획서가 없으면 ("계획서와 작업 로그").
+* H4 `run_mode_guard.py`: reason이 `[ownReview:self-reviewer]`인데 ownReview가 self-reviewer 결과 원문 형식(`## 지적`·`## 읽은 파일`, 읽은 파일은 `subagent_in/` 안)이 아니면. 재호출 때도 원문 그대로 넣는다.
+* 훅 등록은 `python -I .claude/scripts/check_agents.py`, 동작은 `python -I .claude/scripts/test_hooks.py`로 검사한다. settings.json을 고치면 새 세션에서 반영된다.
 
 ## 계획서와 작업 로그
 
