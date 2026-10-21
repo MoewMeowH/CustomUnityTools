@@ -11,52 +11,6 @@ using UnityEngine;
 using Unity.Scripting.LifecycleManagement;
 #endif
 
-public readonly struct AndroidBuildParam
-{
-    public readonly string BundleVersion;
-    public readonly int VersionCode;
-    public readonly bool IsAAB;
-    public readonly EBuildType BuildType;
-
-    public AndroidBuildParam(string bundleVersion, int versionCode, bool isAab, EBuildType buildType)
-    {
-        BundleVersion = bundleVersion;
-        VersionCode = versionCode;
-        IsAAB = isAab;
-        BuildType = buildType;
-    }
-}
-
-public readonly struct IOSBuildParam
-{
-    public readonly string BundleVersion;
-    public readonly string VersionCode;
-    public readonly string ProvisionUUID;
-    public readonly EBuildType BuildType;
-
-    public IOSBuildParam(string bundleVersion, EBuildType buildType, string provisionUuid, string versionCode)
-    {
-        BundleVersion = bundleVersion;
-        BuildType = buildType;
-        ProvisionUUID = provisionUuid;
-        VersionCode = versionCode;
-    }
-}
-
-public readonly struct PCBuildParam
-{
-    public readonly string BundleVersion;
-    public readonly bool EnablePDB;
-    public readonly EBuildType BuildType;
-
-    public PCBuildParam(string bundleVersion, bool enablePdb, EBuildType buildType)
-    {
-        BundleVersion = bundleVersion;
-        EnablePDB = enablePdb;
-        BuildType = buildType;
-    }
-}
-
 public class JenkinsBuildException : BuildFailedException
 {
     public JenkinsBuildException(string message) : base(message) { }
@@ -82,23 +36,17 @@ public enum EPlatformType
 #endif
 public static class BuildHelper
 {
-    public const string JENKINS_BUILD_NUM = "BUILD_NUMBER";
-    public const string JENKINS_HOME = "JENKINS_HOME";
-    public const string JOB_NAME = "JOB_NAME";
-
     public const string BUILD_TARGET = "buildTarget";
     public const string BUILD_TYPE = "buildType";
     public const string BUILD_VERSION = "buildVersion";
     public const string VERSION_CODE = "versionCode";
     public const string IS_AAB = "isAab";
     public const string SCENE_LIST = "sceneList";
-    public const string ENABLE_PDB = "enablePdb";
     public const string DEV_BUILD = "devBuild";
     public const string AUTO_PROF = "autoProfile";
     public const string DEEP_PROF = "deepProfile";
     public const string CLEAN_BUILD = "cleanBuild";
     public const string OUTPUT_PATH = "outputPath";
-    public const string PROVISION_UUID = "provisionUuid";
     public const string ZIP_PACKAGE = "zipPackage";
     public const string BUILD_PROFILE = "buildProfile";
     public const string DISABLED_STEPS = "disabledSteps";
@@ -112,10 +60,7 @@ public static class BuildHelper
     private static List<string> s_Args = new List<string>();
     private const string LOG_HEAD = "[HB_Build]";
 
-    public static bool IsDevBuild = false;
-    public static bool IsDeepProfile = false;
     public static bool IsAutoProfile = false;
-    public static bool IsCleanBuild = false;
     public static string ProjectPath = string.Empty;
 
 #if UNITY_EDITOR
@@ -123,10 +68,7 @@ public static class BuildHelper
     private static void ResetStaticsOnDomainReload()
     {
         s_Args = new List<string>();
-        IsDevBuild = false;
-        IsDeepProfile = false;
         IsAutoProfile = false;
-        IsCleanBuild = false;
         ProjectPath = string.Empty;
     }
 #endif
@@ -144,14 +86,12 @@ public static class BuildHelper
 
     public static void ReadDevBuildState()
     {
-        // 잘못된 값은 조용히 무시하지 않고 실패시킨다 (TryGetBoolArg가 예외를 던짐)
-        if (TryGetBoolArg(DEV_BUILD, out bool dev)) IsDevBuild = dev;
+        // 잘못된 값은 조용히 무시하지 않고 빌드 시작 전에 실패시킨다 (TryGetBoolArg가 예외를 던짐)
+        // devBuild · deepProfile · cleanBuild 값 자체는 BuildContext를 만들 때 다시 읽는다
+        TryGetBoolArg(DEV_BUILD, out _);
+        TryGetBoolArg(DEEP_PROF, out _);
+        TryGetBoolArg(CLEAN_BUILD, out _);
         if (TryGetBoolArg(AUTO_PROF, out bool autoProf)) IsAutoProfile = autoProf;
-        if (TryGetBoolArg(DEEP_PROF, out bool deep)) IsDeepProfile = deep;
-        if (TryGetBoolArg(CLEAN_BUILD, out bool clean)) IsCleanBuild = clean;
-
-        if (!IsDevBuild && IsDeepProfile)
-            IsDeepProfile = false;
     }
 
     public static void ReadEnvironment()

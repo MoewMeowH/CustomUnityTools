@@ -97,9 +97,28 @@ public class ProjectDefine : ScriptableObject
 
     /// <summary>
     /// Assets/Editor/HBBuild/DefineContainer.asset 에 새 ScriptableObject 에셋을 생성합니다.
+    /// 이미 있으면 새로 만들지 않고 기존 에셋을 반환합니다. (CreateAsset은 같은 경로의 기존 에셋을 지우고 만든다)
     /// </summary>
     public static ProjectDefine CreateAssetInUserFolder()
     {
+        string path = BuildHelper.USER_DEFINE_CONTAINER_PATH;
+        var existing = AssetDatabase.LoadAssetAtPath<ProjectDefine>(path);
+        if (existing == null && File.Exists(path))
+        {
+            // 파일은 있는데 아직 임포트 전일 수 있다 (자동 Refresh 꺼짐, git pull 직후 등)
+            AssetDatabase.ImportAsset(path);
+            existing = AssetDatabase.LoadAssetAtPath<ProjectDefine>(path);
+        }
+
+        if (existing != null)
+        {
+            Debug.Log($"[ProjectDefine] Asset already exists. Using: {path}");
+            return existing;
+        }
+
+        if (File.Exists(path))
+            throw new InvalidOperationException($"[ProjectDefine] A file exists at {path} but cannot be loaded as ProjectDefine (different type, import error, or missing script). Check the file before creating a new one; it was not overwritten.");
+
         BuildHelper.EnsureUserBuildDataDirExists();
 
         var instance = CreateInstance<ProjectDefine>();
