@@ -129,13 +129,13 @@ Enum이 `internal`이면 클래스도 `internal`로 생성됩니다.
 
 | | 기존 | E2String |
 |---|---|---|
-| Enum → String | `ToString()` 55.6 ns | `ToStringFast()` 11.2 ns |
-| String → Enum | `Enum.TryParse` 765 ns | `To{Enum}Fast(string)` 16.1 ns |
-| 정의 검사 | `Enum.IsDefined` 149 ns / 20 B | `IsDefinedFast` 1.1 ns / 0 B |
-| 전체 값 순회 (원소당) | `Enum.GetValues` 184 ns / 44.6 B | `Values` 0.8 ns / 0 B |
+| Enum → String | `ToString()` 43.4 ns | `ToStringFast()` 11.0 ns |
+| String → Enum | `Enum.TryParse` 727 ns | `To{Enum}Fast(string)` 16.3 ns |
+| 정의 검사 | `Enum.IsDefined` 134 ns / 20 B | `IsDefinedFast` 0.7 ns / 0 B |
+| 전체 값 순회 (원소당) | `Enum.GetValues` 168 ns / 44.6 B | `Values` 0.7 ns / 0 B |
 
 시간은 Release, 할당은 Development 플레이어 기준입니다. IL2CPP에서는 `ToString()` · `Enum.TryParse`도 할당하지 않으므로 이득은 주로 속도입니다.
-비용은 Enum 하나당 `GameAssembly.dll` 약 +19 KB입니다. CoreCLR · Unity 6.x Mono 수치, 빌드 크기, 측정 방법은 [벤치마크 리포트](https://github.com/MoewMeowH/CustomUnityTools/blob/main/Assets/Tools/Benchmarks/E2String/Benchmark.md)를 참고하세요.
+비용은 Enum(100 멤버) 하나당 `GameAssembly.dll` 약 +11 KB입니다 (IL2CPP, Managed Stripping `Low`). `Medium` 이상에서는 쓰지 않는 Enum의 생성 코드가 빠집니다. 빌드 크기 상세와 측정 방법은 [벤치마크 리포트](https://github.com/MoewMeowH/CustomUnityTools/blob/main/Assets/Tools/Benchmarks/E2String/Benchmark.md)를 참고하세요.
 
 ## 주의 사항
 
