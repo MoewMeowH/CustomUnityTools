@@ -594,3 +594,7 @@ $ unity command cheat_status --execution abc --format json
 ## 2026-10-18 todo 통합
 
 * 바탕화면 `todo.txt`(2026-10-16 갱신본)를 `docs/todo.md`로 합침. 이후 할 일은 `docs/todo.md` 하나로 관리 (사용자 결정). 오늘 확인해 끝난 항목은 "끝난 항목" 절로, 미점검 패키지(HB_Build · HB_Cheat · HB_ScreenRecorder) 점검 항목 추가.
+
+## 2026-10-22 HB_ScreenRecorder 점검
+
+* `package.json` Recorder 의존 4.0.0 → 5.1.7 (패키지 버전은 실사용 전이라 1.0.0 유지, 사용자 결정). 근거(확정): 6.3 에디터 내장 manifest가 `com.unity.recorder` minimumVersion 5.1.6(6.3.16)·5.1.7(6.3.23)을 지정해 4.0.0 선언은 무시되고 5.1.x로 해결됨, 5.1.7 최소 Unity 6000.0(레지스트리). 배치 프로젝트 6.3/ForAI(6000.3.23f1)에 `file:` 설치 → 스모크 통과, Recorder 5.1.7 해결, `HB.ScreenRecorder.Editor.dll` 생성, 이후 원복. 에디터 전용 분리는 기존 asmdef(Editor 전용)로 확인. 미확인: 에디터에서 실제 녹화·스크린샷 동작.
