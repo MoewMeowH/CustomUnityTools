@@ -21,6 +21,10 @@ namespace HB.CustomBuild.Editor
     {
         private static List<IPreBuildStep> s_AllPreBuildSteps;
         private static List<IPostBuildStep> s_AllPostBuildSteps;
+        private static List<string> s_InstantiationErrors = new List<string>();
+
+        /// <summary> 마지막 ReloadSteps에서 인스턴스를 만들지 못한 스텝 (빌드 경로에서는 실패 처리) </summary>
+        public static IReadOnlyList<string> InstantiationErrors => s_InstantiationErrors;
 
     #if UNITY_EDITOR
         [InitializeOnLoadMethod]
@@ -28,6 +32,7 @@ namespace HB.CustomBuild.Editor
         {
             s_AllPreBuildSteps = null;
             s_AllPostBuildSteps = null;
+            s_InstantiationErrors = new List<string>();
         }
     #endif
 
@@ -65,10 +70,23 @@ namespace HB.CustomBuild.Editor
                 .ToList();
         }
 
+        /// <summary>
+        /// 주어진 ID 중 등록된 Pre/Post 스텝 어디에도 없는 ID를 반환합니다 (스텝 이름 변경 · 삭제, 오타).
+        /// </summary>
+        public static List<string> GetUnknownStepIds(IEnumerable<string> stepIds)
+        {
+            var knownIds = new HashSet<string>(
+                GetAllPreBuildSteps().Select(s => s.StepId)
+                    .Concat(GetAllPostBuildSteps().Select(s => s.StepId)));
+
+            return stepIds.Where(id => !string.IsNullOrWhiteSpace(id) && !knownIds.Contains(id)).Distinct().ToList();
+        }
+
         public static void ReloadSteps()
         {
             s_AllPreBuildSteps = new List<IPreBuildStep>();
             s_AllPostBuildSteps = new List<IPostBuildStep>();
+            s_InstantiationErrors = new List<string>();
 
             // 1. IPreBuildStep 타입 수집 및 상속 오버라이드 필터링
             var preTypes = TypeCache.GetTypesDerivedFrom<IPreBuildStep>()
@@ -89,7 +107,10 @@ namespace HB.CustomBuild.Editor
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[BuildStepRegistry] Failed to instantiate {type.Name}: {ex.Message}");
+                    // Activator는 생성자 예외를 TargetInvocationException으로 감싸므로 원래 예외를 꺼낸다
+                    var cause = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
+                    Debug.LogError($"[BuildStepRegistry] Failed to instantiate {type.Name}: {cause.GetType().Name}: {cause.Message}");
+                    s_InstantiationErrors.Add($"{type.FullName}: {cause.GetType().Name}: {cause.Message}");
                 }
             }
 
@@ -111,7 +132,10 @@ namespace HB.CustomBuild.Editor
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[BuildStepRegistry] Failed to instantiate {type.Name}: {ex.Message}");
+                    // Activator는 생성자 예외를 TargetInvocationException으로 감싸므로 원래 예외를 꺼낸다
+                    var cause = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
+                    Debug.LogError($"[BuildStepRegistry] Failed to instantiate {type.Name}: {cause.GetType().Name}: {cause.Message}");
+                    s_InstantiationErrors.Add($"{type.FullName}: {cause.GetType().Name}: {cause.Message}");
                 }
             }
 

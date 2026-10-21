@@ -31,22 +31,33 @@ namespace HB.CustomBuild.Editor
     {
         public static BuildReport Execute(BuildContext context)
         {
+            // 플랫폼 확인에서 실패해도 이전 빌드의 경고 파일이 남지 않도록 가장 먼저 지운다
+            DeleteWarningsFile();
             EnsureActiveBuildTarget(context.TargetGroup, context.Target);
 
+            var changeReport = BuildChangeReport.Capture();
             var snapshot = BuildSettingsSnapshot.Capture(context.TargetGroup);
             bool pipelineSucceeded = false;
             var sw = Stopwatch.StartNew();
             Log($"==========================================================================");
-            Log($"🚀 [Build Pipeline Started] Target: {context.Target} | Mode: {context.BuildType} | Version: {context.Version}");
+            Log($"🚀 [Build Pipeline Started] Target: {context.Target} | Mode: {context.BuildType} | Version: {context.Version} ({context.VersionCode})");
             Log($"==========================================================================");
+
+            if (context.IsLiveDevBuild)
+                WarnLiveDevBuild(context, "started");
 
             try
             {
                 ValidateOutputName(context);
-                WarnUnknownDisabledSteps(context);
+                ValidateStepRegistry();
+                ValidateDisabledSteps(context);
+                ValidateLiveDefines(context);
 
                 // 1. 사전 빌드 스텝들 순차 실행 (IPreBuildStep)
                 BuildStepRegistry.ExecutePreBuildSteps(context);
+
+                // 버전 코드는 사전 스텝이 채울 수도 있으므로 스텝 뒤, 실제 빌드 전에 확인한다
+                ValidateVersionCode(context);
 
                 if (context.PlayerOptions.scenes == null || context.PlayerOptions.scenes.Length == 0)
                 {
@@ -63,7 +74,9 @@ namespace HB.CustomBuild.Editor
 
                 // 2. 실제 Unity 빌드 실행
                 Log($"[Pipeline] Invoking Unity BuildPipeline.BuildPlayer -> {context.PlayerOptions.locationPathName}");
-                BuildReport report = BuildPipeline.BuildPlayer(context.PlayerOptions);
+                BuildReport report;
+                using (BuildGuard.HBBuildScope())
+                    report = BuildPipeline.BuildPlayer(context.PlayerOptions);
                 context.Report = report;
 
                 if (report.summary.result != BuildResult.Succeeded)
@@ -80,6 +93,9 @@ namespace HB.CustomBuild.Editor
                 Log($"==========================================================================");
                 Log($"🎉 [Build Pipeline Completed Successfully in {sw.Elapsed.TotalSeconds:F1}s]");
                 Log($"==========================================================================");
+
+                if (context.IsLiveDevBuild)
+                    WarnLiveDevBuild(context, "finished");
 
                 pipelineSucceeded = true;
                 return report;
@@ -101,7 +117,62 @@ namespace HB.CustomBuild.Editor
 
                     LogWarning($"[Pipeline] Failed to restore build settings: {restoreEx.Message}");
                 }
+                finally
+                {
+                    // 빌드 산출물(기본 BuildOutput/ 과 이번 출력 경로)과 빌드 로그 파일은 목록에서 뺀다
+                    var outputDirs = new List<string> { ResolveProjectRelativePath("BuildOutput") };
+                    if (!string.IsNullOrWhiteSpace(context.OutputPath))
+                        outputDirs.Add(ResolveProjectRelativePath(context.OutputPath));
+                    changeReport?.LogChangesDuringBuild(outputDirs, GetLogFilePaths());
+                    WriteWarningsFile(context);
+                }
             }
+        }
+
+        /// <summary> Jenkinsfile이 읽는 경고 파일 (있으면 빌드를 UNSTABLE로 표시) </summary>
+        public const string WARNINGS_FILE = "BuildOutput/HB_BUILD_WARNINGS.txt";
+
+        private static void DeleteWarningsFile()
+        {
+            try
+            {
+                string path = ResolveProjectRelativePath(WARNINGS_FILE);
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                LogWarning($"[Pipeline] Failed to delete previous {WARNINGS_FILE}: {ex.Message}");
+            }
+        }
+
+        private static void WriteWarningsFile(BuildContext context)
+        {
+            if (context.Warnings.Count == 0) return;
+            try
+            {
+                string path = ResolveProjectRelativePath(WARNINGS_FILE);
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllLines(path, context.Warnings);
+            }
+            catch (Exception ex)
+            {
+                LogWarning($"[Pipeline] Failed to write {WARNINGS_FILE}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// LIVE + Development 빌드는 막지 않되(라이브 환경 프로파일링 · 로그 확인용), 로그 · 산출물 이름 · 경고 파일로 눈에 띄게 남깁니다.
+        /// </summary>
+        private static void WarnLiveDevBuild(BuildContext context, string phase)
+        {
+            string message = $"LIVE build with Development Build ON{(context.IsDeepProfile ? " + Deep Profiling" : string.Empty)} ({phase}). Output is marked _DEVBUILD. Do NOT ship this build to store users.";
+            LogWarning("##########################################################################");
+            if (phase == "started")
+                context.AddWarning($"[Pipeline] {message}");
+            else
+                LogWarning($"[Pipeline] {message}");
+            LogWarning("##########################################################################");
         }
 
         /// <summary>
@@ -236,7 +307,8 @@ namespace HB.CustomBuild.Editor
             context.Version = !string.IsNullOrEmpty(ver) ? ver : Application.version;
 
             var vCode = GetArg(VERSION_CODE);
-            context.VersionCode = !string.IsNullOrEmpty(vCode) ? vCode : "1";
+            // 버전 코드는 기본값으로 채우지 않는다 (모바일 빌드는 비어 있으면 ValidateVersionCode에서 실패)
+            context.VersionCode = vCode ?? string.Empty;
 
             context.IsDevBuild = TryGetBoolArg(DEV_BUILD, out bool dev) && dev;
             context.IsDeepProfile = context.IsDevBuild && TryGetBoolArg(DEEP_PROF, out bool deep) && deep;
@@ -310,22 +382,93 @@ namespace HB.CustomBuild.Editor
             }
         }
 
-        /// <summary>
-        /// 비활성 목록에 등록되지 않은 스텝 ID가 있으면 경고합니다. (오타로 끄려던 스텝이 실행되는 것을 알아차리도록)
-        /// </summary>
-        private static void WarnUnknownDisabledSteps(BuildContext context)
+        /// <summary> 이번 Unity 실행이 쓰는 로그 파일 (-logFile 인자, Application.consoleLogPath) </summary>
+        private static IEnumerable<string> GetLogFilePaths()
         {
-            if (context.DisabledStepIds.Count == 0) return;
-
-            var knownIds = new HashSet<string>(
-                BuildStepRegistry.GetAllPreBuildSteps().Select(s => s.StepId)
-                    .Concat(BuildStepRegistry.GetAllPostBuildSteps().Select(s => s.StepId)));
-
-            foreach (string id in context.DisabledStepIds)
+            var paths = new List<string>();
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
             {
-                if (!knownIds.Contains(id))
-                    LogWarning($"[Pipeline] Unknown disabled step id '{id}' (no registered step has this id).");
+                if (args[i].Equals("-logFile", StringComparison.OrdinalIgnoreCase) && args[i + 1] != "-")
+                    paths.Add(ResolveProjectRelativePath(args[i + 1].Trim('"')));
             }
+            if (!string.IsNullOrEmpty(Application.consoleLogPath))
+                paths.Add(Application.consoleLogPath);
+            return paths;
+        }
+
+        /// <summary>
+        /// 스텝 인스턴스 생성에 실패한 타입이 있으면 실패시킵니다. (빠진 스텝의 검증 · 설정 없이 빌드되는 것 방지)
+        /// </summary>
+        private static void ValidateStepRegistry()
+        {
+            BuildStepRegistry.ReloadSteps();
+            var errors = BuildStepRegistry.InstantiationErrors;
+            if (errors.Count > 0)
+                throw ThrowError($"Failed to create build step(s): {string.Join("; ", errors)}. Fix the step class (public parameterless constructor, no exception).");
+        }
+
+        /// <summary>
+        /// LIVE 빌드는 DefineContainer와 해당 빌드 타입 · 플랫폼 항목이 있어야 하고, 심볼 설정 스텝을 끌 수 없습니다.
+        /// (스텝 안의 검사만으로는 스텝을 끈 프로필에서 건너뛰어지므로 파이프라인 단계에서 먼저 확인)
+        /// </summary>
+        private static void ValidateLiveDefines(BuildContext context)
+        {
+            if (context.BuildType != EBuildType.LIVE) return;
+
+            if (context.DisabledStepIds.Contains(PreBuildStep_ConfigDefines.FIXED_STEP_ID))
+                throw ThrowError($"LIVE build cannot disable the define step '{PreBuildStep_ConfigDefines.FIXED_STEP_ID}'. Re-enable it in the profile.");
+
+            var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null);
+            if (container == null)
+                container = ProjectDefine.LoadIfExists();
+            if (container == null)
+                throw ThrowError("LIVE build requires a DefineContainer (ProjectDefine) asset. Without it, the scripting define symbols committed in ProjectSettings are used as-is.");
+
+            if (container.GetDefineArray(context.BuildType, context.Target) == null)
+                throw ThrowError($"LIVE build requires a define entry for {context.BuildType}/{context.Target} in DefineContainer '{container.name}'. Add the entry (an empty list clears all symbols).");
+        }
+
+        /// <summary>
+        /// 비활성 목록에 등록되지 않은 스텝 ID가 있으면 (스텝 이름 변경 · 삭제, 오타) 끄려던 의도가 깨진 것이므로
+        /// LIVE 또는 배치 모드(Jenkins)에서는 실패, 로컬 DEV · QA에서는 경고합니다.
+        /// </summary>
+        private static void ValidateDisabledSteps(BuildContext context)
+        {
+            var unknown = BuildStepRegistry.GetUnknownStepIds(context.DisabledStepIds);
+            if (unknown.Count == 0) return;
+
+            string list = string.Join(", ", unknown.Select(id => $"'{id}'"));
+            if (context.BuildType == EBuildType.LIVE || Application.isBatchMode)
+                throw ThrowError($"Disabled step id(s) not registered: {list}. Remove them from the profile (Build Manager window) or -disabledSteps.");
+
+            context.AddWarning($"[Pipeline] Disabled step id(s) not registered: {list} (the step may have been renamed or removed). LIVE / batch builds fail on this.");
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex s_IosBuildNumber =
+            new System.Text.RegularExpressions.Regex(@"^\d+(\.\d+){0,2}$");
+
+        /// <summary>
+        /// 모바일 빌드의 버전 코드는 기본값으로 채우지 않고, 비어 있거나 형식이 틀리면 실패시킵니다.
+        /// Android versionCode는 모든 빌드에서 증가하는 양의 정수, iOS buildNumber는 점으로 구분한 정수 1~3개입니다.
+        /// </summary>
+        private static void ValidateVersionCode(BuildContext context)
+        {
+            string code = context.VersionCode?.Trim() ?? string.Empty;
+            switch (context.Target)
+            {
+                case BuildTarget.Android:
+                    if (!int.TryParse(code, out int versionCode) || versionCode <= 0)
+                        throw ThrowError($"Android versionCode is required and must be a positive integer (increase it for every store build): '{code}'");
+                    break;
+                case BuildTarget.iOS:
+                    if (!s_IosBuildNumber.IsMatch(code))
+                        throw ThrowError($"iOS build number is required (e.g. 1, 12, 1.0.3): '{code}'");
+                    break;
+            }
+
+            // 앞뒤 공백을 지운 값으로 맞춘다 (iOS CFBundleVersion은 공백을 허용하지 않음)
+            context.VersionCode = code;
         }
 
         private static bool TryGetBuildTypeArg(out EBuildType buildType)
@@ -362,10 +505,17 @@ namespace HB.CustomBuild.Editor
 
         private static void EnsureActiveBuildTarget(BuildTargetGroup group, BuildTarget target)
         {
+            // 배치 모드(-executeMethod)에서 플랫폼을 전환하면 스크립트가 재컴파일되지 않아 #if UNITY_ANDROID 등이 이전 플랫폼 기준으로 남는다.
+            // 그래서 배치 모드는 전환하지 않고 실패시킨다 (Unity 실행 시 -buildTarget으로 맞춰야 함)
+            if (Application.isBatchMode && EditorUserBuildSettings.activeBuildTarget != target)
+            {
+                throw ThrowError($"Active build target is {EditorUserBuildSettings.activeBuildTarget}, but this build targets {target}. " +
+                                 $"Launch Unity with -buildTarget {target} (regenerate the Jenkinsfile if it was created before HB_Build added -buildTarget to profile builds).");
+            }
+
             if (EditorUserBuildSettings.selectedBuildTargetGroup != group ||
                 EditorUserBuildSettings.activeBuildTarget != target)
             {
-                // executeMethod 도중 전환하면 스크립트가 재컴파일되지 않으므로 CLI에서는 -buildTarget 지정을 권장
                 Log($"Switching Active Target -> Group: {group}, Target: {target}");
                 EditorUserBuildSettings.SwitchActiveBuildTarget(group, target);
             }

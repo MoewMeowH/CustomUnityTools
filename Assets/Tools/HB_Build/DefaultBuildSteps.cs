@@ -15,6 +15,8 @@ namespace HB.CustomBuild.Editor
     /// </summary>
     public class PreBuildStep_FilterScenes : IPreBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다 (파생 클래스도 같은 ID를 이어받음)
+        public virtual string StepId => "HB.CustomBuild.Editor.PreBuildStep_FilterScenes";
         public virtual int ExecutionOrder => 5;
         public virtual string StepName => "SceneDefine 기반 무시 씬(IgnoreScene) 필터링 (선택 사항)";
 
@@ -46,6 +48,8 @@ namespace HB.CustomBuild.Editor
     /// </summary>
     public class PreBuildStep_PlayerSettings : IPreBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다 (파생 클래스도 같은 ID를 이어받음)
+        public virtual string StepId => "HB.CustomBuild.Editor.PreBuildStep_PlayerSettings";
         public virtual int ExecutionOrder => 10;
         public virtual string StepName => "기본 Player & Log 설정";
 
@@ -76,8 +80,11 @@ namespace HB.CustomBuild.Editor
     /// </summary>
     public class PreBuildStep_ConfigDefines : IPreBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다 (파생 클래스도 같은 ID를 이어받음)
+        public const string FIXED_STEP_ID = "HB.CustomBuild.Editor.PreBuildStep_ConfigDefines";
+        public virtual string StepId => FIXED_STEP_ID;
         public virtual int ExecutionOrder => 20;
-        public virtual string StepName => "Scripting Define Symbols (전처리기 심볼) 설정 (선택 사항)";
+        public virtual string StepName => "Scripting Define Symbols (전처리기 심볼) 설정 (LIVE는 DefineContainer 항목 필수)";
 
         public virtual bool IsActive(BuildContext context) => true;
 
@@ -87,17 +94,25 @@ namespace HB.CustomBuild.Editor
             if (container == null)
                 container = ProjectDefine.LoadIfExists();
 
+            // LIVE에서 심볼 설정이 없으면 커밋된 ProjectSettings의 개발용 심볼(USE_HLOG 등)이 그대로 들어가므로 실패시킨다
             if (container == null)
             {
-                // 사용자가 정의하지 않았으면 기존 심볼 유지하고 건너뜀
+                if (context.BuildType == EBuildType.LIVE)
+                    throw BuildHelper.ThrowError("LIVE build requires a DefineContainer (ProjectDefine) asset. Without it, the scripting define symbols committed in ProjectSettings are used as-is.");
+
+                // DEV · QA는 기존 심볼 유지하고 건너뜀
+                BuildHelper.Log("[Defines] No DefineContainer. Keeping existing symbols.");
                 return;
             }
 
             var defines = container.GetDefineArray(context.BuildType, context.Target);
             if (defines == null)
             {
-                // 해당 빌드 타입/플랫폼 설정이 없으면 기존 심볼 유지
-                BuildHelper.Log($"[Defines] No define entry for {context.BuildType}/{context.Target}. Keeping existing symbols.");
+                if (context.BuildType == EBuildType.LIVE)
+                    throw BuildHelper.ThrowError($"LIVE build requires a define entry for {context.BuildType}/{context.Target} in DefineContainer '{container.name}'. Add the entry (an empty list clears all symbols).");
+
+                // DEV · QA는 해당 빌드 타입/플랫폼 설정이 없으면 기존 심볼 유지
+                context.AddWarning($"[Defines] No define entry for {context.BuildType}/{context.Target} in DefineContainer '{container.name}'. Keeping existing symbols (LIVE builds fail on this).");
                 return;
             }
 
@@ -115,6 +130,8 @@ namespace HB.CustomBuild.Editor
     /// </summary>
     public class PreBuildStep_AndroidSettings : IPreBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다 (파생 클래스도 같은 ID를 이어받음)
+        public virtual string StepId => "HB.CustomBuild.Editor.PreBuildStep_AndroidSettings";
         public virtual int ExecutionOrder => 30;
         public virtual string StepName => "Android 플랫폼 세부 설정 (ARM64, IL2CPP, AAB 등)";
 
@@ -148,6 +165,8 @@ namespace HB.CustomBuild.Editor
     /// </summary>
     public class PreBuildStep_WindowsSettings : IPreBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다 (파생 클래스도 같은 ID를 이어받음)
+        public virtual string StepId => "HB.CustomBuild.Editor.PreBuildStep_WindowsSettings";
         public virtual int ExecutionOrder => 30;
         public virtual string StepName => "Windows Standalone 세부 설정";
 
@@ -168,6 +187,8 @@ namespace HB.CustomBuild.Editor
     /// </summary>
     public class PreBuildStep_IOSSettings : IPreBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다 (파생 클래스도 같은 ID를 이어받음)
+        public virtual string StepId => "HB.CustomBuild.Editor.PreBuildStep_IOSSettings";
         public virtual int ExecutionOrder => 30;
         public virtual string StepName => "iOS 플랫폼 세부 설정 (Provisioning Profile, 빌드 번호 등)";
 
@@ -176,7 +197,7 @@ namespace HB.CustomBuild.Editor
         public virtual void OnPreBuild(BuildContext context)
         {
             PlayerSettings.bundleVersion = context.Version;
-            PlayerSettings.iOS.buildNumber = context.VersionCode;
+            PlayerSettings.iOS.buildNumber = context.VersionCode?.Trim() ?? string.Empty;
 
             string provisionUuid = context.GetCustomData<string>("ProvisionUUID", null);
             if (!string.IsNullOrEmpty(provisionUuid))
@@ -196,6 +217,8 @@ namespace HB.CustomBuild.Editor
     /// </summary>
     public class PostBuildStep_ZipArchive : IPostBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다 (파생 클래스도 같은 ID를 이어받음)
+        public virtual string StepId => "HB.CustomBuild.Editor.PostBuildStep_ZipArchive";
         public virtual int ExecutionOrder => 100;
         public virtual string StepName => "PC 산출물 ZIP 자동 압축 (선택 옵션)";
 

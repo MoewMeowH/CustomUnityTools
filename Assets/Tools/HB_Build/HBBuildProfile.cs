@@ -35,7 +35,7 @@ namespace HB.CustomBuild.Editor
         [SerializeField] public string Version = "1.0.0";
 
         [Tooltip("빌드 번호 / 버전 코드 (Android versionCode / iOS buildNumber)")]
-        [SerializeField] public string VersionCode = "1";
+        [SerializeField] public string VersionCode = string.Empty;
 
         [Header("=== 빌드 옵션 ===")]
         [Tooltip("Development Build 활성화 여부")]
