@@ -1034,6 +1034,8 @@ namespace HB.CustomBuild.Editor
         // Jenkins choice 파라미터에서 "프로필 값 사용"을 뜻하는 값
         private const string PROFILE_VALUE = "(profile)";
 
+        private static string BoolArg(bool value) => value ? "true" : "false";
+
         private string BuildCommandLine(ECliCommandMode mode, bool isJenkinsVar)
         {
             BuildCommandParts(mode, isJenkinsVar, out string exe, out string args);
@@ -1075,10 +1077,12 @@ namespace HB.CustomBuild.Editor
                     sb.Append($" -buildType {(isJenkinsVar ? "${params.BUILD_TYPE}" : m_BuildType.ToString())}");
                     sb.Append($" -buildVersion \"{(isJenkinsVar ? "${params.BUILD_VERSION}" : m_Version)}\"");
                     sb.Append($" -versionCode \"{(isJenkinsVar ? "${params.VERSION_CODE}" : m_VersionCode)}\"");
-                    sb.Append($" -devBuild {m_DevBuild.ToString().ToLower()}");
-                    sb.Append($" -cleanBuild {m_CleanBuild.ToString().ToLower()}");
-                    sb.Append($" -isAab {m_IsAab.ToString().ToLower()}");
-                    sb.Append($" -zipPackage {m_ZipPackage.ToString().ToLower()}");
+                    // Jenkins는 booleanParam(기본값 = 생성 시 창 값)을 참조해 빌드 실행 시 바꿀 수 있게 한다
+                    sb.Append($" -devBuild {(isJenkinsVar ? "${params.DEV_BUILD}" : BoolArg(m_DevBuild))}");
+                    sb.Append($" -deepProfile {(isJenkinsVar ? "${params.DEEP_PROFILE}" : BoolArg(m_DeepProfile))}");
+                    sb.Append($" -cleanBuild {(isJenkinsVar ? "${params.CLEAN_BUILD}" : BoolArg(m_CleanBuild))}");
+                    sb.Append($" -isAab {(isJenkinsVar ? "${params.IS_AAB}" : BoolArg(m_IsAab))}");
+                    sb.Append($" -zipPackage {(isJenkinsVar ? "${params.ZIP_PACKAGE}" : BoolArg(m_ZipPackage))}");
                     sb.Append($" -sceneList \"{sceneArg}\"");
 
                     // Jenkins는 기본 경로(workspace/BuildOutput/<Target>)를 써야 archiveArtifacts와 일치한다
@@ -1326,8 +1330,14 @@ namespace HB.CustomBuild.Editor
 
             if (m_CliMode == ECliCommandMode.FullUnpack)
             {
+                // 기본값은 생성 시 창 값, Jenkins에서 바꾼 값이 우선한다
                 sb.AppendLine($"        string(name: 'BUILD_VERSION', defaultValue: '{m_Version}', description: '앱 버전 (Bundle Version)')");
                 sb.AppendLine($"        string(name: 'VERSION_CODE', defaultValue: '{m_VersionCode}', description: '버전 코드 (Android/iOS)')");
+                sb.AppendLine($"        booleanParam(name: 'DEV_BUILD', defaultValue: {BoolArg(m_DevBuild)}, description: 'Development Build')");
+                sb.AppendLine($"        booleanParam(name: 'DEEP_PROFILE', defaultValue: {BoolArg(m_DeepProfile)}, description: 'Deep Profiling Support (DEV_BUILD일 때만 적용)')");
+                sb.AppendLine($"        booleanParam(name: 'CLEAN_BUILD', defaultValue: {BoolArg(m_CleanBuild)}, description: 'Clean Build Cache')");
+                sb.AppendLine($"        booleanParam(name: 'IS_AAB', defaultValue: {BoolArg(m_IsAab)}, description: 'Android App Bundle(.aab) 빌드 (Android 전용)')");
+                sb.AppendLine($"        booleanParam(name: 'ZIP_PACKAGE', defaultValue: {BoolArg(m_ZipPackage)}, description: '빌드 결과 ZIP 압축 (PC 전용)')");
             }
 
             if (m_CliMode == ECliCommandMode.ProfileOverride)

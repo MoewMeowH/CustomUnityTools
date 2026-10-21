@@ -53,6 +53,7 @@ Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
 - **로컬 빌드**: 프로필 빌드는 저장된 프로필 값으로 실행됩니다. 창에 저장하지 않은 변경이 있으면 빌드 전에 저장 여부를 묻고, 자동 저장하지 않습니다.
 - **Jenkinsfile**: 생성된 파이프라인은 빌드 전에 `BuildOutput/` 폴더만 지웁니다 (`Library/` 캐시는 유지). 소스 정리는 Jenkins job의 checkout 설정을 사용하세요.
   - 명령은 `Unity.exe`를 직접 호출합니다 (environment의 `UNITY_PATH`). Unity Hub 헤드리스 CLI에는 프로젝트를 실행하는 명령이 없습니다.
+  - **전체 풀기 모드**: `BUILD_TARGET` · `BUILD_TYPE` · `BUILD_VERSION` · `VERSION_CODE`와 `DEV_BUILD` · `DEEP_PROFILE` · `CLEAN_BUILD` · `IS_AAB` · `ZIP_PACKAGE`(booleanParam)가 Jenkins 파라미터입니다. 기본값은 생성할 때 창의 값이고, Jenkins에서 바꾼 값이 우선합니다. 씬 목록과 비활성 스텝은 생성 시 창 값으로 고정됩니다.
   - **프로필+오버라이드 모드**: 기본은 고른 프로필(`BUILD_PROFILE`)의 값입니다. Jenkins 파라미터 `BUILD_TYPE` · `DEV_BUILD`(`(profile)`이 아닌 값), `BUILD_VERSION` · `VERSION_CODE`(비어 있지 않은 값)를 넣은 것만 인자로 넘겨 프로필 값을 덮어씁니다.
 - **선택 설정 에셋 생성**: `DefineContainer.asset` · `SceneDefine.asset`이 이미 있으면 새로 만들지 않고 기존 에셋을 연결합니다.
 - Build Settings에 활성 씬이 없고 프로필에도 씬이 없으면 빌드를 실패시킵니다.
