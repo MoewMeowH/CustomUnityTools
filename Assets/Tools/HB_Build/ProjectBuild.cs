@@ -13,7 +13,7 @@ using Unity.Scripting.LifecycleManagement;
 
 /// <summary>
 /// Unity 커스텀 빌드 매니저 및 Jenkins CI/CD 연동 에디터 윈도우입니다.
-/// BuildProfile(.asset) 기반의 프로필 관리 및 저장, 다중 버전 Jenkins/Unity Hub CLI 명령어 자동 생성,
+/// BuildProfile(.asset) 기반의 프로필 관리 및 저장, Jenkins/Unity CLI 명령어 자동 생성,
 /// 체크박스 On/Off, 인라인 C# 소스 코드 미리보기, Groovy Declarative Jenkinsfile 생성을 지원합니다.
 /// </summary>
 #if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
@@ -26,12 +26,6 @@ public class ProjectBuild : EditorWindow
         PC = 0,
         Android = 1,
         iOS = 2,
-    }
-
-    public enum ECliRunnerType
-    {
-        DirectUnityExe = 0,   // Direct Unity.exe 실행
-        UnityHubHeadless = 1  // Unity Hub CLI 헤드리스 실행 (--headless run --project-path)
     }
 
     public enum ECliCommandMode
@@ -68,7 +62,6 @@ public class ProjectBuild : EditorWindow
     [SerializeField] private ProjectDefine m_ProjectDefine;
 
     // CLI 생성 옵션 상태
-    private ECliRunnerType m_CliRunner = ECliRunnerType.DirectUnityExe;
     private ECliCommandMode m_CliMode = ECliCommandMode.ProfileOnly;
     private bool m_ShowCliSection = true;
 
@@ -424,7 +417,7 @@ public class ProjectBuild : EditorWindow
         {
             if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
             {
-                m_SceneDefine = SceneDefine.CreateAssetInUserFolder();
+                m_SceneDefine = CreateOptionalAsset(SceneDefine.CreateAssetInUserFolder);
             }
         }
         EditorGUILayout.EndHorizontal();
@@ -439,13 +432,32 @@ public class ProjectBuild : EditorWindow
         {
             if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
             {
-                m_ProjectDefine = ProjectDefine.CreateAssetInUserFolder();
+                m_ProjectDefine = CreateOptionalAsset(ProjectDefine.CreateAssetInUserFolder);
             }
         }
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.LabelField(m_ProjectDefine == null ? "  ↳ 미생성/미할당 시: 기존 PlayerSettings 심볼 유지 (건너뛰기)" : "  ↳ 할당됨: 플랫폼/모드별 전처리기 심볼 자동 주입", EditorStyles.miniLabel);
 
         EditorGUILayout.EndVertical();
+    }
+
+    /// <summary>
+    /// 선택 설정 에셋을 만들거나(이미 있으면 기존 에셋) 가져옵니다.
+    /// 실패하면 예외를 OnGUI 밖으로 던지지 않고 대화상자로 알린 뒤, 모달 이후 남은 레이아웃 그리기는 ExitGUI로 건너뜁니다.
+    /// </summary>
+    private static T CreateOptionalAsset<T>(Func<T> create) where T : ScriptableObject
+    {
+        try
+        {
+            return create();
+        }
+        catch (Exception ex) when (ex is not ExitGUIException)
+        {
+            Debug.LogException(ex);
+            EditorUtility.DisplayDialog("에셋 생성 실패", ex.Message, "확인");
+            GUIUtility.ExitGUI();
+            return null;
+        }
     }
 
     /// <summary>
@@ -955,18 +967,12 @@ public class ProjectBuild : EditorWindow
     {
         EditorGUILayout.BeginVertical("box");
 
-        m_ShowCliSection = EditorGUILayout.Foldout(m_ShowCliSection, "Jenkins & Unity CLI 명령어 생성기 (다중 버전 지원)", true, EditorStyles.foldoutHeader);
+        m_ShowCliSection = EditorGUILayout.Foldout(m_ShowCliSection, "Jenkins & Unity CLI 명령어 생성기", true, EditorStyles.foldoutHeader);
         if (m_ShowCliSection)
         {
             EditorGUILayout.Space(4);
 
-            // 1. 실행 주체 (Runner Type)
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("실행 방식 (Runner)", GUILayout.Width(130));
-            m_CliRunner = (ECliRunnerType)EditorGUILayout.EnumPopup(m_CliRunner);
-            EditorGUILayout.EndHorizontal();
-
-            // 2. 명령어 모드 (Command Mode)
+            // 명령어 모드 (Command Mode)
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("파라미터 모드 (Mode)", GUILayout.Width(130));
             m_CliMode = (ECliCommandMode)EditorGUILayout.EnumPopup(m_CliMode);
@@ -979,23 +985,17 @@ public class ProjectBuild : EditorWindow
             {
                 ECliCommandMode.ProfileOnly => "▶ 1) 순수 프로필: '-buildProfile <경로>' 단일 인자로 가장 깔끔하게 프로필 전체 설정을 적용합니다.",
                 ECliCommandMode.FullUnpack => "▶ 2) 전체 풀기: 프로필 없이 '-buildTarget', '-buildType', '-buildVersion' 등 모든 개별 CLI 인자를 명시합니다.",
-                ECliCommandMode.ProfileOverride => "▶ 3) 프로필+오버라이드: 프로필 기본값 기반으로, CI 환경변수(Version 등)로 필요한 값만 덮어씁니다.",
+                ECliCommandMode.ProfileOverride => "▶ 3) 프로필+오버라이드: 프로필 값이 기본이고, 넘긴 인자만 덮어씁니다. (Jenkinsfile은 값을 넣은 Jenkins 파라미터만 넘김)",
                 _ => ""
             };
             EditorGUILayout.LabelField(modeDesc, EditorStyles.miniLabel);
 
-            string runnerDesc = m_CliRunner switch
-            {
-                ECliRunnerType.DirectUnityExe => "▶ Runner: 'Unity.exe' 직접 호출 (Jenkins 환경변수 UNITY_PATH 또는 로컬 Unity.exe)",
-                ECliRunnerType.UnityHubHeadless => "▶ Runner: 'Unity Hub.exe -- --headless run --project-path' (프로젝트 버전 일치 에디터 자동 탐색)",
-                _ => ""
-            };
-            EditorGUILayout.LabelField(runnerDesc, EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("▶ 실행: 'Unity.exe' 직접 호출 (Jenkins는 environment의 UNITY_PATH, 로컬은 현재 에디터)", EditorStyles.miniLabel);
 
             EditorGUILayout.Space(4);
 
             // 실시간 미리보기
-            string previewCmd = BuildCommandLine(m_CliRunner, m_CliMode, false);
+            string previewCmd = BuildCommandLine(m_CliMode, false);
             EditorGUILayout.TextArea(previewCmd, GUILayout.Height(64));
 
             EditorGUILayout.Space(4);
@@ -1029,19 +1029,21 @@ public class ProjectBuild : EditorWindow
         EditorGUILayout.EndVertical();
     }
 
-    private const string DEFAULT_HUB_PATH = @"C:\Program Files\Unity Hub\Unity Hub.exe";
+    // Jenkins choice 파라미터에서 "프로필 값 사용"을 뜻하는 값
+    private const string PROFILE_VALUE = "(profile)";
 
-    private string BuildCommandLine(ECliRunnerType runner, ECliCommandMode mode, bool isJenkinsVar)
+    private string BuildCommandLine(ECliCommandMode mode, bool isJenkinsVar)
     {
-        BuildCommandParts(runner, mode, isJenkinsVar, out string exe, out string args);
+        BuildCommandParts(mode, isJenkinsVar, out string exe, out string args);
         return $"\"{exe}\" {args}";
     }
 
     /// <summary>
     /// 실행 파일과 인자를 분리해 생성합니다. (.ps1은 Start-Process에 둘을 따로 넘겨야 한다)
     /// Jenkins용(isJenkinsVar)은 Jenkinsfile의 parameters/environment 값을 참조합니다.
+    /// (Unity Hub 헤드리스 CLI에는 프로젝트를 실행하는 명령이 없어 Unity.exe를 직접 호출한다)
     /// </summary>
-    private void BuildCommandParts(ECliRunnerType runner, ECliCommandMode mode, bool isJenkinsVar, out string exe, out string args)
+    private void BuildCommandParts(ECliCommandMode mode, bool isJenkinsVar, out string exe, out string args)
     {
         string projectPath = isJenkinsVar ? "${PROJECT_PATH}" : BuildHelper.ProjectPath;
         if (string.IsNullOrEmpty(projectPath))
@@ -1054,18 +1056,8 @@ public class ProjectBuild : EditorWindow
 
         var sb = new StringBuilder();
 
-        // Runner
-        if (runner == ECliRunnerType.DirectUnityExe)
-        {
-            exe = isJenkinsVar ? "${UNITY_PATH}" : EditorApplication.applicationPath;
-            sb.Append($"-batchmode -quit -projectPath \"{projectPath}\" -executeMethod ProjectBuild.JenkinsBuild -logFile \"{logPath}\"");
-        }
-        else
-        {
-            // Jenkins에서는 environment의 UNITY_HUB_PATH를 쓴다 (Groovy 문자열 안에 역슬래시 경로를 넣지 않기 위함)
-            exe = isJenkinsVar ? "${UNITY_HUB_PATH}" : DEFAULT_HUB_PATH;
-            sb.Append($"-- --headless run --project-path \"{projectPath}\" -- -batchmode -quit -executeMethod ProjectBuild.JenkinsBuild -logFile \"{logPath}\"");
-        }
+        exe = isJenkinsVar ? "${UNITY_PATH}" : EditorApplication.applicationPath;
+        sb.Append($"-batchmode -quit -projectPath \"{projectPath}\" -executeMethod ProjectBuild.JenkinsBuild -logFile \"{logPath}\"");
 
         // Mode arguments
         switch (mode)
@@ -1097,10 +1089,14 @@ public class ProjectBuild : EditorWindow
 
             case ECliCommandMode.ProfileOverride:
                 sb.Append($" -buildProfile \"{profilePath}\"");
-                sb.Append($" -buildVersion \"{(isJenkinsVar ? "${params.BUILD_VERSION}" : m_Version)}\"");
-                sb.Append($" -versionCode \"{(isJenkinsVar ? "${params.VERSION_CODE}" : m_VersionCode)}\"");
-                sb.Append($" -buildType {m_BuildType}");
-                sb.Append($" -devBuild {m_DevBuild.ToString().ToLower()}");
+                // Jenkins는 값을 넣은 파라미터만 Jenkinsfile 스크립트가 덧붙인다 (비우면 프로필 값 사용, BuildJenkinsfileText 참고)
+                if (!isJenkinsVar)
+                {
+                    sb.Append($" -buildVersion \"{m_Version}\"");
+                    sb.Append($" -versionCode \"{m_VersionCode}\"");
+                    sb.Append($" -buildType {m_BuildType}");
+                    sb.Append($" -devBuild {m_DevBuild.ToString().ToLower()}");
+                }
                 break;
         }
 
@@ -1139,7 +1135,7 @@ public class ProjectBuild : EditorWindow
         string selected = EditorUtility.SaveFilePanel("파워셸 스크립트(.ps1) 저장", projectRoot, "RunBuild", "ps1");
         if (!string.IsNullOrEmpty(selected))
         {
-            BuildCommandParts(m_CliRunner, m_CliMode, false, out string exe, out string args);
+            BuildCommandParts(m_CliMode, false, out string exe, out string args);
 
             var sb = new StringBuilder();
             sb.AppendLine("Write-Host '===================================================' -ForegroundColor Cyan");
@@ -1251,6 +1247,32 @@ public class ProjectBuild : EditorWindow
 
     private void GenerateJenkinsfile()
     {
+        string groovyCode = BuildJenkinsfileText();
+        GUIUtility.systemCopyBuffer = groovyCode;
+
+        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        string jenkinsfilePath = Path.Combine(projectRoot, "Jenkinsfile");
+
+        bool saveFile = EditorUtility.DisplayDialog(
+            "Jenkinsfile (Groovy) 생성 완료",
+            $"현재 선택된 옵션(Mode: {m_CliMode}) 기반의 Jenkinsfile Groovy 코드가 클립보드에 복사되었습니다!\n\n프로젝트 루트에 'Jenkinsfile' 파일로 저장하시겠습니까?",
+            "Jenkinsfile 파일로 저장",
+            "클립보드 복사만 유지"
+        );
+
+        if (saveFile)
+        {
+            File.WriteAllText(jenkinsfilePath, groovyCode, Encoding.UTF8);
+            EditorUtility.DisplayDialog("저장 완료", $"파일이 성공적으로 저장되었습니다:\n{jenkinsfilePath}", "확인");
+            EditorUtility.RevealInFinder(jenkinsfilePath);
+        }
+    }
+
+    /// <summary>
+    /// 창의 현재 옵션(모드, 선택 프로필, 버전 등)으로 Jenkinsfile(Groovy) 내용을 만듭니다.
+    /// </summary>
+    private string BuildJenkinsfileText()
+    {
         var allProfiles = HBBuildProfile.FindAllProfiles();
         var profileChoices = new List<string>();
 
@@ -1277,7 +1299,7 @@ public class ProjectBuild : EditorWindow
         var sb = new StringBuilder();
         sb.AppendLine("// ==========================================================================");
         sb.AppendLine($"// Jenkins Declarative Pipeline - Generated by HB Custom Build Manager");
-        sb.AppendLine($"// Mode: {m_CliMode} | Runner: {m_CliRunner}");
+        sb.AppendLine($"// Mode: {m_CliMode}");
         sb.AppendLine($"// Generated Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine("// ==========================================================================");
         sb.AppendLine("pipeline {");
@@ -1300,25 +1322,28 @@ public class ProjectBuild : EditorWindow
             sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: [{string.Join(", ", typeChoices.Select(c => $"'{c}'"))}], description: '빌드 환경 모드')");
         }
 
-        if (m_CliMode == ECliCommandMode.FullUnpack || m_CliMode == ECliCommandMode.ProfileOverride)
+        if (m_CliMode == ECliCommandMode.FullUnpack)
         {
             sb.AppendLine($"        string(name: 'BUILD_VERSION', defaultValue: '{m_Version}', description: '앱 버전 (Bundle Version)')");
             sb.AppendLine($"        string(name: 'VERSION_CODE', defaultValue: '{m_VersionCode}', description: '버전 코드 (Android/iOS)')");
+        }
+
+        if (m_CliMode == ECliCommandMode.ProfileOverride)
+        {
+            // 기본은 프로필 값, 값을 넣은 파라미터만 프로필을 덮어쓴다 (Jenkins 우선)
+            string typeChoices = string.Join(", ", new[] { PROFILE_VALUE }.Concat(Enum.GetNames(typeof(EBuildType))).Select(c => $"'{c}'"));
+            sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: [{typeChoices}], description: '빌드 환경 모드 ({PROFILE_VALUE} = 프로필 값)')");
+            sb.AppendLine($"        choice(name: 'DEV_BUILD', choices: ['{PROFILE_VALUE}', 'true', 'false'], description: 'Development Build ({PROFILE_VALUE} = 프로필 값)')");
+            sb.AppendLine("        string(name: 'BUILD_VERSION', defaultValue: '', description: '앱 버전 (Bundle Version, 비우면 프로필 값)')");
+            sb.AppendLine("        string(name: 'VERSION_CODE', defaultValue: '', description: '버전 코드 (Android/iOS, 비우면 프로필 값)')");
         }
 
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    environment {");
 
-        if (m_CliRunner == ECliRunnerType.DirectUnityExe)
-        {
-            string unityPath = EditorApplication.applicationPath.Replace('\\', '/');
-            sb.AppendLine($"        UNITY_PATH = '{unityPath}'");
-        }
-        else
-        {
-            sb.AppendLine("        UNITY_HUB_PATH = 'C:/Program Files/Unity Hub/Unity Hub.exe'");
-        }
+        string unityPath = EditorApplication.applicationPath.Replace('\\', '/');
+        sb.AppendLine($"        UNITY_PATH = '{unityPath}'");
 
         sb.AppendLine("        PROJECT_PATH = \"${WORKSPACE}\"");
         sb.AppendLine("        OUTPUT_DIR = \"${WORKSPACE}/BuildOutput\"");
@@ -1344,15 +1369,42 @@ public class ProjectBuild : EditorWindow
         sb.AppendLine("        stage('Unity Build Execution') {");
         sb.AppendLine("            steps {");
         sb.AppendLine("                script {");
-        sb.AppendLine($"                    echo \"Executing Unity Build: Runner={m_CliRunner}, Mode={m_CliMode}\"");
+        sb.AppendLine($"                    echo \"Executing Unity Build: Mode={m_CliMode}\"");
 
-        string rawCmd = BuildCommandLine(m_CliRunner, m_CliMode, true);
+        if (m_CliMode == ECliCommandMode.FullUnpack || m_CliMode == ECliCommandMode.ProfileOverride)
+        {
+            // 자유 입력 파라미터는 sh/bat 명령줄에 들어가므로 허용 문자만 통과시킨다 ($(...), ", & 등으로 명령이 깨지거나 끼어드는 것 방지)
+            sb.AppendLine("                    ['BUILD_VERSION', 'VERSION_CODE'].each { name ->");
+            sb.AppendLine("                        def value = params[name]?.trim()");
+            sb.AppendLine("                        if (value && !(value ==~ /[0-9A-Za-z._-]+/)) {");
+            sb.AppendLine("                            error(\"${name} contains characters not allowed (allowed: 0-9 A-Z a-z . _ -)\")");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                    }");
+            sb.AppendLine();
+        }
+
+        string rawCmd = BuildCommandLine(m_CliMode, true);
         string formattedCmd = rawCmd.Replace(" -", " \\\n                        -");
 
         sb.AppendLine("                    def unityArgs = \"\"\"");
         sb.AppendLine($"                        {formattedCmd}");
         sb.AppendLine("                    \"\"\".stripIndent().trim()");
         sb.AppendLine();
+
+        if (m_CliMode == ECliCommandMode.ProfileOverride)
+        {
+            // 빈 값을 인자로 넘기면 빌드가 실패하므로(-buildType "" 등) 값을 넣은 파라미터만 인자로 붙인다
+            sb.AppendLine("                    def overrides = []");
+            sb.AppendLine($"                    if (params.BUILD_TYPE && params.BUILD_TYPE != '{PROFILE_VALUE}') overrides << \"-buildType ${{params.BUILD_TYPE}}\"");
+            sb.AppendLine($"                    if (params.DEV_BUILD && params.DEV_BUILD != '{PROFILE_VALUE}') overrides << \"-devBuild ${{params.DEV_BUILD}}\"");
+            sb.AppendLine("                    if (params.BUILD_VERSION?.trim()) overrides << \"-buildVersion \\\"${params.BUILD_VERSION.trim()}\\\"\"");
+            sb.AppendLine("                    if (params.VERSION_CODE?.trim()) overrides << \"-versionCode \\\"${params.VERSION_CODE.trim()}\\\"\"");
+            sb.AppendLine("                    if (overrides) {");
+            sb.AppendLine("                        unityArgs += ' ' + overrides.join(' ')");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    echo \"Profile overrides: ${overrides ? overrides.join(' ') : '(none)'}\"");
+            sb.AppendLine();
+        }
         sb.AppendLine("                    if (isUnix()) {");
         sb.AppendLine("                        sh unityArgs");
         sb.AppendLine("                    } else {");
@@ -1382,25 +1434,7 @@ public class ProjectBuild : EditorWindow
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        string groovyCode = sb.ToString();
-        GUIUtility.systemCopyBuffer = groovyCode;
-
-        string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-        string jenkinsfilePath = Path.Combine(projectRoot, "Jenkinsfile");
-
-        bool saveFile = EditorUtility.DisplayDialog(
-            "Jenkinsfile (Groovy) 생성 완료",
-            $"현재 선택된 옵션(Runner: {m_CliRunner}, Mode: {m_CliMode}) 기반의 Jenkinsfile Groovy 코드가 클립보드에 복사되었습니다!\n\n프로젝트 루트에 'Jenkinsfile' 파일로 저장하시겠습니까?",
-            "Jenkinsfile 파일로 저장",
-            "클립보드 복사만 유지"
-        );
-
-        if (saveFile)
-        {
-            File.WriteAllText(jenkinsfilePath, groovyCode, Encoding.UTF8);
-            EditorUtility.DisplayDialog("저장 완료", $"파일이 성공적으로 저장되었습니다:\n{jenkinsfilePath}", "확인");
-            EditorUtility.RevealInFinder(jenkinsfilePath);
-        }
+        return sb.ToString();
     }
 
     #region Jenkins CLI Entrypoint
