@@ -1,4 +1,5 @@
 ﻿#if HB_CUSTOM_BUILD_ENABLED
+using HB.CustomBuild.Editor;
 using UnityEditor;
 using UnityEngine;
 

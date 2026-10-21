@@ -14,6 +14,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
 
 ## 주요 구성 및 기능
 1. **`[NeedSlotNullCheck]` 어트리뷰트**: 필수 연결이 필요한 직렬화 필드에 선언하여 검증 대상으로 등록합니다.
+   - 네임스페이스는 `HB.TestFrameworkHelper`입니다. 사용하는 스크립트에 `using HB.TestFrameworkHelper;`를 추가하세요 (CodeFix는 using을 자동으로 넣지 않습니다).
    - `[NeedSlotNullCheck("설명")]`: 리포트에 설명을 붙입니다.
    - `[NeedSlotNullCheck(warnNullElements: false)]`: 배열 · List 슬롯의 빈 원소 경고를 끕니다 (기본 true). 단일 슬롯에는 영향이 없습니다.
 2. **Roslyn Analyzer & CodeFix (`HB_TestFrameworkHelper.dll`)**:
@@ -43,6 +44,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
 
 ```csharp
 using System.Collections.Generic;
+using HB.TestFrameworkHelper;
 using UnityEngine;
 using UnityEngine.UI;
 
