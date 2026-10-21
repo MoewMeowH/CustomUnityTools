@@ -20,14 +20,16 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
   - 상속 관계에 있는 빌드 스텝이 있을 경우 파생 클래스가 부모 스텝을 자동으로 오버라이드하도록 필터링합니다.
 - **Jenkinsfile (Groovy) 생성 및 CLI 연동**:
   - 에디터 설정값을 바탕으로 Jenkins Declarative Pipeline 스크립트를 생성합니다.
-  - CLI 환경에서 `-executeMethod ProjectBuild.JenkinsBuild` 호출을 통한 배치를 지원합니다.
+  - CLI 환경에서 `-executeMethod HB.CustomBuild.Editor.ProjectBuild.JenkinsBuild` 호출을 통한 배치를 지원합니다.
+- **네임스페이스**: 모든 타입은 `HB.CustomBuild.Editor`에 있습니다. 커스텀 스텝(`IPreBuildStep` · `IPostBuildStep`)을 만들 때 `using HB.CustomBuild.Editor;`를 추가하세요.
+  - 스텝 ID(`StepId`)는 기본적으로 타입의 전체 이름입니다 (예: `HB.CustomBuild.Editor.PreBuildStep_PlayerSettings`). `-disabledSteps`와 프로필의 비활성 목록에 이 이름을 씁니다.
 
 ---
 
 ## CLI 빌드 예시
 ```bash
 Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
-  -executeMethod ProjectBuild.JenkinsBuild \
+  -executeMethod HB.CustomBuild.Editor.ProjectBuild.JenkinsBuild \
   -logFile "build.log" \
   -buildTarget StandaloneWindows64 \
   -buildType DEV \
