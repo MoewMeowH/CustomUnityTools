@@ -11,6 +11,8 @@ namespace HB.TestFrameworkHelper.Editor
     /// </summary>
     public class PreBuildStep_ValidateInspectorSlots : IPreBuildStep
     {
+        // 클래스 이름이 바뀌어도 프로필의 비활성 목록이 깨지지 않도록 ID를 고정한다
+        public virtual string StepId => "HB.TestFrameworkHelper.Editor.PreBuildStep_ValidateInspectorSlots";
         public virtual int ExecutionOrder => 1; // 가장 먼저 실행
         public virtual string StepName => "Inspector 필수 슬롯([NeedSlotNullCheck]) 사전 검증";
 

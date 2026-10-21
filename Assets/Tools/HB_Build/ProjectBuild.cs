@@ -44,7 +44,7 @@ namespace HB.CustomBuild.Editor
         [SerializeField] private ESelfBuildPlatform m_Platform = ESelfBuildPlatform.PC;
         [SerializeField] private EBuildType m_BuildType = EBuildType.DEV;
         [SerializeField] private string m_Version = "1.0.0";
-        [SerializeField] private string m_VersionCode = "1";
+        [SerializeField] private string m_VersionCode = string.Empty;
         [SerializeField] private bool m_DevBuild = false;
         [SerializeField] private bool m_DeepProfile = false;
         [SerializeField] private bool m_CleanBuild = false;
@@ -128,8 +128,7 @@ namespace HB.CustomBuild.Editor
             if (string.IsNullOrEmpty(m_Version))
                 m_Version = Application.version;
 
-            if (string.IsNullOrEmpty(m_VersionCode))
-                m_VersionCode = PlayerSettings.Android.bundleVersionCode.ToString();
+            // 버전 코드는 자동으로 채우지 않는다 (모바일 빌드는 비어 있으면 실패 — 정하지 않은 값으로 빌드되는 것 방지)
 
             // m_OutputPath는 비워 두면 기본 경로(BuildOutput/<Target>)를 사용한다.
             // 로컬 절대 경로가 프로필에 저장되어 CI에서 쓰이지 않도록 자동으로 채우지 않는다.
@@ -587,11 +586,39 @@ namespace HB.CustomBuild.Editor
                     EditorGUILayout.HelpBox("현재 조건에서 실행될 Post-Build Step이 없습니다.", MessageType.None);
                 }
 
+                DrawUnknownDisabledSteps();
+
                 // 4. 선택된 스텝 코드 미리보기 패널 노출
                 DrawCodePreviewSection();
             }
 
             EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>
+        /// 비활성 목록에 있지만 등록된 스텝이 없는 ID(스텝 이름 변경 · 삭제)를 보여주고 제거할 수 있게 합니다.
+        /// LIVE · 배치 빌드는 이런 ID가 있으면 실패합니다.
+        /// </summary>
+        private void DrawUnknownDisabledSteps()
+        {
+            var unknown = BuildStepRegistry.GetUnknownStepIds(m_DisabledStepIds);
+            if (unknown.Count == 0) return;
+
+            EditorGUILayout.Space(4);
+            EditorGUILayout.HelpBox($"비활성 목록에 등록되지 않은 스텝 ID가 {unknown.Count}개 있습니다 (스텝 이름 변경 · 삭제). LIVE · 배치(Jenkins) 빌드는 실패합니다. 제거 후 [프로필 저장]하세요.", MessageType.Warning);
+
+            string removeId = null;
+            foreach (string id in unknown)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(id, EditorStyles.miniLabel);
+                if (GUILayout.Button("제거", EditorStyles.miniButton, GUILayout.Width(45)))
+                    removeId = id;
+                EditorGUILayout.EndHorizontal();
+            }
+
+            if (removeId != null)
+                m_DisabledStepIds.RemoveAll(x => x == removeId);
         }
 
         private void DrawStepRow(string stepId, string stepName, int executionOrder, bool conditionActive, Type stepType)
@@ -992,7 +1019,7 @@ namespace HB.CustomBuild.Editor
                 };
                 EditorGUILayout.LabelField(modeDesc, EditorStyles.miniLabel);
 
-                EditorGUILayout.LabelField("▶ 실행: 'Unity.exe' 직접 호출 (Jenkins는 environment의 UNITY_PATH, 로컬은 현재 에디터)", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("▶ 실행: 'Unity.exe' 직접 호출 (Jenkins는 에이전트의 UNITY_PATH 또는 ProjectVersion.txt 버전, 로컬은 현재 에디터)", EditorStyles.miniLabel);
 
                 EditorGUILayout.Space(4);
 
@@ -1036,6 +1063,9 @@ namespace HB.CustomBuild.Editor
 
         private static string BoolArg(bool value) => value ? "true" : "false";
 
+        /// <summary> Groovy 작은따옴표 문자열 리터럴 (경로에 ' 나 \ 가 있어도 Jenkinsfile 문법이 깨지지 않게) </summary>
+        private static string GroovyQuote(string value) => "'" + value.Replace("\\", "\\\\").Replace("'", "\\'") + "'";
+
         private string BuildCommandLine(ECliCommandMode mode, bool isJenkinsVar)
         {
             BuildCommandParts(mode, isJenkinsVar, out string exe, out string args);
@@ -1055,19 +1085,30 @@ namespace HB.CustomBuild.Editor
 
             string logPath = isJenkinsVar ? "${LOG_FILE}" : "build.log";
             string profilePath = isJenkinsVar
-                ? "${params.BUILD_PROFILE}"
+                ? "${profilePath}"   // Jenkinsfile 스크립트가 BUILD_PROFILE_PATH(직접 입력) 또는 BUILD_PROFILE로 정함
                 : (m_SelectedProfile != null ? AssetDatabase.GetAssetPath(m_SelectedProfile) : "Assets/Editor/HBBuild/Profiles/BuildProfile_PC_DEV.asset");
+
+            // 프로필 빌드도 -buildTarget을 넘겨야 Unity가 처음부터 그 플랫폼으로 열린다 (배치 모드는 도중 전환하면 실패)
+            // Jenkins는 BuildJenkinsfileText가 만든 profileTarget(프로필 경로 → 플랫폼 표에서 고른 값)을 쓴다
+            string profileTarget = isJenkinsVar
+                ? "${profileTarget}"
+                : (m_SelectedProfile != null ? m_SelectedProfile.GetResolvedBuildTarget() : GetBuildTarget(m_Platform)).ToString();
 
             var sb = new StringBuilder();
 
-            exe = isJenkinsVar ? "${UNITY_PATH}" : EditorApplication.applicationPath;
+            // Jenkins는 BuildJenkinsfileText가 에이전트 환경(UNITY_PATH 또는 ProjectVersion.txt)으로 찾은 unityPath를 쓴다
+            exe = isJenkinsVar ? "${unityPath}" : EditorApplication.applicationPath;
             sb.Append($"-batchmode -quit -projectPath \"{projectPath}\" -executeMethod HB.CustomBuild.Editor.ProjectBuild.JenkinsBuild -logFile \"{logPath}\"");
 
             // Mode arguments
             switch (mode)
             {
                 case ECliCommandMode.ProfileOnly:
+                    sb.Append($" -buildTarget {profileTarget}");
                     sb.Append($" -buildProfile \"{profilePath}\"");
+                    // Jenkins는 프로필의 출력 경로 대신 BuildOutput/<플랫폼>에 만든다 (Clean · archiveArtifacts 대상과 일치)
+                    if (isJenkinsVar)
+                        sb.Append(" -outputPath \"BuildOutput/${profileTarget}\"");
                     break;
 
                 case ECliCommandMode.FullUnpack:
@@ -1094,7 +1135,11 @@ namespace HB.CustomBuild.Editor
                     break;
 
                 case ECliCommandMode.ProfileOverride:
+                    sb.Append($" -buildTarget {profileTarget}");
                     sb.Append($" -buildProfile \"{profilePath}\"");
+                    // Jenkins는 프로필의 출력 경로 대신 BuildOutput/<플랫폼>에 만든다 (Clean · archiveArtifacts 대상과 일치)
+                    if (isJenkinsVar)
+                        sb.Append(" -outputPath \"BuildOutput/${profileTarget}\"");
                     // Jenkins는 값을 넣은 파라미터만 Jenkinsfile 스크립트가 덧붙인다 (비우면 프로필 값 사용, BuildJenkinsfileText 참고)
                     if (!isJenkinsVar)
                     {
@@ -1211,6 +1256,13 @@ namespace HB.CustomBuild.Editor
             };
         }
 
+        /// <summary> 프로필 에셋 경로의 빌드 대상 (에셋이 없으면 창에서 고른 플랫폼) </summary>
+        private BuildTarget GetProfileTarget(string profilePath)
+        {
+            var profile = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(profilePath);
+            return profile != null ? profile.GetResolvedBuildTarget() : GetBuildTarget(m_Platform);
+        }
+
         private void ExecuteLocalBuild()
         {
             // delayCall 시점에 창이 닫혔을 수 있다
@@ -1233,16 +1285,24 @@ namespace HB.CustomBuild.Editor
 
             try
             {
-                if (m_SelectedProfile != null)
+                var context = m_SelectedProfile != null ? m_SelectedProfile.ToBuildContext() : CreateContextFromWindow();
+
+                // LIVE + Development는 라이브 환경 확인용으로 허용하되, 실수로 켠 것이 아닌지 한 번 묻는다
+                if (context.IsLiveDevBuild && !EditorUtility.DisplayDialog(
+                        "LIVE + Development Build",
+                        "LIVE 빌드인데 Development Build가 켜져 있습니다" + (context.IsDeepProfile ? " (Deep Profiling 포함)" : string.Empty) + ".\n\n" +
+                        "라이브 환경 프로파일링 · 로그 확인용이 아니라면 끄고 빌드하세요. 산출물 이름에 _DEVBUILD가 붙습니다.",
+                        "그대로 빌드", "취소"))
                 {
-                    AbsBuild.ExecuteFromProfile(m_SelectedProfile);
-                }
-                else
-                {
-                    AbsBuild.Execute(CreateContextFromWindow());
+                    return;
                 }
 
-                EditorUtility.DisplayDialog("빌드 완료", $"{buildName}플레이어 빌드가 성공적으로 완료되었습니다!", "확인");
+                if (m_SelectedProfile != null)
+                    BuildHelper.Log($"[Pipeline] Executing build from Profile: {m_SelectedProfile.name} (Platform: {m_SelectedProfile.TargetPlatform}, Mode: {m_SelectedProfile.BuildType})");
+                AbsBuild.Execute(context);
+
+                EditorUtility.DisplayDialog("빌드 완료", $"{buildName}플레이어 빌드가 성공적으로 완료되었습니다!" +
+                    (context.Warnings.Count > 0 ? $"\n\n경고 {context.Warnings.Count}건이 있습니다. Console 또는 {AbsBuild.WARNINGS_FILE}를 확인하세요." : string.Empty), "확인");
             }
             catch (Exception ex)
             {
@@ -1299,7 +1359,7 @@ namespace HB.CustomBuild.Editor
                 profileChoices.Add("Assets/Editor/HBBuild/Profiles/BuildProfile_PC_DEV.asset");
             }
 
-            string choicesArrayStr = string.Join(", ", profileChoices.Select(c => $"'{c}'"));
+            string choicesArrayStr = string.Join(", ", profileChoices.Select(GroovyQuote));
             string defaultProfile = profileChoices[0];
 
             var sb = new StringBuilder();
@@ -1315,29 +1375,25 @@ namespace HB.CustomBuild.Editor
 
             if (m_CliMode == ECliCommandMode.ProfileOnly || m_CliMode == ECliCommandMode.ProfileOverride)
             {
-                sb.AppendLine($"        choice(name: 'BUILD_PROFILE', choices: [{choicesArrayStr}], description: '실행할 HBBuildProfile(.asset) 경로')");
+                sb.AppendLine($"        choice(name: 'BUILD_PROFILE', choices: [{choicesArrayStr}], description: '실행할 HBBuildProfile(.asset) 경로 (생성한 PC에 있던 프로필)')");
+                // 목록에 없는 프로필(빌드 PC 전용 .gitignore 폴더 등)은 경로와 플랫폼을 직접 넣는다. 플랫폼이 틀리면 배치 빌드가 불일치로 실패한다
+                sb.AppendLine("        string(name: 'BUILD_PROFILE_PATH', defaultValue: '', description: '목록에 없는 프로필 경로 직접 입력 (예: Assets/Editor/HBBuild/Profiles/BuildMachine/Live_AOS.asset). 비우면 BUILD_PROFILE 사용')");
+                sb.AppendLine($"        choice(name: 'BUILD_TARGET', choices: ['{PROFILE_VALUE}', 'StandaloneWindows64', 'Android', 'iOS'], description: '프로필 플랫폼 ({PROFILE_VALUE} = 생성 시 기록된 플랫폼, 직접 입력한 프로필은 필수)')");
             }
 
             if (m_CliMode == ECliCommandMode.FullUnpack)
             {
-                // 현재 선택값을 첫 번째(기본값)로 두고 중복 없이 나열
-                string targetStr = GetBuildTarget(m_Platform).ToString();
-                var targetChoices = new[] { targetStr, "StandaloneWindows64", "Android", "iOS" }.Distinct();
-                var typeChoices = new[] { m_BuildType.ToString() }.Concat(Enum.GetNames(typeof(EBuildType))).Distinct();
-                sb.AppendLine($"        choice(name: 'BUILD_TARGET', choices: [{string.Join(", ", targetChoices.Select(c => $"'{c}'"))}], description: '빌드 타겟 플랫폼')");
-                sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: [{string.Join(", ", typeChoices.Select(c => $"'{c}'"))}], description: '빌드 환경 모드')");
-            }
-
-            if (m_CliMode == ECliCommandMode.FullUnpack)
-            {
-                // 기본값은 생성 시 창 값, Jenkins에서 바꾼 값이 우선한다
-                sb.AppendLine($"        string(name: 'BUILD_VERSION', defaultValue: '{m_Version}', description: '앱 버전 (Bundle Version)')");
-                sb.AppendLine($"        string(name: 'VERSION_CODE', defaultValue: '{m_VersionCode}', description: '버전 코드 (Android/iOS)')");
-                sb.AppendLine($"        booleanParam(name: 'DEV_BUILD', defaultValue: {BoolArg(m_DevBuild)}, description: 'Development Build')");
-                sb.AppendLine($"        booleanParam(name: 'DEEP_PROFILE', defaultValue: {BoolArg(m_DeepProfile)}, description: 'Deep Profiling Support (DEV_BUILD일 때만 적용)')");
-                sb.AppendLine($"        booleanParam(name: 'CLEAN_BUILD', defaultValue: {BoolArg(m_CleanBuild)}, description: 'Clean Build Cache')");
-                sb.AppendLine($"        booleanParam(name: 'IS_AAB', defaultValue: {BoolArg(m_IsAab)}, description: 'Android App Bundle(.aab) 빌드 (Android 전용)')");
-                sb.AppendLine($"        booleanParam(name: 'ZIP_PACKAGE', defaultValue: {BoolArg(m_ZipPackage)}, description: '빌드 결과 ZIP 압축 (PC 전용)')");
+                // 기본값은 생성한 사람의 창 상태와 무관한 안전값으로 고정한다 (DEV 설정으로 생성해 커밋해도 라이브 기본값이 바뀌지 않게)
+                // 선택지 순서도 고정: 첫 항목이 기본값
+                sb.AppendLine("        choice(name: 'BUILD_TARGET', choices: ['StandaloneWindows64', 'Android', 'iOS'], description: '빌드 타겟 플랫폼')");
+                sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: [{string.Join(", ", Enum.GetNames(typeof(EBuildType)).Select(c => $"'{c}'"))}], description: '빌드 환경 모드')");
+                sb.AppendLine("        string(name: 'BUILD_VERSION', defaultValue: '', description: '앱 버전 (Bundle Version, 비우면 PlayerSettings 값)')");
+                sb.AppendLine("        string(name: 'VERSION_CODE', defaultValue: '', description: '버전 코드 (Android versionCode / iOS buildNumber, 모바일은 필수)')");
+                sb.AppendLine("        booleanParam(name: 'DEV_BUILD', defaultValue: false, description: 'Development Build (LIVE에서 켜면 산출물에 _DEVBUILD, 결과 UNSTABLE)')");
+                sb.AppendLine("        booleanParam(name: 'DEEP_PROFILE', defaultValue: false, description: 'Deep Profiling Support (DEV_BUILD일 때만 적용)')");
+                sb.AppendLine("        booleanParam(name: 'CLEAN_BUILD', defaultValue: false, description: 'Clean Build Cache')");
+                sb.AppendLine("        booleanParam(name: 'IS_AAB', defaultValue: false, description: 'Android App Bundle(.aab) 빌드 (Android 전용)')");
+                sb.AppendLine("        booleanParam(name: 'ZIP_PACKAGE', defaultValue: false, description: '빌드 결과 ZIP 압축 (PC 전용)')");
             }
 
             if (m_CliMode == ECliCommandMode.ProfileOverride)
@@ -1352,11 +1408,8 @@ namespace HB.CustomBuild.Editor
 
             sb.AppendLine("    }");
             sb.AppendLine();
+            // UNITY_PATH는 넣지 않는다 (생성 PC의 경로가 박히면 에이전트 경로가 다르거나 Unity를 올릴 때 깨짐). 실행 시 찾는다
             sb.AppendLine("    environment {");
-
-            string unityPath = EditorApplication.applicationPath.Replace('\\', '/');
-            sb.AppendLine($"        UNITY_PATH = '{unityPath}'");
-
             sb.AppendLine("        PROJECT_PATH = \"${WORKSPACE}\"");
             sb.AppendLine("        OUTPUT_DIR = \"${WORKSPACE}/BuildOutput\"");
             sb.AppendLine("        LOG_FILE = \"${WORKSPACE}/build.log\"");
@@ -1382,6 +1435,36 @@ namespace HB.CustomBuild.Editor
             sb.AppendLine("            steps {");
             sb.AppendLine("                script {");
             sb.AppendLine($"                    echo \"Executing Unity Build: Mode={m_CliMode}\"");
+            sb.AppendLine();
+
+            // Unity 경로: 에이전트 환경변수 UNITY_PATH, 없으면 ProjectVersion.txt의 버전으로 Hub 설치 경로(UNITY_EDITORS_ROOT로 바꿀 수 있음)
+            sb.AppendLine("                    def unityPath = env.UNITY_PATH");
+            sb.AppendLine("                    if (!unityPath) {");
+            sb.AppendLine("                        def versionLine = readFile('ProjectSettings/ProjectVersion.txt').readLines().find { it.startsWith('m_EditorVersion:') }");
+            sb.AppendLine("                        if (!versionLine) error('m_EditorVersion not found in ProjectSettings/ProjectVersion.txt')");
+            sb.AppendLine("                        def editorVersion = versionLine.substring('m_EditorVersion:'.length()).trim()");
+            sb.AppendLine("                        if (isUnix()) {");
+            sb.AppendLine("                            unityPath = \"${env.UNITY_EDITORS_ROOT ?: '/Applications/Unity/Hub/Editor'}/${editorVersion}/Unity.app/Contents/MacOS/Unity\"");
+            sb.AppendLine("                        } else {");
+            sb.AppendLine("                            unityPath = \"${env.UNITY_EDITORS_ROOT ?: 'C:/Program Files/Unity/Hub/Editor'}/${editorVersion}/Editor/Unity.exe\"");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    if (!fileExists(unityPath)) error(\"Unity editor not found: ${unityPath} (set UNITY_PATH or UNITY_EDITORS_ROOT on the agent)\")");
+            sb.AppendLine("                    echo \"Unity: ${unityPath}\"");
+            sb.AppendLine();
+
+            if (m_CliMode == ECliCommandMode.ProfileOnly || m_CliMode == ECliCommandMode.ProfileOverride)
+            {
+                // 고른 프로필의 플랫폼을 -buildTarget으로 넘긴다 (생성 시점의 프로필 플랫폼. 바꿨으면 다시 생성 — 배치 빌드가 불일치로 실패함)
+                string targetMap = string.Join(", ", profileChoices.Select(path => $"{GroovyQuote(path)}: {GroovyQuote(GetProfileTarget(path).ToString())}"));
+                sb.AppendLine($"                    def profileTargets = [{targetMap}]");
+                sb.AppendLine("                    def profilePath = params.BUILD_PROFILE_PATH?.trim() ?: params.BUILD_PROFILE");
+                // 명령줄에 들어가므로 에셋 경로에 쓰는 문자만 허용한다
+                sb.AppendLine(@"                    if (!(profilePath ==~ /[\p{L}\p{N} ._\/-]+\.asset/)) error(""Profile path must be an .asset path (letters, digits, space, . _ / -): ${profilePath}"")");
+                sb.AppendLine($"                    def profileTarget = params.BUILD_TARGET && params.BUILD_TARGET != '{PROFILE_VALUE}' ? params.BUILD_TARGET : profileTargets[profilePath]");
+                sb.AppendLine("                    if (!profileTarget) error(\"No build target recorded for profile ${profilePath}. Choose BUILD_TARGET or regenerate the Jenkinsfile.\")");
+                sb.AppendLine();
+            }
 
             if (m_CliMode == ECliCommandMode.FullUnpack || m_CliMode == ECliCommandMode.ProfileOverride)
             {
@@ -1435,6 +1518,13 @@ namespace HB.CustomBuild.Editor
             sb.AppendLine();
             sb.AppendLine("    post {");
             sb.AppendLine("        always {");
+            // HB_Build가 남긴 경고(LIVE + Development, 심볼 항목 없음 등)가 있으면 내용을 출력하고 UNSTABLE로 표시한다
+            sb.AppendLine("            script {");
+            sb.AppendLine($"                if (fileExists('{AbsBuild.WARNINGS_FILE}')) {{");
+            sb.AppendLine($"                    echo \"HB_Build warnings:\\n\" + readFile('{AbsBuild.WARNINGS_FILE}')");
+            sb.AppendLine("                    unstable('HB_Build reported warnings (see the log above)')");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
             sb.AppendLine("            archiveArtifacts artifacts: 'build.log', allowEmptyArchive: true");
             sb.AppendLine("        }");
             sb.AppendLine("        success {");

@@ -16,7 +16,8 @@ namespace HB.CustomBuild.Editor
         public BuildTargetGroup TargetGroup { get; set; }
         public EBuildType BuildType { get; set; }
         public string Version { get; set; } = "1.0.0";
-        public string VersionCode { get; set; } = "1";
+        /// <summary> Android versionCode / iOS buildNumber. 모바일 빌드에서는 비어 있으면 실패 (기본값으로 채우지 않음) </summary>
+        public string VersionCode { get; set; } = string.Empty;
         public bool IsDevBuild { get; set; }
         public bool IsDeepProfile { get; set; }
         public bool IsCleanBuild { get; set; }
@@ -33,13 +34,30 @@ namespace HB.CustomBuild.Editor
         public HashSet<string> DisabledStepIds { get; } = new HashSet<string>();
 
         /// <summary>
+        /// LIVE인데 Development Build가 켜진 빌드 (라이브 환경 프로파일링 · 로그 확인용으로 허용하되 눈에 띄게 표시)
+        /// </summary>
+        public bool IsLiveDevBuild => BuildType == EBuildType.LIVE && IsDevBuild;
+
+        /// <summary>
+        /// 빌드를 막지는 않지만 사람이 확인해야 할 경고. 빌드가 끝나면 BuildOutput/HB_BUILD_WARNINGS.txt로 남는다 (Jenkins는 UNSTABLE 처리)
+        /// </summary>
+        public List<string> Warnings { get; } = new List<string>();
+
+        public void AddWarning(string message)
+        {
+            Warnings.Add(message);
+            BuildHelper.LogWarning(message);
+        }
+
+        /// <summary>
         /// 빌드 결과물 경로를 계산합니다.
         /// Windows는 버전별 하위 폴더에 실행 파일과 데이터 폴더를 모으고, Android는 단일 파일, iOS는 Xcode 프로젝트 폴더입니다.
+        /// LIVE + Development 빌드는 이름에 _DEVBUILD가 붙습니다.
         /// </summary>
         public string GetLocationPathName()
         {
             string outDir = BuildHelper.ResolveProjectRelativePath(OutputPath);
-            string baseName = $"{Application.productName}_v{Version}_{BuildType}";
+            string baseName = $"{Application.productName}_v{Version}_{BuildType}" + (IsLiveDevBuild ? "_DEVBUILD" : string.Empty);
             return Target switch
             {
                 BuildTarget.Android => Path.Combine(outDir, baseName + (IsAab ? ".aab" : ".apk")),
