@@ -1,21 +1,23 @@
 # HB_E2String 벤치마크
 
-`Enum.ToString()` · `Enum.TryParse()` · `Enum.IsDefined()` · `Enum.GetValues()`와 E2String 생성 코드를 Unity 7 플레이어(IL2CPP · CoreCLR)에서 비교한 결과입니다.
+`Enum.ToString()` · `Enum.TryParse()` · `Enum.IsDefined()` · `Enum.GetValues()`와 E2String 생성 코드를 Unity 7 IL2CPP 플레이어에서 비교한 결과입니다.
 
 | 항목 | 값 |
 |---|---|
-| 측정 대상 | `Plugins/EString.dll` (빌드 2026-10-15 21:17, SHA-256 `47b624f2719f…`) |
-| Unity | 7000.0.0a8, Windows x64 Standalone |
-| 측정일 | 2026-10-15 |
+| 측정 대상 | `Plugins/EString.dll` (빌드 2026-10-18 00:49, SHA-256 `cf2220a5bbd1…`) |
+| Unity | 7000.0.0a8, Windows x64 Standalone, IL2CPP |
+| 측정일 | 2026-10-22 |
 | 패키지 | [HB_E2String](../../HB_E2String/README.md) |
 | 측정 코드 | 작업 프로젝트의 `Assets/Benchmarks/E2String/` (UPM 패키지에는 포함되지 않음, [7절](#7-측정-방법과-실행-코드) 참고) |
 
 > DLL이 교체되면 수치가 달라질 수 있습니다. 재측정 시 위 표를 함께 갱신하세요.
+>
+> CoreCLR 측정은 Unity 7.0 정식 출시 이후 예정입니다.
 
 ## 목차
 
 1. [요약](#1-요약)
-2. [결과 비교 (IL2CPP · CoreCLR)](#2-결과-비교-il2cpp--coreclr)
+2. [결과 비교 (IL2CPP)](#2-결과-비교-il2cpp)
 3. [그래프](#3-그래프)
 4. [기존 코드의 문제점과 원인](#4-기존-코드의-문제점과-원인)
 5. [전 · 후 코드와 생성 코드](#5-전--후-코드와-생성-코드)
@@ -27,74 +29,74 @@
 
 ## 1. 요약
 
-| | IL2CPP | CoreCLR |
-|---|---|---|
-| **Enum → String** | 약 **5배** 빠름 (할당은 원래 없음) | 약 **4배** 빠름, 24 B → **0 B** |
-| **String → Enum** | 약 **48배** 빠름 | 약 **11배** 빠름 |
-| **정의 검사** | 약 **136배** 빠름, 20 B → **0 B** | 약 **35배** 빠름, 24 B → **0 B** |
-| **값 순회** | 약 **230배** 빠름, 44.6 B → **0 B** | 약 **32배** 빠름, 4.6 B → **0 B** |
-| **비용** | Enum(100 멤버) 1개당 `GameAssembly.dll` 약 **+19 KB** | Enum 1개당 IL 약 +7.6 KB |
+| | IL2CPP |
+|---|---|
+| **Enum → String** | 약 **4배** 빠름 (할당은 원래 없음) |
+| **String → Enum** | 약 **45배** 빠름 |
+| **정의 검사** | **100배 이상** 빠름, 20 B → **0 B** |
+| **값 순회** | **100배 이상** 빠름, 44.6 B → **0 B** |
+| **비용** | Enum(100 멤버) 1개당 `GameAssembly.dll` 약 **+11 KB** (Stripping `Low`, 생성 메서드 미사용). `Medium` 이상에서 쓰지 않는 Enum은 **0** |
 
-- **IL2CPP에서 E2String의 이득은 주로 속도입니다.** IL2CPP에서는 `Enum.ToString()`과 `Enum.TryParse`가 원래 할당하지 않습니다 (Profiler 캡처로 교차 확인).
-- **할당이 0이 되는 곳** (두 런타임 공통): `Enum.IsDefined`, `Enum.GetValues` 순회, `[Flags]` 조합 출력, 문자열 보간의 박싱.
-- **주의할 곳**: `[Flags]` 조합의 **첫 호출**은 기존보다 5~9배 느립니다 (조합마다 1회, 이후 캐시).
+- **IL2CPP에서 E2String의 이득은 주로 속도입니다.** IL2CPP에서는 `Enum.ToString()`과 `Enum.TryParse`가 원래 할당하지 않습니다.
+- **할당이 0이 되는 곳**: `Enum.IsDefined`, `Enum.GetValues` 순회, `[Flags]` 조합 출력. 문자열 보간은 박싱이 빠져 64 B → 44 B(결과 문자열만)가 됩니다.
+- **주의할 곳**: `[Flags]` 조합의 **첫 호출**은 기존보다 약 3배 느립니다 (조합마다 1회, 이후 캐시).
 
-## 2. 결과 비교 (IL2CPP · CoreCLR)
+## 2. 결과 비교 (IL2CPP)
 
 호출 1회당 시간입니다. **시간은 Release 플레이어, 할당은 Development 플레이어** 기준입니다.
 
 ### 2-1. 시간
 
-| 케이스 | IL2CPP 기존 | IL2CPP E2String | 배수 | CoreCLR 기존 | CoreCLR E2String | 배수 |
-|---|---:|---:|---:|---:|---:|---:|
-| **Enum → String** | | | | | | |
-| 100 멤버, 순서대로 | 55.6 ns | **11.2 ns** | ×5.0 | 7.0 ns | **1.9 ns** | ×3.7 |
-| 100 멤버, 무작위 순서 | 55.5 ns | **11.1 ns** | ×5.0 | 7.0 ns | **1.2 ns** | ×5.8 |
-| 100 멤버, 띄엄띄엄한 값 | 71.4 ns | **5.5 ns** | ×13 | 13.8 ns | **3.4 ns** | ×4.1 |
-| 8 멤버 | 55.9 ns | **10.0 ns** | ×5.6 | 7.0 ns | **1.0 ns** | ×7.0 |
-| 문자열 보간 `$"S:{e}"` | 174.4 ns | **45.7 ns** | ×3.8 | 26.6 ns | **11.6 ns** | ×2.3 |
-| `[Flags]` 조합 | 188.1 ns | **60.9 ns** | ×3.1 | 27.5 ns | **7.4 ns** | ×3.7 |
-| **String → Enum** | | | | | | |
-| 100 멤버, 성공 | 765.4 ns | **16.1 ns** | ×48 | 71.8 ns | **6.7 ns** | ×11 |
-| 100 멤버, 실패 입력 | 801.4 ns | **16.3 ns** | ×49 | 67.2 ns | **5.1 ns** | ×13 |
-| 8 멤버, 성공 | 222.3 ns | **5.8 ns** | ×38 | 7.9 ns | **3.3 ns** | ×2.4 |
-| **검사 · 순회** | | | | | | |
-| 정의 검사 | 149.2 ns | **1.1 ns** | ×136 | 10.5 ns | **0.3 ns** | ×35 |
-| 전체 값 순회 (원소당) | 183.9 ns | **0.8 ns** | ×230 | 6.5 ns | **0.2 ns** | ×32 |
+| 케이스 | 기존 | E2String | 배수 |
+|---|---:|---:|---:|
+| **Enum → String** | | | |
+| 100 멤버, 순서대로 | 43.4 ns | **11.0 ns** | ×4.0 |
+| 100 멤버, 무작위 순서 | 43.0 ns | **10.9 ns** | ×4.0 |
+| 100 멤버, 띄엄띄엄한 값 | 62.5 ns | **5.2 ns** | ×12 |
+| 8 멤버 | 41.8 ns | **9.9 ns** | ×4.2 |
+| 문자열 보간 `$"S:{e}"` | 169.8 ns | **45.9 ns** | ×3.7 |
+| `[Flags]` 조합 | 175.2 ns | **52.4 ns** | ×3.3 |
+| **String → Enum** | | | |
+| 100 멤버, 성공 | 726.9 ns | **16.3 ns** | ×45 |
+| 100 멤버, 실패 입력 | 760.6 ns | **18.3 ns** | ×42 |
+| 8 멤버, 성공 | 181.6 ns | **4.8 ns** | ×38 |
+| **검사 · 순회** | | | |
+| 정의 검사 | 134.0 ns | **0.7 ns** | ×190 |
+| 전체 값 순회 (원소당) | 168.0 ns | **0.7 ns** | ×250 |
 
 - 기존: `ToString()` · `Enum.TryParse` · `Enum.IsDefined(Type, object)` · `foreach Enum.GetValues(Type)`
 - E2String: `ToStringFast()` · `To{Enum}Fast(string)` · `IsDefinedFast(T)` · `for Values[i]`
+- 1 ns 미만 값(정의 검사 · 값 순회의 E2String 쪽)은 측정 루프 비용 수준이라 배수는 참고용입니다.
 
 ### 2-2. 할당 (호출 1회당)
 
-| 케이스 | IL2CPP 기존 | IL2CPP E2String | CoreCLR 기존 | CoreCLR E2String |
-|---|---:|---:|---:|---:|
-| Enum → String | 0 B | 0 B | 24 B | **0 B** |
-| 문자열 보간 `$"S:{e}"` | 64 B | **44 B** | 64 B | **40 B** |
-| `[Flags]` 조합 → String | 47.1 B | **0 B** | 67.1 B | **0 B** |
-| String → Enum | 0 B | 0 B | 0 B | 0 B |
-| 정의 검사 | 20 B | **0 B** | 24 B | **0 B** |
-| 전체 값 순회 (원소당) | 44.6 B | **0 B** | 4.6 B | **0 B** |
+| 케이스 | 기존 | E2String |
+|---|---:|---:|
+| Enum → String | 0 B | 0 B |
+| 문자열 보간 `$"S:{e}"` | 64 B | **44 B** |
+| `[Flags]` 조합 → String | 47.1 B | **0 B** |
+| String → Enum | 0 B | 0 B |
+| 정의 검사 | 20 B | **0 B** |
+| 전체 값 순회 (원소당) | 44.6 B | **0 B** |
 
-문자열 보간의 E2String 쪽 할당(40~44 B)은 결과 문자열 자체입니다. 기존 쪽은 여기에 박싱이 더해집니다.
+문자열 보간의 E2String 쪽 할당(44 B)은 결과 문자열 자체입니다. 기존 쪽은 여기에 박싱이 더해집니다.
 
 ### 2-3. `[Flags]` 조합의 첫 호출
 
-`ToStringFast`는 `[Flags]` 조합 문자열을 **조합마다 첫 호출에서 만들어 캐시**합니다. 위 반복 측정에는 이 비용이 보이지 않으므로, 아직 캐시되지 않은 조합 255개를 측정 시작 전에 따로 쟀습니다. 타입 초기화 등 첫 호출 비용이 함께 들어간 1회 측정값입니다.
+`ToStringFast`는 `[Flags]` 조합 문자열을 **조합마다 첫 호출에서 만들어 캐시**합니다. 위 반복 측정에는 이 비용이 보이지 않으므로, 아직 캐시되지 않은 조합 255개를 측정 시작 전에 따로 쟀습니다. 타입 초기화 등 첫 호출 비용이 함께 들어간 1회 측정값입니다 (시간은 Release, 할당은 Development, 실행 2회의 중앙값).
 
-| 런타임 | 기존 `ToString()` | E2String `ToStringFast()` |
+| | 기존 `ToString()` | E2String `ToStringFast()` |
 |---|---:|---:|
-| IL2CPP | 425 ns / 4,093 B | 3,919 ns / 326 B |
-| CoreCLR | 415 ns / 5,694 B | 1,982 ns / 299 B |
+| IL2CPP | 270 ns / 4,147 B | 876 ns / 290 B |
 
-- 첫 호출은 E2String이 약 5~9배 느립니다 (문자열 조립 + 캐시 등록 + `lock`). 이후 호출은 할당 없이 2-1의 속도로 동작합니다.
-- 기존 쪽의 큰 할당(4~6 KB)에는 런타임의 Enum 메타데이터 초기화가 섞여 있습니다.
+- 첫 호출은 E2String이 약 3배 느립니다 (문자열 조립 + 캐시 등록 + `lock`). 1회 측정이라 실행 간 편차가 큽니다 (E2String 694 ~ 1,058 ns). 이후 호출은 할당 없이 2-1의 속도로 동작합니다.
+- 기존 쪽의 큰 할당(약 4 KB)에는 런타임의 Enum 메타데이터 초기화가 섞여 있습니다.
 
 ## 3. 그래프
 
 주황 = 기존 API, 파랑 = E2String. 막대가 겹쳐 그려지므로 **주황 막대 안의 파랑 막대가 E2String**입니다. 값은 [2-1 표](#2-1-시간)와 같습니다.
 
-### IL2CPP — Enum → String (ns, 낮을수록 좋음)
+### Enum → String (ns, 낮을수록 좋음)
 
 ```mermaid
 %%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#eb6834, #2a78d6"}}}}%%
@@ -102,44 +104,20 @@ xychart-beta
     title "IL2CPP: Enum -> String (ns/call)"
     x-axis ["100 순서", "100 무작위", "100 띄엄", "8 멤버", "보간", "Flags"]
     y-axis "ns" 0 --> 200
-    bar [55.6, 55.5, 71.4, 55.9, 174.4, 188.1]
-    bar [11.2, 11.1, 5.5, 10.0, 45.7, 60.9]
+    bar [43.4, 43.0, 62.5, 41.8, 169.8, 175.2]
+    bar [11.0, 10.9, 5.2, 9.9, 45.9, 52.4]
 ```
 
-### IL2CPP — 파싱 · 검사 · 순회 (ns, 낮을수록 좋음)
+### 파싱 · 검사 · 순회 (ns, 낮을수록 좋음)
 
 ```mermaid
 %%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#eb6834, #2a78d6"}}}}%%
 xychart-beta
     title "IL2CPP: Parse / IsDefined / Values (ns/call)"
     x-axis ["파싱 성공", "파싱 실패", "8 멤버 파싱", "정의 검사", "값 순회"]
-    y-axis "ns" 0 --> 850
-    bar [765.4, 801.4, 222.3, 149.2, 183.9]
-    bar [16.1, 16.3, 5.8, 1.1, 0.8]
-```
-
-### CoreCLR — Enum → String (ns, 낮을수록 좋음)
-
-```mermaid
-%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#eb6834, #2a78d6"}}}}%%
-xychart-beta
-    title "CoreCLR: Enum -> String (ns/call)"
-    x-axis ["100 순서", "100 무작위", "100 띄엄", "8 멤버", "보간", "Flags"]
-    y-axis "ns" 0 --> 30
-    bar [7.0, 7.0, 13.8, 7.0, 26.6, 27.5]
-    bar [1.9, 1.2, 3.4, 1.0, 11.6, 7.4]
-```
-
-### CoreCLR — 파싱 · 검사 · 순회 (ns, 낮을수록 좋음)
-
-```mermaid
-%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#eb6834, #2a78d6"}}}}%%
-xychart-beta
-    title "CoreCLR: Parse / IsDefined / Values (ns/call)"
-    x-axis ["파싱 성공", "파싱 실패", "8 멤버 파싱", "정의 검사", "값 순회"]
-    y-axis "ns" 0 --> 80
-    bar [71.8, 67.2, 7.9, 10.5, 6.5]
-    bar [6.7, 5.1, 3.3, 0.3, 0.2]
+    y-axis "ns" 0 --> 800
+    bar [726.9, 760.6, 181.6, 134.0, 168.0]
+    bar [16.3, 18.3, 4.8, 0.7, 0.7]
 ```
 
 ### 할당 (B/call, 낮을수록 좋음)
@@ -154,27 +132,17 @@ xychart-beta
     bar [44, 0, 0, 0]
 ```
 
-```mermaid
-%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#eb6834, #2a78d6"}}}}%%
-xychart-beta
-    title "CoreCLR: GC Alloc (B/call)"
-    x-axis ["ToString", "보간", "Flags", "정의 검사", "값 순회"]
-    y-axis "B" 0 --> 70
-    bar [24, 64, 67.1, 24, 4.6]
-    bar [0, 40, 0, 0, 0]
-```
-
-IL2CPP에서 `ToString()`과 `Enum.TryParse`, CoreCLR에서 `Enum.TryParse`는 원래 할당이 없어 그래프에서 뺐습니다.
+`ToString()`과 `Enum.TryParse`는 원래 할당이 없어 그래프에서 뺐습니다.
 
 ## 4. 기존 코드의 문제점과 원인
 
-| 기존 API | IL2CPP | CoreCLR | 원인 |
-|---|---|---|---|
-| `Enum.ToString()` | 느림 (약 56 ns) | 24 B 할당 (박싱) | `System.Enum`의 가상 메서드 호출 → 런타임 메타데이터에서 이름 조회 |
-| `Enum.TryParse` / `Parse` | **매우 느림** (약 770 ns) | 약 70 ns | `Type` 기반 메타데이터 탐색, 대소문자 · 공백 · 쉼표(`[Flags]`) 처리 |
-| `Enum.IsDefined(Type, object)` | 약 150 ns, 20 B | 약 11 ns, 24 B | 시그니처가 `object`라 호출 시점에 박싱 |
-| `Enum.GetValues(Type)` 순회 | 원소당 약 184 ns, 44.6 B | 원소당 6.5 ns, 4.6 B | 호출마다 새 배열 생성 + `foreach`에서 원소를 `object`로 꺼냄 |
-| `$"{e}"` (C# 9) | 64 B | 64 B | `string.Format(string, object)`로 컴파일 → 박싱 후 내부에서 `ToString()` |
+| 기존 API | IL2CPP | 원인 |
+|---|---|---|
+| `Enum.ToString()` | 느림 (약 43 ns) | `System.Enum`의 가상 메서드 호출 → 런타임 메타데이터에서 이름 조회 |
+| `Enum.TryParse` / `Parse` | **매우 느림** (약 730 ns) | `Type` 기반 메타데이터 탐색, 대소문자 · 공백 · 쉼표(`[Flags]`) 처리 |
+| `Enum.IsDefined(Type, object)` | 약 134 ns, 20 B | 시그니처가 `object`라 호출 시점에 박싱 |
+| `Enum.GetValues(Type)` 순회 | 원소당 약 168 ns, 44.6 B | 호출마다 새 배열 생성 + `foreach`에서 원소를 `object`로 꺼냄 |
+| `$"{e}"` (C# 9) | 64 B | `string.Format(string, object)`로 컴파일 → 박싱 후 내부에서 `ToString()` |
 
 E2String은 이 작업을 컴파일 시점에 `switch` 문으로 펼쳐 두어, 런타임 메타데이터 조회 · 박싱 · 배열 생성이 없습니다.
 
@@ -184,7 +152,7 @@ E2String은 이 작업을 컴파일 시점에 `switch` 문으로 펼쳐 두어, 
 
 ```csharp
 // 전
-string s  = state.ToString();                                        // 메타데이터 조회 (CoreCLR은 박싱)
+string s  = state.ToString();                                        // 메타데이터 조회
 var e     = (CharacterState)Enum.Parse(typeof(CharacterState), s);   // 메타데이터 탐색
 bool ok   = Enum.IsDefined(typeof(CharacterState), raw);             // 박싱
 foreach (CharacterState v in Enum.GetValues(typeof(CharacterState))) { }  // 배열 생성 + 박싱
@@ -199,7 +167,7 @@ for (int i = 0; i < all.Length; i++) { }                             // GC 0
 
 ### 생성 코드 (실제 출력)
 
-벤치마크의 8 멤버 Enum에서 생성된 코드입니다. 대소문자 무시(`ignoreCase` 매개변수와 `TryMatchName`)는 제거 예정이라 생략했습니다.
+벤치마크의 8 멤버 Enum에서 생성된 코드입니다.
 
 ```csharp
 [E2String(E2StringOptions.All)]
@@ -282,32 +250,44 @@ public static class BenchEnum8Extensions
 
 100 멤버 Enum 50개를 IL2CPP Release로 클린 빌드해 비교했습니다. (괄호) 안은 Enum 1개당 증가량입니다.
 
-| 변형 | 스트리핑 | `GameAssembly.dll` 증가 | `global-metadata.dat` 증가 | 빌드 시간 |
+| 변형 | 스트리핑 | `GameAssembly.dll` | `global-metadata.dat` | 빌드 시간 |
 |---|---|---:|---:|---:|
-| E2String 없음 (기준) | Disabled | 37,655,040 B | 10,137,232 B | 131.9 s |
-| `[E2String]`, 생성 메서드 미사용 | Disabled | +944,640 B (**+18.9 KB**) | +85,296 B (+1.7 KB) | 124.4 s |
-| `All`, 미사용 | Disabled | +971,776 B (+19.4 KB) | +95,592 B (+1.9 KB) | 129.9 s |
-| `[E2String]`, 사용 | Disabled | +1,126,400 B (+22.5 KB) | +86,600 B (+1.7 KB) | 128.6 s |
-| `All`, 사용 | Disabled | +1,157,632 B (+23.2 KB) | +96,896 B (+1.9 KB) | 124.9 s |
-| E2String 없음 (기준) | Low | 35,994,624 B | 9,227,828 B | 121.4 s |
-| `[E2String]`, 미사용 | Low | +943,104 B (+18.9 KB) | +85,212 B (+1.7 KB) | 130.4 s |
-| `[E2String]`, 사용 | Low | +1,125,376 B (+22.5 KB) | +86,508 B (+1.7 KB) | 125.7 s |
+| E2String 없음 (기준) | Low | 34,358,272 B | 8,953,068 B | 136.2 s |
+| `[E2String]`, 생성 메서드 미사용 | Low | +552,960 B (**+11.1 KB**) | +81,056 B (+1.6 KB) | 118.7 s |
+| `All`, 미사용 | Low | +577,024 B (+11.5 KB) | +91,808 B (+1.8 KB) | 110.5 s |
+| `[E2String]`, 사용 | Low | +735,232 B (+14.7 KB) | +82,360 B (+1.6 KB) | 110.6 s |
+| `All`, 사용 | Low | +764,416 B (+15.3 KB) | +93,104 B (+1.9 KB) | 110.5 s |
+| E2String 없음 (기준) | Medium | 28,154,880 B | 6,999,700 B | 97.5 s |
+| E2String 없음, Enum을 기존 API로 사용 | Medium | +37,888 B | +137,384 B | 92.4 s |
+| `[E2String]`, 미사용 | Medium | **+0 B** | +0 B | 96.0 s |
+| `[E2String]`, 사용 | Medium | +764,416 B | +218,476 B | 109.4 s |
+| └ E2String만 (사용 − 기존 API 사용) | Medium | +726,528 B (**+14.5 KB**) | +81,092 B (+1.6 KB) | |
+| E2String 없음 (기준) | High | 29,365,760 B | 7,243,180 B | 125.7 s |
+| E2String 없음, Enum을 기존 API로 사용 | High | +37,376 B | +137,388 B | 111.6 s |
+| `[E2String]`, 미사용 | High | **+0 B** | +0 B | 97.1 s |
+| `[E2String]`, 사용 | High | +764,416 B | +218,476 B | 104.2 s |
+| └ E2String만 (사용 − 기존 API 사용) | High | +727,040 B (**+14.5 KB**) | +81,088 B (+1.6 KB) | |
 
-- **쓰지 않는 생성 메서드도 Managed Stripping `Low`에서는 빠지지 않습니다.**
+- **`Low`에서는 쓰지 않는 생성 메서드도 빠지지 않습니다.** `Low`는 사용자 어셈블리를 통째로 남기기 때문입니다 (기준 빌드에도 Enum 50개와 멤버 이름 5,000개가 들어 있음).
+- **`Medium` · `High`에서는 아무도 참조하지 않는 Enum의 생성 코드가 Enum과 함께 전부 빠집니다** (기준과 바이트까지 같음).
+- **생성 코드 자체는 Enum당 약 11 KB이고, 호출하는 코드까지 포함하면 약 14.5 KB입니다** (근사, 스트리핑 단계와 무관). `Low` 미사용(+11.1 KB)이 생성 코드만의 몫이고, `Medium` · `High`의 "사용" 증가량(+764 KB)에서 같은 값을 `ToString()` · `Enum.TryParse<T>()`로 쓰는 변형을 뺀 값(+14.5 KB)에는 호출 코드 모양 차이(약 3.4 KB)가 더 들어 있습니다. 빼는 변형의 증가분(메타데이터 약 137 KB)은 Enum 자체(멤버 이름 · 상수 5,000개)의 몫입니다.
 - 옵션 간 차이는 작습니다 (`All`이 기본보다 Enum당 약 0.5 KB). 비용 대부분은 항상 생성되는 문자열 변환입니다.
-- 빌드 시간 차이는 같은 조건의 편차(±5초)보다 작아 구분되지 않습니다.
-- 이 수치는 `ignoreCase` 분기가 포함된 DLL로 측정했습니다. 제거 후에는 줄어들 것이므로 재측정이 필요합니다 (C# IL 기준 Enum당 약 2.4 KB).
+- 빌드 시간 차이는 같은 조건의 편차(±10초)보다 작아 구분되지 않습니다 (각 측정의 첫 빌드는 캐시 정리 때문에 더 걸림).
+- `High` 기준선이 `Medium`보다 약 1.2 MB 큽니다. 스트리핑 뒤 BCL에 EventSource(트레이싱) · Reflection.Emit · RegexCompiler가 더 남습니다 (7000.0.0a8, 원인 미확인, 다시 빌드해도 바이트까지 같음). E2String 증가량은 `Medium`과 같습니다.
+- 측정 조건: 작업 프로젝트의 치트 define(`DEV_CHEAT` · `HB_CHEAT` · `HB_CHEAT_HAS_CONSOLE`)은 측정 동안 껐습니다. `USE_HLOG`는 켜진 상태입니다.
 
-### 6-2. C# 컴파일 시간 (Unity 밖, warm Csc)
+### 6-2. C# 컴파일 시간 (Unity 밖, warm Roslyn)
 
-| 옵션 | 어셈블리 (Enum 50개) | 컴파일 시간 (Enum 50개) |
-|---|---:|---:|
-| E2String 없음 | 66 KB | 38 ms |
-| `[E2String]` | 447 KB (Enum당 +7.6 KB) | 249 ms (**+211 ms**) |
-| `All` | 459 KB (Enum당 +7.9 KB) | 269 ms (**+231 ms**) |
+| 옵션 | 어셈블리 (Enum 50개) | 컴파일 시간 (Enum 50개) | 그중 생성기 실행 |
+|---|---:|---:|---:|
+| E2String 없음 | 115,200 B (113 KB) | 26 ms | — |
+| `[E2String]` | 478,720 B (468 KB, Enum당 +7.1 KB) | 338 ms (**+312 ms**) | 24 ms |
+| `All` | 491,520 B (480 KB, Enum당 +7.3 KB) | 433 ms (**+407 ms**) | 27 ms |
 
-- 생성기 실행 자체는 수 ms입니다. 시간 증가는 대부분 생성된 `switch`를 컴파일하는 비용입니다.
-- 생성기는 `ISourceGenerator`(비증분)라 컴파일 및 IDE 편집 시마다 전체 구문 트리를 다시 탐색합니다.
+- 생성기 실행 자체는 Enum 50개에 약 25 ms(Enum당 약 0.5 ms)입니다. 나머지 증가분은 생성된 코드(`switch` · 문자열 리터럴)를 컴파일하고 Emit하는 비용입니다.
+- 생성기는 `IIncrementalGenerator`(증분)입니다.
+- 크기는 모든 실행에서 바이트까지 같았습니다. 시간은 라운드 사이 범위가 `[E2String]` 319 ~ 370 ms, `All` 426 ~ 482 ms, 없음 26 ~ 33 ms입니다.
+- 측정 방법: Unity 7000.0.0a8에 들어 있는 Roslyn 5.6(`DotNetSdk/sdk/10.0.303/Roslyn/bincore`)을 별도 프로세스에서 API로 호출 (Unity 밖, warm). 입력은 SizeProbe(`E2StringSizeProbe.cs` + `BenchmarkE2StringAttribute.cs`), 참조는 netstandard 2.1 + `Unity.Scripting`, C# 9 · Release · deterministic. 1회 = 파싱 → Compilation 생성 → 생성기 실행 → Emit. 프로세스마다 예열 10회 뒤 20회 중앙값, 5라운드의 중앙값.
 
 ### 6-3. 인게임 메모리 (추정)
 
@@ -343,7 +323,7 @@ public static class BenchEnum8Extensions
 | 시간 | `Stopwatch`. 빈 케이스(Baseline)를 빼고 호출 수로 나눔 |
 | 할당 | `ProfilerRecorder`로 `GC Allocated In Frame`을 읽고 Baseline을 뺌 (Development 플레이어 전용) |
 | 예열 · 표본 | 최소 5초 · 20 사이클 예열 → 60 사이클 측정의 중앙값 |
-| 반복 | IL2CPP 빌드마다 2회, CoreCLR 빌드마다 3회 실행 → 실행별 중앙값의 중앙값 |
+| 반복 | 빌드마다 2회 실행 → 실행별 중앙값의 중앙값 |
 | 교차 확인 | IL2CPP Development 플레이어의 Profiler 데이터(`.raw`)를 에디터에서 열어 `E2S.*` 마커별 GC Alloc을 집계 → `ProfilerRecorder` 결과와 일치 |
 
 ### 7-2. 실행
@@ -353,9 +333,11 @@ public static class BenchEnum8Extensions
 | 메뉴 | 출력 |
 |---|---|
 | `Build IL2CPP Development Player` / `Build IL2CPP Release Player` | `Builds/E2StringBenchmark_IL2CPP_{Dev,Release}/` |
-| `Build CoreCLR Development Player` / `Build CoreCLR Release Player` | `Builds/E2StringBenchmark_CoreCLR_{Dev,Release}/` |
+| `Build CoreCLR Development Player` / `Build CoreCLR Release Player` (Unity 7.0 정식 출시 이후 측정 예정) | `Builds/E2StringBenchmark_CoreCLR_{Dev,Release}/` |
 | `Measure IL2CPP Size Variants (5 clean builds)` | `Temp/E2StringIl2CppSize.csv` |
 | `Measure IL2CPP Size Variants (Stripping Low, 3 clean builds)` | `Temp/E2StringIl2CppSize_StrippingLow.csv` |
+| `Measure IL2CPP Size Variants (Stripping Medium, 4 clean builds)` | `Temp/E2StringIl2CppSize_StrippingMedium.csv` |
+| `Measure IL2CPP Size Variants (Stripping High, 4 clean builds)` | `Temp/E2StringIl2CppSize_StrippingHigh.csv` |
 | `Run in Editor (Play Mode)` | `Temp/E2StringProfilerBenchmark.csv` |
 
 ```bash
@@ -370,6 +352,10 @@ Unity.exe -batchmode -quit -projectPath . -executeMethod HB.E2String.Benchmarks.
 ```
 
 빌드 스크립트는 스크립팅 백엔드(크기 측정은 스트리핑 수준도)를 잠시 바꿨다가 되돌립니다. 이때 에디터가 `ProjectSettings`를 다시 저장할 수 있으니 커밋 전에 확인하세요.
+
+- 크기 측정 메뉴는 같은 이름의 출력 폴더(`Builds/E2StringBenchmark_Size_<스트리핑>/<변형>/`)를 지우고 다시 빌드합니다.
+- 배치 모드로 실행하면 Unity가 종료하면서 `Temp/`를 정리하므로 CSV가 남지 않습니다. 같은 내용이 `-logFile` 로그에 `[E2S Benchmark] IL2CPP 크기 측정 결과`로 찍히니 로그에서 가져오세요.
+- 작업 프로젝트처럼 치트 define이 켜져 있으면 HB_Cheat 릴리스 가드가 Release 빌드를 막습니다. 측정 동안만 define을 끄세요.
 
 ### 7-3. 측정 코드 (핵심)
 
@@ -423,55 +409,23 @@ private void Update()
 
 ## 부록
 
-### 부록 A. Unity 6.x (Mono)
+### 부록 A. Development 플레이어 시간
 
-Unity 6000.3.23f1 내장 Mono 6.13을 Unity 밖에서 실행해 측정했습니다 (`--optimize=all`, C# 9, 할당은 `GC.GetAllocatedBytesForCurrentThread()`). Mono에서는 기존 API가 대부분 할당하므로 **GC 제거 효과가 큽니다.**
-
-| 케이스 | 기존 | E2String | 배수 |
-|---|---:|---:|---:|
-| Enum → String | 452 ns / 32 B | **3.5 ns / 0 B** | ×130 |
-| 문자열 보간 `$"S:{e}"` | 592 ns / 64 B | **41.9 ns / 32 B** | ×14 |
-| 미정의 값 → String | 483 ns / 56 B | **0.5 ns / 0 B** | fallback 반환 |
-| `[Flags]` 조합 → String | 665 ns / 152 B | **27.1 ns / 0 B** | ×25 |
-| String → Enum | 2,169 ns / 56 B | **51 ns / 0 B** | ×43 |
-| `[Flags]` 조합 파싱 | 718 ns / 210 B | **198 ns / 0 B** | ×3.6 |
-| 정의 검사 | 336 ns / 32 B | **0.5 ns / 0 B** | ×670 |
-| Enum → int (`Convert.ToInt32`) | 52 ns / 32 B | **0.5 ns / 0 B** | 박싱 제거 |
-| int → Enum (검사 포함) | 142 ns / 16 B | **0.5 ns / 0 B** | ×280 |
-| 전체 값 순회 (원소당) | 194 ns / 36.6 B | **0.3 ns / 0 B** | ×650 |
-
-매 프레임 `ToString()`을 100회 호출하면 60fps 기준 초당 약 192 KB의 가비지가 생깁니다. E2String을 쓰면 0입니다.
-
-### 부록 B. Development 플레이어 시간
-
-본문 시간은 Release 플레이어 기준입니다. Development 플레이어 값은 아래와 같습니다. CoreCLR Development는 기존 API가 크게 느려지므로 비교에 쓰지 마세요.
-
-| 케이스 | IL2CPP 기존 | IL2CPP E2String | CoreCLR 기존 | CoreCLR E2String |
-|---|---:|---:|---:|---:|
-| Enum → String (100 순서) | 41.7 ns | 10.6 ns | 38.5 ns | 1.9 ns |
-| 문자열 보간 | 172.7 ns | 50.7 ns | 90.4 ns | 43.4 ns |
-| `[Flags]` 조합 | 180.2 ns | 52.4 ns | 89.5 ns | 7.5 ns |
-| String → Enum (성공) | 715.5 ns | 14.5 ns | 72.2 ns | 6.9 ns |
-| 정의 검사 | 139.3 ns | 1.1 ns | 42.1 ns | 0.3 ns |
-| 전체 값 순회 (원소당) | 180.0 ns | 0.8 ns | 7.3 ns | 0.2 ns |
-
-### 부록 C. 에디터 (참고)
-
-Unity 7 에디터(.NET 10 CoreCLR, 스크립트 최적화 Debug, Profiler 녹화 중)에서 Profiler 캡처로 집계한 값입니다. 절대값이 크므로 상대 비교용으로만 보세요.
+본문 시간은 Release 플레이어 기준입니다. Development 플레이어 값은 아래와 같습니다.
 
 | 케이스 | 기존 | E2String |
 |---|---:|---:|
-| Enum → String | 95.1 ns / 24.5 B | 13.3 ns / 0 B |
-| 문자열 보간 | 224.8 ns / 64 B | 104.9 ns / 40 B |
-| `[Flags]` 조합 → String | 214.9 ns / 67.2 B | 23.4 ns / 0 B |
-| String → Enum | 173.5 ns / 0 B | 30.9 ns / 0 B |
-| 정의 검사 | 125.1 ns / 24 B | 4.2 ns / 0 B |
-| 전체 값 순회 (원소당) | 15.5 ns / 4.6 B | 1.5 ns / 0 B |
+| Enum → String (100 순서) | 41.8 ns | 11.0 ns |
+| 문자열 보간 | 169.8 ns | 52.7 ns |
+| `[Flags]` 조합 | 185.1 ns | 52.4 ns |
+| String → Enum (성공) | 724.9 ns | 14.2 ns |
+| 정의 검사 | 138.7 ns | 1.1 ns |
+| 전체 값 순회 (원소당) | 181.1 ns | 0.9 ns |
 
-### 부록 D. 측정 한계
+### 부록 B. 측정 한계
 
 - **플랫폼**: Windows x64만 측정했습니다. 모바일(Android ARM64 IL2CPP)은 추후 측정 예정입니다.
-- **편차**: 실행 간 편차(케이스별 중앙값 기준)는 IL2CPP Development 1%, IL2CPP Release 7%, CoreCLR Release 6%, CoreCLR Development 26%이고, 일부 케이스는 최대 89~164%까지 벌어졌습니다. 배수는 대략적인 크기로 보세요.
-- **스트리핑**: `Disabled` · `Low`만 측정했습니다. `Medium` · `High`에서는 미사용 생성 코드가 빠질 수 있습니다.
-- **대소문자 무시 파싱**: 제거 예정이라 본문에서 뺐습니다. 측정 당시에는 이득이 없었습니다 (IL2CPP 686 → 717 ns, CoreCLR 120 → 325 ns).
+- **편차**: 두 실행 사이의 차이(케이스별 중앙값 기준)는 Release 0.7%(최대 2.7%), Development 0.9%(최대 5.4%)입니다. `[Flags]` 첫 호출(2-3)은 1회 측정이라 최대 52%까지 벌어졌습니다.
+- **스트리핑**: 크기는 `Low` · `Medium` · `High`를 측정했습니다. 속도는 프로젝트 설정(`Low`) 기준입니다.
+- **런타임**: IL2CPP만 측정했습니다. CoreCLR은 Unity 7.0 정식 출시 이후 측정 예정입니다.
 - **입력 패턴**: 무작위 순서 · 실패 입력 · 작은 Enum · 띄엄띄엄한 값을 포함했지만, 실제 게임의 호출 분포와는 다를 수 있습니다.

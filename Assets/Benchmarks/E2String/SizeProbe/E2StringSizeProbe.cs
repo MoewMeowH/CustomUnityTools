@@ -1,6 +1,6 @@
 // 자동 생성 파일 (IL2CPP 크기 측정용). 빌드 define으로 변형을 고른다:
 //   E2S_SIZE_DEFAULT : [E2String]            E2S_SIZE_ALL : [E2String(E2StringOptions.All)]
-//   E2S_SIZE_USED    : Touch()에서 생성 메서드를 호출해 스트리핑되지 않게 한다
+//   E2S_SIZE_USED    : Touch()에서 생성 메서드를 호출해 스트리핑되지 않게 한다 (DEFAULT·ALL 없이 쓰면 기존 API로 같은 값을 호출: None_Used)
 namespace HB.E2String.Benchmarks.SizeProbe
 {
 #if E2S_SIZE_ALL
@@ -1063,6 +1063,109 @@ namespace HB.E2String.Benchmarks.SizeProbe
             IntSink += (int)"Item00148".ToSizeEnum48Fast();
             StringSink = SizeEnum49.Item00049.ToStringFast();
             IntSink += (int)"Item00149".ToSizeEnum49Fast();
+#endif
+#if E2S_SIZE_USED && !E2S_SIZE_DEFAULT && !E2S_SIZE_ALL
+            // None_Used: E2String 없이 같은 값을 기존 API로 쓴다 (Default_Used와 빼서 E2String 비용을 근사)
+            StringSink = SizeEnum00.Item00000.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum00>("Item00100", out var parsed00) ? (int)parsed00 : 0;
+            StringSink = SizeEnum01.Item00001.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum01>("Item00101", out var parsed01) ? (int)parsed01 : 0;
+            StringSink = SizeEnum02.Item00002.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum02>("Item00102", out var parsed02) ? (int)parsed02 : 0;
+            StringSink = SizeEnum03.Item00003.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum03>("Item00103", out var parsed03) ? (int)parsed03 : 0;
+            StringSink = SizeEnum04.Item00004.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum04>("Item00104", out var parsed04) ? (int)parsed04 : 0;
+            StringSink = SizeEnum05.Item00005.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum05>("Item00105", out var parsed05) ? (int)parsed05 : 0;
+            StringSink = SizeEnum06.Item00006.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum06>("Item00106", out var parsed06) ? (int)parsed06 : 0;
+            StringSink = SizeEnum07.Item00007.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum07>("Item00107", out var parsed07) ? (int)parsed07 : 0;
+            StringSink = SizeEnum08.Item00008.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum08>("Item00108", out var parsed08) ? (int)parsed08 : 0;
+            StringSink = SizeEnum09.Item00009.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum09>("Item00109", out var parsed09) ? (int)parsed09 : 0;
+            StringSink = SizeEnum10.Item00010.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum10>("Item00110", out var parsed10) ? (int)parsed10 : 0;
+            StringSink = SizeEnum11.Item00011.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum11>("Item00111", out var parsed11) ? (int)parsed11 : 0;
+            StringSink = SizeEnum12.Item00012.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum12>("Item00112", out var parsed12) ? (int)parsed12 : 0;
+            StringSink = SizeEnum13.Item00013.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum13>("Item00113", out var parsed13) ? (int)parsed13 : 0;
+            StringSink = SizeEnum14.Item00014.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum14>("Item00114", out var parsed14) ? (int)parsed14 : 0;
+            StringSink = SizeEnum15.Item00015.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum15>("Item00115", out var parsed15) ? (int)parsed15 : 0;
+            StringSink = SizeEnum16.Item00016.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum16>("Item00116", out var parsed16) ? (int)parsed16 : 0;
+            StringSink = SizeEnum17.Item00017.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum17>("Item00117", out var parsed17) ? (int)parsed17 : 0;
+            StringSink = SizeEnum18.Item00018.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum18>("Item00118", out var parsed18) ? (int)parsed18 : 0;
+            StringSink = SizeEnum19.Item00019.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum19>("Item00119", out var parsed19) ? (int)parsed19 : 0;
+            StringSink = SizeEnum20.Item00020.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum20>("Item00120", out var parsed20) ? (int)parsed20 : 0;
+            StringSink = SizeEnum21.Item00021.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum21>("Item00121", out var parsed21) ? (int)parsed21 : 0;
+            StringSink = SizeEnum22.Item00022.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum22>("Item00122", out var parsed22) ? (int)parsed22 : 0;
+            StringSink = SizeEnum23.Item00023.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum23>("Item00123", out var parsed23) ? (int)parsed23 : 0;
+            StringSink = SizeEnum24.Item00024.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum24>("Item00124", out var parsed24) ? (int)parsed24 : 0;
+            StringSink = SizeEnum25.Item00025.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum25>("Item00125", out var parsed25) ? (int)parsed25 : 0;
+            StringSink = SizeEnum26.Item00026.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum26>("Item00126", out var parsed26) ? (int)parsed26 : 0;
+            StringSink = SizeEnum27.Item00027.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum27>("Item00127", out var parsed27) ? (int)parsed27 : 0;
+            StringSink = SizeEnum28.Item00028.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum28>("Item00128", out var parsed28) ? (int)parsed28 : 0;
+            StringSink = SizeEnum29.Item00029.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum29>("Item00129", out var parsed29) ? (int)parsed29 : 0;
+            StringSink = SizeEnum30.Item00030.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum30>("Item00130", out var parsed30) ? (int)parsed30 : 0;
+            StringSink = SizeEnum31.Item00031.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum31>("Item00131", out var parsed31) ? (int)parsed31 : 0;
+            StringSink = SizeEnum32.Item00032.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum32>("Item00132", out var parsed32) ? (int)parsed32 : 0;
+            StringSink = SizeEnum33.Item00033.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum33>("Item00133", out var parsed33) ? (int)parsed33 : 0;
+            StringSink = SizeEnum34.Item00034.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum34>("Item00134", out var parsed34) ? (int)parsed34 : 0;
+            StringSink = SizeEnum35.Item00035.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum35>("Item00135", out var parsed35) ? (int)parsed35 : 0;
+            StringSink = SizeEnum36.Item00036.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum36>("Item00136", out var parsed36) ? (int)parsed36 : 0;
+            StringSink = SizeEnum37.Item00037.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum37>("Item00137", out var parsed37) ? (int)parsed37 : 0;
+            StringSink = SizeEnum38.Item00038.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum38>("Item00138", out var parsed38) ? (int)parsed38 : 0;
+            StringSink = SizeEnum39.Item00039.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum39>("Item00139", out var parsed39) ? (int)parsed39 : 0;
+            StringSink = SizeEnum40.Item00040.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum40>("Item00140", out var parsed40) ? (int)parsed40 : 0;
+            StringSink = SizeEnum41.Item00041.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum41>("Item00141", out var parsed41) ? (int)parsed41 : 0;
+            StringSink = SizeEnum42.Item00042.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum42>("Item00142", out var parsed42) ? (int)parsed42 : 0;
+            StringSink = SizeEnum43.Item00043.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum43>("Item00143", out var parsed43) ? (int)parsed43 : 0;
+            StringSink = SizeEnum44.Item00044.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum44>("Item00144", out var parsed44) ? (int)parsed44 : 0;
+            StringSink = SizeEnum45.Item00045.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum45>("Item00145", out var parsed45) ? (int)parsed45 : 0;
+            StringSink = SizeEnum46.Item00046.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum46>("Item00146", out var parsed46) ? (int)parsed46 : 0;
+            StringSink = SizeEnum47.Item00047.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum47>("Item00147", out var parsed47) ? (int)parsed47 : 0;
+            StringSink = SizeEnum48.Item00048.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum48>("Item00148", out var parsed48) ? (int)parsed48 : 0;
+            StringSink = SizeEnum49.Item00049.ToString();
+            IntSink += System.Enum.TryParse<SizeEnum49>("Item00149", out var parsed49) ? (int)parsed49 : 0;
 #endif
 #if E2S_SIZE_USED && E2S_SIZE_ALL
             IntSink += SizeEnum00.Item00200.ToIntFast() + SizeEnum00Extensions.Values.Length + (SizeEnum00Extensions.IsDefinedFast(IntSink) ? 1 : 0);

@@ -25,6 +25,8 @@ namespace HB.E2String.Benchmarks.Editor
         private const string BENCHMARK_DEFINE = "E2S_BENCHMARK";
         private const string SIZE_RESULT_PATH = "Temp/E2StringIl2CppSize.csv";
         private const string SIZE_LOW_RESULT_PATH = "Temp/E2StringIl2CppSize_StrippingLow.csv";
+        private const string SIZE_MEDIUM_RESULT_PATH = "Temp/E2StringIl2CppSize_StrippingMedium.csv";
+        private const string SIZE_HIGH_RESULT_PATH = "Temp/E2StringIl2CppSize_StrippingHigh.csv";
 
         private const string SPAWN_ON_PLAY_KEY = "HB.E2String.Benchmark.SpawnOnPlay";
 
@@ -121,6 +123,31 @@ namespace HB.E2String.Benchmarks.Editor
         {
             var variants = s_SizeVariants.Where(v => v.Name == "None" || v.Name.StartsWith("Default")).ToArray();
             MeasureSizeVariants(ManagedStrippingLevel.Low, variants, SIZE_LOW_RESULT_PATH);
+        }
+
+        /// <summary>
+        /// 스트리핑 Medium에서 쓰지 않는 생성 메서드가 빠지는지와, 사용 시 E2String만의 비용(Default_Used − None_Used)을 본다
+        /// (없음 / 없음·enum 사용 / 기본 미사용 / 기본 사용, 빌드 4회).
+        /// </summary>
+        [MenuItem(MENU_ROOT + "Measure IL2CPP Size Variants (Stripping Medium, 4 clean builds)")]
+        public static void MeasureIl2CppSizeVariantsStrippingMedium()
+        {
+            MeasureSizeVariants(ManagedStrippingLevel.Medium, StrippingCompareVariants(), SIZE_MEDIUM_RESULT_PATH);
+        }
+
+        /// <summary>스트리핑 High에서 Medium과 같은 4개 변형을 빌드한다.</summary>
+        [MenuItem(MENU_ROOT + "Measure IL2CPP Size Variants (Stripping High, 4 clean builds)")]
+        public static void MeasureIl2CppSizeVariantsStrippingHigh()
+        {
+            MeasureSizeVariants(ManagedStrippingLevel.High, StrippingCompareVariants(), SIZE_HIGH_RESULT_PATH);
+        }
+
+        private static SizeVariant[] StrippingCompareVariants()
+        {
+            var variants = s_SizeVariants.Where(v => v.Name == "None" || v.Name.StartsWith("Default")).ToList();
+            // E2String 없이 같은 값을 기존 API로 쓰는 변형 (enum 자체 + 호출 코드 몫을 빼기 위함, SizeProbe Touch() 참고)
+            variants.Insert(1, new SizeVariant { Name = "None_Used", Defines = new[] { "E2S_SIZE_USED" } });
+            return variants.ToArray();
         }
 
         private static void MeasureSizeVariants(ManagedStrippingLevel? stripping, SizeVariant[] variants, string resultPath)
