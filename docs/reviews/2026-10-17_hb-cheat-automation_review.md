@@ -1,4 +1,0 @@
-- [major] Assets/Tools/HB_Cheat/Runtime/CheatSystem.cs:378-381, 668-690 — 로컬 실행은 invoker가 반환한 뒤 히스토리에 추가되므로 중첩 실행에서 발급 순서와 보존 순서가 뒤집힌다. HistoryCapacity=1에서 로컬 #1이 로컬 #2를 실행하면 #2가 먼저 추가되고, #1이 반환하면서 더 최근 실행인 #2를 제거한다. 이후 Status(2)는 evicted가 되고 History에는 #1만 남는다 / 사용자 코드를 호출하기 전에 실행을 히스토리에 등록하거나, 보존 창을 추가 순서가 아닌 발급 순서로 계산한다. 등록 시점 변경 시 패널 알림 동작도 함께 검증한다 / 확신도(high)
-- [minor] Assets/Tools/HB_Cheat/Runtime/CheatSystem.cs:626-630 및 Assets/Tools/HB_Cheat/Runtime/CheatProtocol.cs:258 — 타임아웃 처리에서 실행을 완료하기 전에 PauseServerQueue가 ServerQueueChanged를 동기 호출한다. 해당 구독자가 Status나 History를 직렬화하면 타임아웃된 실행이 아직 Pending이어서 done:false, blocked:true로 노출된다. 이 실행은 큐에서 대기하는 것이 아니며 곧 TimedOut으로 완료되지만, 자동화는 불필요하게 사람에게 처리를 넘길 수 있다. Shutdown의 242-244행에도 같은 중간 상태가 있다 / 실행 상태와 큐 상태를 모두 확정한 뒤 이벤트를 발행한다. 예를 들어 완료 처리를 알림 없이 먼저 수행하고, 큐 정지 반영 후 상태 변경 알림을 보낸다 / 확신도(high)
-
-총 2건(critical 0 / major 1 / minor 1 / nit 0)

@@ -1,4 +1,0 @@
-
-HKEY_CURRENT_USER\Control Panel\Desktop
-    ForegroundLockTimeout    REG_DWORD    0x30d40
-

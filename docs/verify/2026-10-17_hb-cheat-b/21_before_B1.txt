@@ -1,2 +1,0 @@
-22:57:24.645747600 Assets/Cheats/Generated/HBCheatRegistry.g.cs
-15:            options.PreferConsoleTab = true;

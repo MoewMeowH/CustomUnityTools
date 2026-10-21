@@ -1,9 +1,0 @@
-21:56:58.732 before: app=False ps=False playing=False | 89: runInBackground: 0
-21:57:00.739 [시험 준비] eval set true: app=True ps=True | 89: runInBackground: 0
-21:57:02.772 cheat_play: {"ok":true,"playMode":"entering","runInBackgroundOverride":{"active":false,"original":true,"reason":"already_true","pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}}}
-21:57:09.942 during: app=True ps=True playing=True | 89: runInBackground: 0
-21:57:13.129 cheat_stop: {"ok":true,"playMode":"exiting"}
-21:57:20.275 after stop: app=True ps=True playing=False | 89: runInBackground: 0
-21:57:22.541 [시험 준비 복구] eval set false: app=False ps=False | 89: runInBackground: 0
-21:57:24.811 log (HB_Cheat 줄이 없어야 함):
-(없음)

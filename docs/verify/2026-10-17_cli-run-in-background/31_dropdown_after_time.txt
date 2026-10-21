@@ -1,1 +1,0 @@
-21:44:13.670 수신: "지금 바꿧어 focus(현재까지)->unfocus->focus->unfocus 로 했었어"
