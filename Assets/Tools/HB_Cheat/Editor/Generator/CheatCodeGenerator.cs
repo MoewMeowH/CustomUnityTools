@@ -355,7 +355,7 @@ namespace HB.Cheat.Editor
             sb.AppendLine($"            options.PreferConsoleTab = {Bool(settings.PreferConsoleTab)};");
             sb.AppendLine($"            options.ShowFloatingButton = {Bool(settings.ShowFloatingButton)};");
             sb.AppendLine($"            options.ToggleKey = {Str(settings.ToggleKey)};");
-            sb.AppendLine($"            options.ServerTimeoutSeconds = {settings.ServerTimeoutSeconds.ToString("R", CultureInfo.InvariantCulture)}f;");
+            sb.AppendLine($"            options.ServerTimeoutSeconds = {Flt(settings.ServerTimeoutSeconds)};");
             sb.AppendLine($"            options.HistoryCapacity = {settings.HistoryCapacity};");
             sb.AppendLine($"            options.DontDestroyOnLoad = {Bool(settings.DontDestroyOnLoad)};");
             sb.AppendLine($"            options.AllowRawFromAutomation = {Bool(settings.AllowRawFromAutomation)};");
@@ -481,7 +481,7 @@ namespace HB.Cheat.Editor
             {
                 case int i: return i.ToString(CultureInfo.InvariantCulture);
                 case long l: return l.ToString(CultureInfo.InvariantCulture) + "L";
-                case float f: return f.ToString("R", CultureInfo.InvariantCulture) + "f";
+                case float f: return Flt(f);
                 case double d: return Dbl(d);
                 case bool b: return Bool(b);
                 case string s: return Str(s);
@@ -497,9 +497,17 @@ namespace HB.Cheat.Editor
             return d.ToString("R", CultureInfo.InvariantCulture) + "d";
         }
 
+        internal static string Flt(float f)
+        {
+            if (float.IsPositiveInfinity(f)) return "float.PositiveInfinity";
+            if (float.IsNegativeInfinity(f)) return "float.NegativeInfinity";
+            if (float.IsNaN(f)) return "float.NaN";
+            return f.ToString("R", CultureInfo.InvariantCulture) + "f";
+        }
+
         private static string Bool(bool b) => b ? "true" : "false";
 
-        private static string Str(string s)
+        internal static string Str(string s)
         {
             if (s == null) return "null";
             var sb = new StringBuilder("\"");
@@ -512,7 +520,13 @@ namespace HB.Cheat.Editor
                     case '\n': sb.Append("\\n"); break;
                     case '\r': sb.Append("\\r"); break;
                     case '\t': sb.Append("\\t"); break;
-                    default: sb.Append(c); break;
+                    default:
+                        // C# 문자열 리터럴에 들어갈 수 없는 줄바꿈 문자(U+0085 · U+2028 · U+2029)와 제어 문자
+                        if (c < 0x20 || c == '\u0085' || c == '\u2028' || c == '\u2029')
+                            sb.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                        else
+                            sb.Append(c);
+                        break;
                 }
             }
             return sb.Append('"').ToString();

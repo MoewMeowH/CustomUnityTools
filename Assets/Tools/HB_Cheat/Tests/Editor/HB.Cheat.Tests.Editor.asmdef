@@ -4,6 +4,7 @@
     "references": [
         "HB.Cheat",
         "HB.Cheat.Editor",
+        "HB.Cheat.Editor.Generator",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "Unity.InputSystem"

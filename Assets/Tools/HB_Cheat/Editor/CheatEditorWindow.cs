@@ -166,8 +166,6 @@ namespace HB.Cheat.Editor
                 m_SerializedSettings = new SerializedObject(settings);
 
             m_SerializedSettings.Update();
-            string oldUserDefine = settings.UserDefine;
-            string oldRegistryInputs = settings.RegistryInputs;
 
             EditorGUI.BeginChangeCheck();
             var it = m_SerializedSettings.GetIterator();
@@ -178,75 +176,15 @@ namespace HB.Cheat.Editor
 
             m_SerializedSettings.ApplyModifiedProperties();
 
-            if (changed)
-            {
-                if (oldUserDefine != settings.UserDefine)
-                {
-                    CheatDefines.RenameUserDefine(oldUserDefine, settings.UserDefine);
-                    Debug.LogWarning($"[HB_Cheat] Project define renamed {oldUserDefine} → {settings.UserDefine}. " +
-                                     "Update '#if' guards in cheat files and defineConstraints in cheat asmdefs.");
-                }
-
-                // 리스트 칸(Delayed 아님)은 글자마다 바뀌므로 그때마다 디스크에 쓰지 않는다 → 포커스를 잃거나 창을 닫을 때 저장
-                if (oldRegistryInputs != settings.RegistryInputs)
-                {
-                    AssetDatabase.SaveAssetIfDirty(settings);
-                    RequestRegenerate();
-                }
-            }
+            // 레지스트리에 들어가는 값(프로젝트 심볼 포함)이 바뀌었을 때만 심볼 이름 변경 · 저장 · 재생성
+            // (리스트 칸처럼 글자마다 바뀌는 것은 포커스를 잃거나 창을 닫을 때 저장)
+            if (changed) CheatSettingsWatcher.NotifyChanged();
 
             if (!settings.AutoGenerate)
                 EditorGUILayout.HelpBox("Auto Generate가 꺼져 있습니다. Runtime 설정을 바꾼 뒤 Generate Registry를 눌러야 게임에 반영됩니다.", MessageType.Info);
-            else if (SessionState.GetBool(RegeneratePendingKey, false))
+            else if (CheatSettingsWatcher.IsPending)
                 EditorGUILayout.HelpBox("Play Mode 중에 바뀐 설정은 에디트 모드로 돌아오면 레지스트리에 반영합니다.", MessageType.Info);
         }
-
-        #region Regenerate
-
-        // Play 중에 바뀐 설정을 에디트 모드로 돌아온 뒤 반영하기 위한 표시 (도메인 리로드를 넘긴다)
-        private const string RegeneratePendingKey = "HB.Cheat.RegeneratePending";
-
-        /// <summary>런타임 옵션은 생성 레지스트리 코드에 들어가므로 설정이 바뀌면 다시 생성한다 (내용이 같으면 쓰지 않는다).</summary>
-        private static void RequestRegenerate()
-        {
-            if (!CheatSettings.Load().AutoGenerate) return;
-
-            if (EditorApplication.isPlayingOrWillChangePlaymode)
-            {
-                SessionState.SetBool(RegeneratePendingKey, true);
-                return;
-            }
-
-            // OnGUI 안에서 파일 쓰기 · Refresh를 하지 않도록 미룬다
-            EditorApplication.delayCall -= RegenerateNow;
-            EditorApplication.delayCall += RegenerateNow;
-        }
-
-        private static void RegenerateNow()
-        {
-            if (EditorApplication.isPlayingOrWillChangePlaymode)
-            {
-                SessionState.SetBool(RegeneratePendingKey, true);
-                return;
-            }
-            SessionState.EraseBool(RegeneratePendingKey);
-            // Play 중에 예약한 뒤 Auto Generate를 껐을 수 있다
-            if (!CheatSettings.Load().AutoGenerate) return;
-            // 현재 플랫폼에서 심볼이 꺼져 있으면 생성기가 없다 → 켜질 때 생성기가 로드되며 생성한다
-            CheatEditorHooks.Generate?.Invoke(true);
-        }
-
-        [InitializeOnLoadMethod]
-        private static void HookPlayModeRegenerate()
-        {
-            EditorApplication.playModeStateChanged += change =>
-            {
-                if (change == PlayModeStateChange.EnteredEditMode && SessionState.GetBool(RegeneratePendingKey, false))
-                    RegenerateNow();
-            };
-        }
-
-        #endregion
 
         private void DrawCodeSection()
         {
