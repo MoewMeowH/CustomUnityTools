@@ -17,7 +17,7 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
 ## 🚀 시작하기
 
 1. `Tools > HB > Cheat`를 엽니다.
-2. **Settings** 탭에서 플랫폼별 `Turn On`을 누릅니다. `HB_CHEAT`(패키지)와 `DEV_CHEAT`(프로젝트, 이름 변경 가능)가 함께 켜집니다.
+2. **Settings** 탭에서 플랫폼별 `Turn On`을 누릅니다. `HB_CHEAT`(패키지)와 `DEV_CHEAT`(프로젝트, 이름 변경 가능 — 영문자 · 숫자 · `_`만, 숫자로 시작 불가. 규칙에 안 맞으면 경고 후 `DEV_CHEAT`)가 함께 켜집니다.
 3. `Create Cheat File`로 치트 파일을 만듭니다. 생성 위치는 기본 `Assets/Cheats`입니다.
 4. 컴파일이 끝나면 레지스트리(`HBCheatRegistry.g.cs`)가 자동으로 생성됩니다.
 5. Play를 누르면 열 수 있습니다. PC는 `F8`, 모바일은 화면의 `CHEAT` 버튼(끌어서 이동 가능)을 씁니다. InGameConsole이 있으면 콘솔의 `Cheat` 탭으로 들어갑니다.
