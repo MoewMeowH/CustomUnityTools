@@ -93,6 +93,8 @@ namespace InGameConsoleSystem.Editor
         private HLogCore.LogEntry selectedEntry;
         // 다중 선택 (Ctrl/Cmd+클릭 · Shift+클릭 · Ctrl/Cmd+A) → Ctrl/Cmd+C로 한꺼번에 복사
         private readonly HashSet<HLogCore.LogEntry> selectedEntries = new HashSet<HLogCore.LogEntry>();
+        // UpdateFilteredLogs의 선택 정리용 (재사용)
+        private readonly List<HLogCore.LogEntry> visibleSelectedBuffer = new List<HLogCore.LogEntry>();
         private HLogCore.LogEntry selectionAnchor;
         private readonly List<HLogCore.LogEntry> filteredLogs = new List<HLogCore.LogEntry>();
         private bool isDirty = true;
@@ -562,21 +564,24 @@ namespace InGameConsoleSystem.Editor
             // 로그가 들어올 때마다 도는 곳이라, 선택이 실제로 줄었을 때만 정리한다
             if (selectedEntries.Count > 0 || selectionAnchor != null)
             {
-                int visibleSelected = 0;
+                // 기록이 가득 찬 채 전체 선택하면 새 로그마다 줄어든다 → 정리용 목록은 재사용한다 (할당 · 람다 없음)
+                visibleSelectedBuffer.Clear();
                 bool anchorVisible = false;
                 for (int i = 0; i < filteredLogs.Count; i++)
                 {
                     var entry = filteredLogs[i];
-                    if (selectedEntries.Contains(entry)) visibleSelected++;
+                    if (selectedEntries.Contains(entry)) visibleSelectedBuffer.Add(entry);
                     if (ReferenceEquals(entry, selectionAnchor)) anchorVisible = true;
                 }
 
                 if (!anchorVisible) selectionAnchor = null;
-                if (visibleSelected != selectedEntries.Count)
+                if (visibleSelectedBuffer.Count != selectedEntries.Count)
                 {
-                    var visible = new HashSet<HLogCore.LogEntry>(filteredLogs);
-                    selectedEntries.RemoveWhere(e => !visible.Contains(e));
+                    // HashSet은 Clear 뒤에도 용량을 유지한다
+                    selectedEntries.Clear();
+                    for (int i = 0; i < visibleSelectedBuffer.Count; i++) selectedEntries.Add(visibleSelectedBuffer[i]);
                 }
+                visibleSelectedBuffer.Clear();
             }
         }
 
