@@ -19,8 +19,10 @@ using UnityEngine.LowLevel;
 /// 심볼이 없으면 공개 API는 남지만 아무 동작도 하지 않고 빈 값을 돌려줍니다.
 /// </para>
 /// <para>
-/// 스레드 규칙: 채널 가져오기(<see cref="GetChannel"/>)와 로그 출력만 어느 스레드에서나 호출할 수 있습니다.
-/// 그 밖의 공개 API(Watch 계열, Unwatch, Clear, IsLogEnabled 설정, Initialize, Shutdown, PollWatchGetters, FlushPendingLogs)는
+/// 스레드 규칙: 채널 가져오기(<see cref="GetChannel"/>) · 로그 출력 · 태그 등록(<see cref="RegisterTag"/>)과
+/// 상태를 읽기만 하는 API(History, HistoryCount, GetLogTypeCounts, HasUntaggedLogs, Watches, WatchCount, KnownTags,
+/// ChannelTags, IsChannelTag, IsLogEnabled 읽기, IsInitialized)는 어느 스레드에서나 호출할 수 있습니다 (읽기는 잠금 안에서 복사본을 돌려줌).
+/// 상태를 바꾸는 공개 API(Watch 계열, Unwatch, Clear, IsLogEnabled 설정, Initialize, Shutdown, PollWatchGetters, FlushPendingLogs)는
 /// 메인 스레드 전용이며, 다른 스레드에서 호출하면 처리하지 않고 API별로 처음 한 번만 에러 로그를 남깁니다.
 /// </para>
 /// </summary>
@@ -46,8 +48,8 @@ public static class HLogCore
         }
 
         /// <summary>
-        /// 다른 스레드에서 들어온 로그는 수신 시각을, 채널 Exception은 채널 태그를 그대로 쓰기 위한 생성자.
-        /// explicitTag가 있으면 메시지에서 태그를 해석하지 않는다.
+        /// 다른 스레드에서 들어온 로그는 수신 시각을, 채널 로그는 채널 태그를 그대로 쓰기 위한 생성자.
+        /// explicitTag가 있으면 메시지에서 태그를 해석하지 않고, Logger가 붙인 "태그: " 접두사만 뗀다.
         /// </summary>
         internal LogEntry(string message, string stackTrace, LogType logType, DateTime timestamp, string explicitTag)
         {
@@ -59,7 +61,7 @@ public static class HLogCore
             if (!string.IsNullOrEmpty(explicitTag))
             {
                 Tag = explicitTag;
-                Message = RawMessage;
+                Message = StripTagPrefix(RawMessage, explicitTag);
                 return;
             }
 
@@ -70,7 +72,15 @@ public static class HLogCore
 
         // Singleline: 여러 줄 메시지도 태그를 인식하도록 '.'이 줄바꿈까지 포함하게 한다
         private static readonly Regex TagRegex = new Regex(@"^#([^#]+)#\s*(.*)$", RegexOptions.Compiled | RegexOptions.Singleline);
-        private static readonly Regex ColonTagRegex = new Regex(@"^([a-zA-Z0-9_\-\.\/]+):\s+(.*)$", RegexOptions.Compiled | RegexOptions.Singleline);
+
+        /// <summary> UnityEngine.Logger.Log(type, tag, message)는 "태그: 메시지"로 출력한다. 정확히 그 접두사일 때만 뗀다 </summary>
+        private static string StripTagPrefix(string raw, string tag) =>
+            HasTagPrefix(raw, tag) ? raw.Substring(tag.Length + 2) : raw;
+
+        internal static bool HasTagPrefix(string raw, string tag) =>
+            raw != null && raw.Length >= tag.Length + 2
+            && raw.StartsWith(tag, StringComparison.Ordinal)
+            && raw[tag.Length] == ':' && raw[tag.Length + 1] == ' ';
 
         private static void ParseTagAndMessage(string raw, LogType logType, out string tag, out string msg)
         {
@@ -82,24 +92,25 @@ public static class HLogCore
                 return;
             }
 
-            // "NullReferenceException: ..." 처럼 예외 타입 이름이 태그로 등록되지 않도록 예외 로그는 콜론 태그를 해석하지 않는다
-            var matchColon = logType == LogType.Exception ? Match.Empty : ColonTagRegex.Match(raw);
-            if (matchColon.Success && IsColonTagCandidate(matchColon.Groups[1].Value))
+            // "X: 메시지"는 X가 등록된 채널 태그일 때만 태그로 본다 (Debug.unityLogger.Log("Combat", …) 등).
+            // 우연히 콜론이 들어간 일반 로그("Note: …")나 예외("NullReferenceException: …")가 태그를 만들지 않도록
+            if (logType != LogType.Exception)
             {
-                tag = matchColon.Groups[1].Value.Trim();
-                msg = matchColon.Groups[2].Value;
-                return;
+                int colon = raw.IndexOf(": ", StringComparison.Ordinal);
+                if (colon > 0 && colon <= MaxColonTagLength)
+                {
+                    string candidate = raw.Substring(0, colon);
+                    if (IsChannelTag(candidate))
+                    {
+                        tag = candidate;
+                        msg = raw.Substring(colon + 2);
+                        return;
+                    }
+                }
             }
 
             tag = string.Empty;
             msg = raw;
-        }
-
-        private static bool IsColonTagCandidate(string tag)
-        {
-            return tag.Length < 32
-                   && !tag.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                   && !tag.EndsWith("Exception", StringComparison.Ordinal);
         }
     }
 
@@ -182,6 +193,31 @@ public static class HLogCore
 
     private static readonly ConcurrentDictionary<string, LogChannel> s_ChannelCache = new ConcurrentDictionary<string, LogChannel>(StringComparer.OrdinalIgnoreCase);
 
+    // 코드로 선언된 채널 태그 (내장 · 생성 코드 HLog.X · 생성기 설정). 로그 문자열에서 해석한 태그(#Foo#)는 들어가지 않는다
+    private static readonly ConcurrentDictionary<string, byte> s_DeclaredTags = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+
+    // "X: 메시지"에서 X로 볼 최대 길이 (긴 문장의 첫 콜론까지 잘라 조회하지 않도록)
+    private const int MaxColonTagLength = 64;
+
+    /// <summary>
+    /// 채널 태그인지 (선언된 채널 또는 이미 만들어진 채널). 로그에서 해석한 태그는 채널이 아니다. 어느 스레드에서나.
+    /// </summary>
+    public static bool IsChannelTag(string tag) =>
+        !string.IsNullOrEmpty(tag) && (s_DeclaredTags.ContainsKey(tag) || s_ChannelCache.ContainsKey(tag));
+
+    /// <summary>
+    /// 채널 태그 목록 (선언된 채널 + 만들어진 채널, 이름순). 채널 On/Off UI에 쓴다. 어느 스레드에서나.
+    /// </summary>
+    public static IReadOnlyList<string> ChannelTags
+    {
+        get
+        {
+            var tags = new SortedSet<string>(s_DeclaredTags.Keys, StringComparer.OrdinalIgnoreCase);
+            foreach (var key in s_ChannelCache.Keys) tags.Add(key);
+            return new List<string>(tags);
+        }
+    }
+
 #if USE_HLOG
     // ---------------------------------------------------------------------------------------------
     // 상태 (메인 스레드에서만 바뀌는 것은 따로 표시)
@@ -241,10 +277,45 @@ public static class HLogCore
     private static int s_EditorTick;
 #endif
 
+    /// <summary> 값 형식 · string 게터: 이전 값과 같으면 박싱 · 문자열 변환 없이 끝낸다 (Watch&lt;T&gt;) </summary>
+    private interface ITypedWatchSource
+    {
+        /// <summary> 값이 바뀌었으면 true와 박싱한 값 </summary>
+        bool ReadIfChanged(out object boxed);
+        /// <summary> 다음 읽기에서 값이 같아도 다시 변환하게 한다 (에러 표시 뒤 등) </summary>
+        void Invalidate();
+    }
+
+    private sealed class TypedWatchSource<T> : ITypedWatchSource
+    {
+        private readonly Func<T> m_Getter;
+        private bool m_HasLast;
+        private T m_Last;
+
+        public TypedWatchSource(Func<T> getter) => m_Getter = getter;
+
+        public bool ReadIfChanged(out object boxed)
+        {
+            T value = m_Getter();
+            if (m_HasLast && EqualityComparer<T>.Default.Equals(value, m_Last))
+            {
+                boxed = null;
+                return false;
+            }
+            m_HasLast = true;
+            m_Last = value;
+            boxed = value;
+            return true;
+        }
+
+        public void Invalidate() => m_HasLast = false;
+    }
+
     // Watch 게터 (메인 스레드 전용)
     private sealed class GetterRegistration
     {
         public Func<object> Getter;
+        public ITypedWatchSource Typed;
         public UnityEngine.Object Owner;
         public bool HasOwner;
         public bool HasLastRaw;
@@ -679,8 +750,7 @@ public static class HLogCore
     public static void DiscoverAllChannels()
     {
 #if USE_HLOG
-        RegisterTag("Common");
-        RegisterTag("System");
+        RegisterDeclaredTag("Common");
 
         // 1. Reflection을 통한 HLog 중첩 클래스 스캔 (모든 어셈블리 순회 지원)
         try
@@ -721,7 +791,19 @@ public static class HLogCore
                 foreach (var nt in nestedTypes)
                 {
                     if (nt.Name == "Core") continue;
-                    RegisterTag(nt.Name);
+                    // 생성 코드는 클래스 이름과 태그가 다를 수 있다 → Channel 필드의 실제 태그를 쓴다 (없으면 클래스 이름).
+                    // 필드를 읽으면 그 클래스의 정적 초기화가 돈다 → 한 클래스가 실패해도 나머지는 계속 등록한다
+                    string declared = nt.Name;
+                    try
+                    {
+                        var channelField = nt.GetField("Channel", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                        if (channelField?.GetValue(null) is LogChannel ch) declared = ch.Tag;
+                    }
+                    catch (Exception ex)
+                    {
+                        WarnDiscoveryFailedOnce(ex);
+                    }
+                    RegisterDeclaredTag(declared);
                 }
             }
         }
@@ -750,7 +832,7 @@ public static class HLogCore
                             var fTag = item.GetType().GetField("tagName");
                             string t = fTag?.GetValue(item) as string;
                             if (string.IsNullOrEmpty(t)) t = fVar?.GetValue(item) as string;
-                            if (!string.IsNullOrEmpty(t)) RegisterTag(t);
+                            if (!string.IsNullOrEmpty(t)) RegisterDeclaredTag(t);
                         }
                     }
                 }
@@ -762,6 +844,13 @@ public static class HLogCore
         }
 #endif
 #endif
+    }
+
+    private static void RegisterDeclaredTag(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return;
+        s_DeclaredTags.TryAdd(tag.Trim(), 0);
+        RegisterTag(tag);
     }
 
     /// <summary>
@@ -791,38 +880,35 @@ public static class HLogCore
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// 값을 Watch에 기록합니다. 같은 키에 게터 Watch가 있으면 게터를 해제하고 이 값으로 바꿉니다. 메인 스레드 전용.
+    /// 변수나 프로퍼티를 람다(게터)로 등록해 매 프레임 평가하고, 값이 바뀌면 Watch 목록에 반영합니다. 메인 스레드 전용. Watch API는 이것 하나입니다.
+    /// 같은 키로 다시 부르면 게터를 바꿉니다. owner를 넘기면 owner가 파괴될 때 자동으로 해제되고, 넘기지 않으면 Unwatch로 직접 해제해야 합니다.
+    /// 값 형식 · string은 이전 값과 같으면 박싱 · 문자열 변환을 하지 않습니다 (IEquatable&lt;T&gt; 구현 형식은 할당 없음).
+    /// 예: HLog.Common.Watch("Player/Hp", () => m_Hp, this);
     /// </summary>
     [Conditional("USE_HLOG")]
     [HideInCallstack]
-    public static void Watch(string key, object value)
+    public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null)
     {
 #if USE_HLOG
-        if (!RequireMainThread(MainThreadApi.Watch)) return;
-        if (string.IsNullOrEmpty(key)) return;
-
-        // 나중 호출이 이긴다: 값 Watch는 같은 키의 게터를 해제한다
-        s_WatchGetters.Remove(key);
-        SetWatchValue(key, ConvertWatchValue(value));
+        if (getter == null) return;
+        // 참조 형식은 내부가 바뀔 수 있어 매번 변환해야 하므로 기존 경로
+        if (typeof(T).IsValueType || typeof(T) == typeof(string))
+            RegisterGetter(key, null, new TypedWatchSource<T>(getter), owner);
+        else
+            RegisterGetter(key, () => getter(), null, owner);
 #endif
     }
 
-    /// <summary>
-    /// 변수나 프로퍼티를 람다(게터) 형태로 등록하여 매 프레임 실시간 모니터링합니다. 메인 스레드 전용.
-    /// owner를 넘기면 owner가 파괴될 때 자동으로 해제됩니다. 넘기지 않으면 Unwatch로 직접 해제해야 합니다.
-    /// 예: HLog.Common.Watch("Player/ImageSlot", () => m_Image, this);
-    /// </summary>
-    [Conditional("USE_HLOG")]
-    [HideInCallstack]
-    public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null)
-    {
 #if USE_HLOG
+    private static void RegisterGetter(string key, Func<object> getter, ITypedWatchSource typed, UnityEngine.Object owner)
+    {
         if (!RequireMainThread(MainThreadApi.Watch)) return;
-        if (string.IsNullOrEmpty(key) || getter == null) return;
+        if (string.IsNullOrEmpty(key)) return;
 
         var registration = new GetterRegistration
         {
             Getter = getter,
+            Typed = typed,
             Owner = owner,
             HasOwner = !ReferenceEquals(owner, null),
         };
@@ -830,18 +916,8 @@ public static class HLogCore
 
         // 실행 중이면 등록 직후 한 번 평가 (Shutdown 상태면 등록만 두고, 다시 Initialize된 뒤 PlayerLoop 폴링이 평가)
         EvaluateRegistrationIfRunning(key, registration);
-#endif
     }
-
-    [Conditional("USE_HLOG")]
-    [HideInCallstack]
-    public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null)
-    {
-#if USE_HLOG
-        if (getter == null) return;
-        Watch(key, () => (object)getter(), owner);
 #endif
-    }
 
     /// <summary>
     /// Watch 항목(값/게터)을 제거합니다. 메인 스레드 전용.
@@ -1042,8 +1118,12 @@ public static class HLogCore
         if (!Volatile.Read(ref s_IsLogEnabled)) return;
 
         DateTime receivedAt = DateTime.Now;
-        // 채널 Exception 호출 중이면 그 채널 태그 (예외 로그에만 적용해 무관한 로그에 붙지 않게)
-        string channelTag = type == LogType.Exception ? s_CurrentChannelTag : null;
+        // 채널 로그 호출 중이면 그 채널 태그 (LogChannel이 출력하는 동안만 이 스레드에 설정됨 — 문자열에서 다시 해석하지 않는다).
+        // 그 사이 같은 스레드에서 동기로 나온 다른 로그(메시지 ToString 안의 Debug.Log, 다른 로그 구독자가 남기는 로그 등)에
+        // 붙지 않도록, 예외가 아니면 Logger 형식("태그: …")으로 시작할 때만 쓴다. 예외는 Logger가 접두사를 붙이지 않는다
+        string channelTag = s_CurrentChannelTag;
+        if (channelTag != null && type != LogType.Exception && !LogEntry.HasTagPrefix(condition, channelTag))
+            channelTag = null;
 
         if (IsMainThread)
         {
@@ -1354,13 +1434,22 @@ public static class HLogCore
         string text;
         try
         {
-            value = registration.Getter();
+            if (registration.Typed != null)
+            {
+                // 형식 있는 게터: 값이 같으면 박싱 · 변환 없이 끝 (매 프레임 할당 없음)
+                if (!registration.Typed.ReadIfChanged(out value)) return;
+            }
+            else
+            {
+                value = registration.Getter();
+            }
         }
         catch (Exception ex)
         {
             if (IsCurrentRegistration(key, registration))
             {
                 registration.HasLastRaw = false;
+                registration.Typed?.Invalidate();
                 SetWatchValue(key, $"<Error: {ex.Message}>");
             }
             return;
@@ -1369,7 +1458,8 @@ public static class HLogCore
         if (!IsCurrentRegistration(key, registration)) return;
 
         // 값 형식 · string은 값이 같으면 문자열 변환과 비교를 건너뛴다 (참조 형식은 내부가 바뀔 수 있어 매번 변환)
-        bool comparable = value is string || value is ValueType;
+        // 형식 있는 게터는 위에서 이미 비교했다
+        bool comparable = registration.Typed == null && (value is string || value is ValueType);
         if (comparable && registration.HasLastRaw && Equals(registration.LastRaw, value)) return;
 
         try
@@ -1413,7 +1503,8 @@ public static class HLogCore
         bool rising = result && !registration.LastResult;
         registration.LastResult = result;
 
-        if (rising && !registration.Disarmed)
+        // 꺼진 채널은 발동하지 않는다 (횟수 · once 해제도 하지 않음 → 다시 켜면 다음 거짓→참에서 발동)
+        if (rising && !registration.Disarmed && GetChannel(registration.ChannelTag).IsActive)
         {
             registration.HitCount++;
             registration.LastHitTime = DateTime.Now;

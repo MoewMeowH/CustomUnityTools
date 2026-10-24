@@ -179,6 +179,15 @@ public class HB_InGameConsoleUI : MonoBehaviour
     public UIDocument Document => uiDocument != null ? uiDocument : (uiDocument = GetComponent<UIDocument>());
     public VisualElement RootElement => rootElement;
 
+    /// <summary> 코드가 만든 콘솔에 프로젝트 설정 값을 넣는다 (InGameConsole.EnsureUIInstance가 비활성 상태로 붙인 뒤, Awake 전에 호출) </summary>
+    internal void ApplyProjectSettings(InGameConsoleSettings settings)
+    {
+        if (settings == null) return;
+        dontDestroyOnLoad = settings.PersistAcrossScenes;
+        showFpsGraph = settings.ShowFpsGraph;
+        autoScroll = settings.AutoScroll;
+    }
+
     private void Awake()
     {
 #if UNITY_6000_5_OR_NEWER
@@ -186,13 +195,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
 #endif
         uiDocument = GetComponent<UIDocument>();
 
-        var settings = InGameConsoleSettings.Instance;
-        if (settings != null)
-        {
-            dontDestroyOnLoad = settings.PersistAcrossScenes;
-            showFpsGraph = settings.ShowFpsGraph;
-            autoScroll = settings.AutoScroll;
-        }
+        // 프로젝트 설정은 코드가 만든 콘솔에만 적용된다 (ApplyProjectSettings). 씬에 직접 놓은 콘솔은 인스펙터 값을 그대로 쓴다
 
         if (dontDestroyOnLoad && transform.parent == null)
         {
@@ -1088,14 +1091,16 @@ public class HB_InGameConsoleUI : MonoBehaviour
         if (channelTogglesContainer == null) return;
         channelTogglesContainer.Clear();
 
-        var knownTags = HLogCore.KnownTags;
-        if (knownTags.Count == 0)
+        // 실제 채널만 칩으로 보인다. Debug.Log("#Foo# …")처럼 로그 문자열에서 생긴 태그는 채널이 아니라서
+        // 칩을 만들면 채널 객체만 생기고 꺼도 그 로그는 막히지 않는다
+        var channelTags = HLogCore.ChannelTags;
+        if (channelTags.Count == 0)
         {
             HLogCore.DiscoverAllChannels();
-            knownTags = HLogCore.KnownTags;
+            channelTags = HLogCore.ChannelTags;
         }
 
-        foreach (var tag in knownTags)
+        foreach (var tag in channelTags)
         {
             string tagName = tag;
             var channel = HLogCore.GetChannel(tagName);

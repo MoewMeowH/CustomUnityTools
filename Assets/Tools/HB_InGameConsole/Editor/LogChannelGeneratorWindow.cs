@@ -15,6 +15,11 @@ namespace InGameConsoleSystem.Editor
         private Vector2 scrollPosition;
         private Vector2 codePreviewScroll;
 
+        // 미리보기 캐시: 설정 내용(채널 이름 · 태그)이 바뀔 때만 다시 생성한다 (OnGUI마다 생성하지 않도록)
+        private int cachedPreviewSignature;
+        private string cachedPreviewCode;
+        private List<string> cachedPreviewErrors;
+
         [MenuItem("Tools/HB/In-Game Console/Log Channel Generator", priority = 12)]
         public static void OpenWindow()
         {
@@ -353,10 +358,22 @@ namespace InGameConsoleSystem.Editor
         private void DrawCodePreviewSection()
         {
             EditorGUILayout.LabelField("생성 코드 미리보기", EditorStyles.boldLabel);
-            string code = GenerateCode(settings);
+
+            int signature = ComputeSignature(settings);
+            if (cachedPreviewCode == null || signature != cachedPreviewSignature)
+            {
+                cachedPreviewSignature = signature;
+                cachedPreviewErrors = ValidateChannels(settings);
+                cachedPreviewCode = GenerateCode(settings);
+            }
+
+            foreach (var error in cachedPreviewErrors)
+            {
+                EditorGUILayout.HelpBox(error, MessageType.Error);
+            }
 
             codePreviewScroll = EditorGUILayout.BeginScrollView(codePreviewScroll, GUILayout.Height(180));
-            EditorGUILayout.TextArea(code, EditorStyles.textArea, GUILayout.ExpandHeight(true));
+            EditorGUILayout.TextArea(cachedPreviewCode, EditorStyles.textArea, GUILayout.ExpandHeight(true));
             EditorGUILayout.EndScrollView();
         }
 
@@ -399,8 +416,6 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("{");
             sb.AppendLine($"    private const string Cond = \"{LogChannelGeneratorSettings.ConditionalSymbol}\";");
             sb.AppendLine();
-            sb.AppendLine("    [Conditional(Cond)] public static void Watch(string key, object value) => HLogCore.Watch(key, value);");
-            sb.AppendLine("    [Conditional(Cond)] public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => HLogCore.Watch(key, getter, owner);");
             sb.AppendLine("    [Conditional(Cond)] public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => HLogCore.Watch<T>(key, getter, owner);");
             sb.AppendLine("    [Conditional(Cond)] public static void Unwatch(string key) => HLogCore.Unwatch(key);");
             sb.AppendLine("    public static void Clear() => HLogCore.Clear();");
@@ -425,16 +440,13 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine("        public static void Initialize() => HLogCore.Initialize();");
             sb.AppendLine("        public static void Shutdown() => HLogCore.Shutdown();");
             sb.AppendLine("        public static void Clear() => HLogCore.Clear();");
-            sb.AppendLine("        [Conditional(Cond)] public static void Watch(string key, object value) => HLogCore.Watch(key, value);");
-            sb.AppendLine("        [Conditional(Cond)] public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => HLogCore.Watch(key, getter, owner);");
             sb.AppendLine("        [Conditional(Cond)] public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => HLogCore.Watch<T>(key, getter, owner);");
             sb.AppendLine("        [Conditional(Cond)] public static void Unwatch(string key) => HLogCore.Unwatch(key);");
             sb.AppendLine("    }");
             sb.AppendLine();
 
+            // 기본 채널은 Common 하나만 만든다 (나머지는 생성기 목록으로 추가)
             AppendChannelClass(sb, "Common", "Common");
-            sb.AppendLine();
-            AppendChannelClass(sb, "System", "System");
 
             var channels = settings != null ? settings.Channels : new List<LogChannelGeneratorSettings.ChannelItem>();
             for (int i = 0; i < channels.Count; i++)
@@ -444,7 +456,8 @@ namespace InGameConsoleSystem.Editor
                 string vName = SanitizeIdentifier(ch.varName.Trim());
                 string tName = string.IsNullOrWhiteSpace(ch.tagName) ? vName : ch.tagName.Trim();
 
-                if (vName == "Common" || vName == "System" || vName == "Core") continue;
+                // 비는 이름은 ValidateChannels가 저장을 막는다 (미리보기에서도 깨진 클래스를 만들지 않음)
+                if (vName.Length == 0 || vName == "Common" || vName == "Core") continue;
 
                 sb.AppendLine();
                 AppendChannelClass(sb, vName, tName);
@@ -462,15 +475,13 @@ namespace InGameConsoleSystem.Editor
             sb.AppendLine($"    public static class {className}");
             sb.AppendLine("    {");
             // GetChannel로 가져와야 HLog.Get("태그")·콘솔 채널 On/Off와 같은 인스턴스가 된다
-            sb.AppendLine($"        public static readonly LogChannel Channel = HLogCore.GetChannel(\"{tagName}\");");
+            sb.AppendLine($"        public static readonly LogChannel Channel = HLogCore.GetChannel({ToStringLiteral(tagName)});");
             AppendForward(sb, "public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);");
             AppendForward(sb, "public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);");
             AppendForward(sb, "public static void Error(object message, UnityEngine.Object context = null) => Channel.Error(message, context);");
             AppendForward(sb, "public static void LogError(object message, UnityEngine.Object context = null) => Channel.LogError(message, context);");
             AppendForward(sb, "public static void LogException(Exception exception, UnityEngine.Object context = null) => Channel.LogException(exception, context);");
             AppendForward(sb, "public static void Exception(Exception exception, UnityEngine.Object context = null) => Channel.Exception(exception, context);");
-            AppendForward(sb, "public static void Watch(string key, object value) => Channel.Watch(key, value);");
-            AppendForward(sb, "public static void Watch(string key, Func<object> getter, UnityEngine.Object owner = null) => Channel.Watch(key, getter, owner);");
             AppendForward(sb, "public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => Channel.Watch<T>(key, getter, owner);");
             AppendForward(sb, "public static void Unwatch(string key) => Channel.Unwatch(key);");
             AppendForward(sb, "public static void BreakIf(bool condition, object message, UnityEngine.Object context = null) => Channel.BreakIf(condition, message, context);");
@@ -504,6 +515,17 @@ namespace InGameConsoleSystem.Editor
             }
 
             string filePath = Path.Combine(dir, fileName);
+
+            // 클래스 이름이 비거나 겹치면 생성 코드가 컴파일되지 않는다 → 쓰지 않고 알린다
+            var errors = ValidateChannels(settings);
+            if (errors.Count > 0)
+            {
+                string message = "채널 설정을 고친 뒤 다시 생성하세요:\n" + string.Join("\n", errors);
+                if (silent) Debug.LogError($"[HLog Generator] {message}");
+                else EditorUtility.DisplayDialog("생성 실패", message, "확인");
+                return;
+            }
+
             string code = GenerateCode(settings);
 
             // 내용이 같으면 쓰지 않는다 (불필요한 임포트·재컴파일 방지)
@@ -537,6 +559,94 @@ namespace InGameConsoleSystem.Editor
                 }
 
                 EditorUtility.DisplayDialog("저장 완료", $"스크립트 파일이 갱신되었습니다:\n{filePath}", "확인");
+            }
+        }
+
+        /// <summary>
+        /// 생성 전에 고쳐야 할 문제: 이름이 비는 채널(쓸 수 없는 문자만 있음), 정리 후 클래스 이름이 겹치는 채널
+        /// </summary>
+        // 생성 코드에서 클래스 이름으로 쓸 수 없는 이름: HLog 자신 · 같은 partial 클래스의 멤버(겹치면 CS0102), C# 키워드
+        private static readonly HashSet<string> ReservedClassNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "HLog", "Watch", "Unwatch", "Clear", "IsLogEnabled", "Get", "Channel", "Cond",
+            "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const", "continue", "decimal",
+            "default", "delegate", "do", "double", "else", "enum", "event", "explicit", "extern", "false", "finally", "fixed", "float",
+            "for", "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock", "long", "namespace", "new",
+            "null", "object", "operator", "out", "override", "params", "private", "protected", "public", "readonly", "ref", "return",
+            "sbyte", "sealed", "short", "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true", "try",
+            "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using", "virtual", "void", "volatile", "while"
+        };
+
+        internal static List<string> ValidateChannels(LogChannelGeneratorSettings settings)
+        {
+            var errors = new List<string>();
+            if (settings == null) return errors;
+
+            var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var ch in settings.Channels)
+            {
+                if (ch == null || string.IsNullOrWhiteSpace(ch.varName)) continue;
+                string original = ch.varName.Trim();
+                string className = SanitizeIdentifier(original);
+                if (className.Length == 0)
+                {
+                    errors.Add($"'{original}': 클래스 이름으로 쓸 수 있는 문자가 없습니다.");
+                    continue;
+                }
+                // 내장 이름(Common · Core)은 GenerateCode가 건너뛴다 (내장 채널 · 클래스를 그대로 씀)
+                if (className == "Common" || className == "Core") continue;
+                if (ReservedClassNames.Contains(className))
+                {
+                    errors.Add($"'{original}': '{className}'은(는) HLog의 멤버 이름이거나 C# 키워드라 클래스 이름으로 쓸 수 없습니다.");
+                    continue;
+                }
+                if (owners.TryGetValue(className, out string first))
+                {
+                    errors.Add($"'{first}' · '{original}': 정리한 클래스 이름이 '{className}'로 같습니다.");
+                    continue;
+                }
+                owners.Add(className, original);
+            }
+            return errors;
+        }
+
+        /// <summary> C# 일반 문자열 리터럴 (따옴표 · 역슬래시 · 줄바꿈 · 제어 문자 이스케이프) </summary>
+        internal static string ToStringLiteral(string value)
+        {
+            var sb = new StringBuilder(value.Length + 2);
+            sb.Append('"');
+            foreach (char c in value)
+            {
+                switch (c)
+                {
+                    case '"': sb.Append("\\\""); break;
+                    case '\\': sb.Append("\\\\"); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': sb.Append("\\r"); break;
+                    case '\t': sb.Append("\\t"); break;
+                    default:
+                        // U+2028 · U+2029는 제어 문자가 아니지만 C# 문자열 리터럴 안에서 줄 끝으로 처리된다 (CS1010)
+                        if (char.IsControl(c) || c == '\u2028' || c == '\u2029') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                        else sb.Append(c);
+                        break;
+                }
+            }
+            sb.Append('"');
+            return sb.ToString();
+        }
+
+        private static int ComputeSignature(LogChannelGeneratorSettings settings)
+        {
+            if (settings == null) return 0;
+            unchecked
+            {
+                int hash = 17;
+                foreach (var ch in settings.Channels)
+                {
+                    hash = hash * 31 + (ch?.varName?.GetHashCode() ?? 0);
+                    hash = hash * 31 + (ch?.tagName?.GetHashCode() ?? 0);
+                }
+                return hash * 31 + settings.Channels.Count;
             }
         }
 

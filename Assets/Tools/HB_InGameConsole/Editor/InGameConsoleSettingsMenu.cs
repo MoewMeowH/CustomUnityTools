@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace InGameConsoleSystem.Editor
 {
-    public static class InGameConsoleSettingsProvider
+    public static class InGameConsoleSettingsMenu
     {
         [MenuItem("Tools/HB/In-Game Console/Settings", priority = 11)]
         public static void OpenSettings()
