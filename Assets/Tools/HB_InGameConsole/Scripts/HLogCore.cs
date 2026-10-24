@@ -828,8 +828,8 @@ public static class HLogCore
         };
         s_WatchGetters[key] = registration;
 
-        // 등록 직후 한 번 평가 (실행 중이 아니어도 처음 값은 보이게)
-        EvaluateRegistration(key, registration);
+        // 실행 중이면 등록 직후 한 번 평가 (Shutdown 상태면 등록만 두고, 다시 Initialize된 뒤 PlayerLoop 폴링이 평가)
+        EvaluateRegistrationIfRunning(key, registration);
 #endif
     }
 
@@ -881,7 +881,7 @@ public static class HLogCore
             HasOwner = !ReferenceEquals(owner, null),
         };
         s_WatchGetters[key] = registration;
-        EvaluateRegistration(key, registration);
+        EvaluateRegistrationIfRunning(key, registration);
 #endif
     }
 
@@ -898,7 +898,7 @@ public static class HLogCore
         registration.Disarmed = false;
         registration.LastResult = false;
         registration.HasShownState = false;
-        EvaluateRegistration(key, registration);
+        EvaluateRegistrationIfRunning(key, registration);
 #endif
     }
 
@@ -1321,6 +1321,16 @@ public static class HLogCore
     private static bool IsCurrentRegistration(string key, GetterRegistration registration)
     {
         return s_WatchGetters.TryGetValue(key, out var current) && ReferenceEquals(current, registration);
+    }
+
+    /// <summary>Shutdown은 Watch 평가도 멈춘다 — 실행 중이 아니면 등록만 두고 PollWatchGetters가 평가하게 한다</summary>
+    private static void EvaluateRegistrationIfRunning(string key, GetterRegistration registration)
+    {
+        lock (s_IngressGate)
+        {
+            if (!s_IsRunning) return;
+        }
+        EvaluateRegistration(key, registration);
     }
 
     private static void EvaluateRegistration(string key, GetterRegistration registration)

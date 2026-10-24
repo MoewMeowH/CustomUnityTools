@@ -159,6 +159,10 @@ namespace HB.Cheat.Editor
                 };
                 cheat.Args.Add(arg);
 
+                // CheatProtocol이 run / options에서 건너뛰는 이름 (README "예약 인자 이름")
+                if (p.Name == "query" || p.Name == "limit")
+                    Warn(issues, cheat.Method, $"'{p.Name}' is reserved by the automation protocol; automation cannot set this argument (rename the parameter)");
+
                 if (p.IsOut || p.ParameterType.IsByRef || p.IsDefined(typeof(ParamArrayAttribute)))
                 {
                     Error(issues, cheat.Method, $"'{p.Name}': ref/out/params are not supported");

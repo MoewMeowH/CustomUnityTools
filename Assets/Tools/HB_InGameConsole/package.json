@@ -1,6 +1,6 @@
 ﻿{
   "name": "com.hb.ingameconsole",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "displayName": "HB_InGameConsole",
   "description": "High-performance runtime UI Toolkit in-game debug console with log filtering and auto-scroll.",
   "unity": "6000.3",
