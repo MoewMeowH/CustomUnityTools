@@ -2,6 +2,9 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
 
 namespace HB.Cheat.Editor
 {
@@ -14,7 +17,11 @@ namespace HB.Cheat.Editor
     /// <summary>
     /// HB_Cheat 설정. Editor 폴더에 두므로 빌드에 포함되지 않는다.
     /// 런타임 옵션은 생성 레지스트리 코드로 들어간다 (Resources 에셋을 쓰지 않음).
+    /// (static은 에디터 캐시 · 경고 한 번 표시용이라 도메인 리로드에서만 초기화)
     /// </summary>
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+    [NoAutoStaticsCleanup]
+#endif
     public class CheatSettings : ScriptableObject
     {
         public const string DefaultAssetPath = "Assets/Editor/HBCheat/HBCheatSettings.asset";
@@ -106,7 +113,7 @@ namespace HB.Cheat.Editor
         // NaN · 무한대는 Mathf.Max를 통과하고 생성 코드 리터럴로도 쓸 수 없다 → 기본값
         public float ServerTimeoutSeconds => float.IsNaN(serverTimeoutSeconds) || float.IsInfinity(serverTimeoutSeconds) ? 10f : Mathf.Max(0.5f, serverTimeoutSeconds);
         public int HistoryCapacity => Mathf.Max(1, historyCapacity);
-        public bool DontDestroyOnLoad => dontDestroyOnLoad;
+        public bool PersistAcrossScenes => dontDestroyOnLoad;
         public bool AllowRawFromAutomation => allowRawFromAutomation;
         public bool RunInBackgroundDuringCliPlay => runInBackgroundDuringCliPlay;
 
@@ -189,7 +196,7 @@ namespace HB.Cheat.Editor
         internal string RegistryInputs => string.Join("|",
             UserDefine, AssemblyCSharpOutputFolder, AutoGenerate, InitMode, PreferConsoleTab, ShowFloatingButton,
             ToggleKey, ServerTimeoutSeconds.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
-            HistoryCapacity, DontDestroyOnLoad, AllowRawFromAutomation);
+            HistoryCapacity, PersistAcrossScenes, AllowRawFromAutomation);
 
         private static string Normalize(string path, string fallback)
         {

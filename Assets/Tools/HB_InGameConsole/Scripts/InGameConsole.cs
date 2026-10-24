@@ -124,7 +124,7 @@ public static partial class InGameConsole
 
         s_UIInstance = go.AddComponent<HB_InGameConsoleUI>();
 
-        bool shouldDontDestroy = settings == null || settings.DontDestroyOnLoad;
+        bool shouldDontDestroy = settings == null || settings.PersistAcrossScenes;
         if (shouldDontDestroy)
         {
             Object.DontDestroyOnLoad(go);

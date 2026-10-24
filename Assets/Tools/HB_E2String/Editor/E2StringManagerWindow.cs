@@ -6,6 +6,9 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
 
 namespace HB.E2String.Editor
 {
@@ -47,7 +50,11 @@ namespace HB.E2String.Editor
     /// - 프로젝트 내 E2String 어트리뷰트가 적용된 Enum 목록 시각화
     /// - 어트리뷰트 스크립트 존재 여부 검사 및 원하는 경로(서버 공유 폴더 등)로 원클릭 생성
     /// - 빠른 소스 코드 이동 및 코드 치트시트 제공
+    /// (static은 초기화 뒤 바뀌지 않는 키워드 · 정규식이라 Play 진입 때 지울 필요가 없다)
     /// </summary>
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+    [NoAutoStaticsCleanup]
+#endif
     public class E2StringManagerWindow : EditorWindow
     {
         // EditorPrefs는 PC의 모든 프로젝트가 공유하므로 프로젝트별로 키를 분리한다
