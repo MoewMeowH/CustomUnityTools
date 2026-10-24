@@ -25,24 +25,34 @@ namespace HB.TestFrameworkHelper.Editor
             var issues = SlotValidatorEngine.ScanPrefabs(new[] { "Assets" });
             if (issues.Count > 0)
             {
-                // 경고(배열 · List의 빈 원소)는 로그만, 에러(빈 슬롯 · Missing 스크립트)만 LIVE 빌드를 막는다
+                // 경고(배열 · List의 빈 원소)는 로그만, 에러(빈 슬롯 · Missing 참조 · Missing 스크립트)만 LIVE 빌드를 막는다
                 int errorCount = 0;
                 foreach (var issue in issues)
                 {
                     if (issue.Severity == EValidationSeverity.Error) errorCount++;
                 }
 
-                string msg = $"[Inspector Validation 경고] 총 {issues.Count}개(에러 {errorCount}개)의 필수 슬롯/스크립트 문제가 발견되었습니다!";
-                BuildHelper.LogWarning(msg);
+                string summary = $"[Inspector Validation] 필수 슬롯/스크립트 문제 {issues.Count}개 (에러 {errorCount} · 경고 {issues.Count - errorCount})";
+
+                // 에러가 있으면 HB_Build 경고 파일(HB_BUILD_WARNINGS.txt → Jenkins UNSTABLE)에 요약만 남긴다. 빈 원소 경고만 있으면 로그만.
+                // 항목별 상세는 경고 파일이 프리팹 수만큼 길어지지 않게 로그로만 남긴다
+                if (errorCount > 0)
+                {
+                    context.AddWarning(summary);
+                }
+                else
+                {
+                    BuildHelper.LogWarning(summary);
+                }
 
                 foreach (var issue in issues)
                 {
-                    BuildHelper.LogWarning($"  ↳ [{issue.Severity}][{issue.IssueType}] {issue.AssetPath} > {issue.ComponentName}.{issue.FieldName}");
+                    BuildHelper.LogWarning($"  ↳ {issue}");
                 }
 
                 if (errorCount > 0 && context.BuildType == EBuildType.LIVE)
                 {
-                    throw BuildHelper.ThrowError($"LIVE 배포 빌드 차단: {errorCount}개의 인스펙터 슬롯 누락이 존재합니다. 빌드 전 수정하세요.");
+                    throw BuildHelper.ThrowError($"LIVE 배포 빌드 차단: 에러 {errorCount}개(빈 슬롯 · Missing 참조 · Missing 스크립트)가 있습니다. 빌드 전 수정하세요.");
                 }
             }
             else

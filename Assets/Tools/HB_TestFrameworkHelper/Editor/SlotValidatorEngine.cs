@@ -9,7 +9,7 @@ namespace HB.TestFrameworkHelper.Editor
     public enum EValidationIssueType
     {
         NullSlot,            // [NeedSlotNullCheck] 필드가 비어있음
-        MissingReference,    // 연결된 에셋/오브젝트가 삭제되어 Missing 상태임 (현재는 구분하지 않고 NullSlot으로 보고)
+        MissingReference,    // 연결된 에셋/오브젝트가 삭제되어 Missing 상태임 (단일 슬롯 · 배열 원소 모두 에러)
         MissingComponent,    // 스크립트 연결 자체가 끊어진 컴포넌트 (Missing Script)
         NullElement,         // [NeedSlotNullCheck] 배열 · List 슬롯의 원소가 비어있음 (경고)
     }
@@ -34,7 +34,9 @@ namespace HB.TestFrameworkHelper.Editor
 
         public override string ToString()
         {
-            return $"[{Severity}][{IssueType}] {AssetPath} > {GameObjectPath} > {ComponentName}.{FieldName}" +
+            // Missing 스크립트는 필드가 없으므로 "컴포넌트."로 끝나지 않게 한다
+            string member = string.IsNullOrEmpty(FieldName) ? ComponentName : $"{ComponentName}.{FieldName}";
+            return $"[{Severity}][{IssueType}] {AssetPath} > {GameObjectPath} > {member}" +
                    (string.IsNullOrEmpty(Description) ? "" : $" ({Description})");
         }
     }
@@ -47,6 +49,9 @@ namespace HB.TestFrameworkHelper.Editor
     {
         // Unity 직렬화 깊이 상한과 같다. 순환 참조 타입에서 무한히 내려가지 않도록 한다.
         private const int MaxDepth = 10;
+
+        // 불러온 프리팹은 스캔이 끝날 때까지 메모리에 남는다 → 이만큼마다 쓰지 않는 에셋을 내린다 (결과가 잡고 있는 프리팹은 남음)
+        private const int UnloadInterval = 100;
 
         private const BindingFlags DeclaredInstanceFields =
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
@@ -75,6 +80,13 @@ namespace HB.TestFrameworkHelper.Editor
 
             string[] guids = AssetDatabase.FindAssets("t:Prefab", searchFolders);
 
+            // 중첩 · 변형 프리팹이 원본에서 그대로 물려받은 값은 원본이 이번 스캔에 있으면 거기서 보고되므로 건너뛴다
+            var scannedPaths = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string guid in guids)
+            {
+                scannedPaths.Add(AssetDatabase.GUIDToAssetPath(guid));
+            }
+
             try
             {
                 for (int i = 0; i < guids.Length; i++)
@@ -90,8 +102,13 @@ namespace HB.TestFrameworkHelper.Editor
                     GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                     if (prefab == null) continue;
 
-                    ScanMissingComponents(prefab, path, issues);
-                    ScanSlots(prefab, path, scan, issues);
+                    ScanMissingComponents(prefab, path, scannedPaths, issues);
+                    ScanSlots(prefab, path, scannedPaths, scan, issues);
+
+                    if ((i + 1) % UnloadInterval == 0)
+                    {
+                        EditorUtility.UnloadUnusedAssetsImmediate();
+                    }
                 }
             }
             finally
@@ -102,13 +119,20 @@ namespace HB.TestFrameworkHelper.Editor
             return issues;
         }
 
-        private static void ScanMissingComponents(GameObject prefab, string path, List<SlotValidationIssue> issues)
+        private static void ScanMissingComponents(GameObject prefab, string path, HashSet<string> scannedPaths, List<SlotValidationIssue> issues)
         {
             // GetComponentsInChildren의 null 항목은 소속 오브젝트를 알 수 없으므로, 오브젝트 단위로 Missing 개수를 센다
             foreach (var transform in prefab.GetComponentsInChildren<Transform>(true))
             {
                 int missingCount = GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(transform.gameObject);
                 if (missingCount == 0) continue;
+
+                // 원본(중첩 · 변형) 프리팹이 이번 스캔에 있으면 원본에 있던 개수는 거기서 보고된다 → 이 프리팹에서 늘어난 것만
+                if (TryGetScannedSource(transform.gameObject, scannedPaths, out var sourceObject))
+                {
+                    missingCount -= GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(sourceObject);
+                    if (missingCount <= 0) continue;
+                }
 
                 issues.Add(new SlotValidationIssue
                 {
@@ -123,7 +147,7 @@ namespace HB.TestFrameworkHelper.Editor
             }
         }
 
-        private static void ScanSlots(GameObject prefab, string path, TypeScanCache scan, List<SlotValidationIssue> issues)
+        private static void ScanSlots(GameObject prefab, string path, HashSet<string> scannedPaths, TypeScanCache scan, List<SlotValidationIssue> issues)
         {
             foreach (var mb in prefab.GetComponentsInChildren<MonoBehaviour>(true))
             {
@@ -132,7 +156,9 @@ namespace HB.TestFrameworkHelper.Editor
                 var mbType = mb.GetType();
                 if (!scan.HasTargetFields(mbType)) continue;
 
+                TryGetScannedSource(mb, scannedPaths, out var source);
                 using (var so = new SerializedObject(mb))
+                using (var sourceSo = source != null ? new SerializedObject(source) : null)
                 {
                     var target = new ScanTarget
                     {
@@ -141,6 +167,7 @@ namespace HB.TestFrameworkHelper.Editor
                         GameObjectPath = GetHierarchyPath(mb.transform),
                         ComponentName = mbType.Name,
                         Issues = issues,
+                        SourceObject = sourceSo,
                     };
                     CheckFields(so, mbType, string.Empty, target, scan, 0);
                 }
@@ -191,24 +218,47 @@ namespace HB.TestFrameworkHelper.Editor
 
             if (isCollection && prop.isArray)
             {
-                // 배열 · List: 빈 목록은 문제 아님, null 원소만 경고 (어트리뷰트에서 끌 수 있음)
-                if (!attr.WarnNullElements) return;
-
+                // 배열 · List: 빈 목록은 문제 아님. Missing 원소는 에러, 빈 원소는 경고 (빈 원소 경고만 어트리뷰트에서 끌 수 있음)
                 for (int i = 0; i < prop.arraySize; i++)
                 {
                     var element = prop.GetArrayElementAtIndex(i);
-                    if (element.propertyType == SerializedPropertyType.ObjectReference && element.objectReferenceValue == null)
+                    if (element.propertyType != SerializedPropertyType.ObjectReference || element.objectReferenceValue != null) continue;
+                    if (target.IsInheritedValue(element)) continue;
+
+                    string elementName = $"{ToDisplayPath(propertyPath)}[{i}]";
+                    if (IsMissingReference(element))
                     {
-                        target.Add($"{ToDisplayPath(propertyPath)}[{i}]", attr.Description, EValidationIssueType.NullElement, EValidationSeverity.Warning);
+                        target.Add(elementName, attr.Description, EValidationIssueType.MissingReference, EValidationSeverity.Error);
+                    }
+                    else if (attr.WarnNullElements)
+                    {
+                        target.Add(elementName, attr.Description, EValidationIssueType.NullElement, EValidationSeverity.Warning);
                     }
                 }
                 return;
             }
 
-            if (prop.propertyType == SerializedPropertyType.ObjectReference && prop.objectReferenceValue == null)
+            if (prop.propertyType == SerializedPropertyType.ObjectReference && prop.objectReferenceValue == null && !target.IsInheritedValue(prop))
             {
-                target.Add(ToDisplayPath(propertyPath), attr.Description, EValidationIssueType.NullSlot, EValidationSeverity.Error);
+                var type = IsMissingReference(prop) ? EValidationIssueType.MissingReference : EValidationIssueType.NullSlot;
+                target.Add(ToDisplayPath(propertyPath), attr.Description, type, EValidationSeverity.Error);
             }
+        }
+
+        /// <summary>값은 비었는데 instanceID가 남아 있으면 삭제된 에셋을 가리키는 참조(Missing)다. 빈 칸은 0이다.</summary>
+        private static bool IsMissingReference(SerializedProperty prop)
+        {
+            return prop.objectReferenceValue == null && prop.objectReferenceInstanceIDValue != 0;
+        }
+
+        /// <summary>obj가 다른 프리팹(중첩 · 변형의 원본)에서 왔고 그 원본이 이번 스캔 대상인지. 아니면 source는 null.</summary>
+        private static bool TryGetScannedSource<T>(T obj, HashSet<string> scannedPaths, out T source) where T : UnityEngine.Object
+        {
+            source = PrefabUtility.GetCorrespondingObjectFromSource(obj);
+            if (source != null && scannedPaths.Contains(AssetDatabase.GetAssetPath(source))) return true;
+
+            source = null;
+            return false;
         }
 
         /// <summary>T[] 또는 List&lt;T&gt;의 T. 그 밖은 null (Unity가 직렬화하는 컬렉션은 이 둘뿐).</summary>
@@ -262,6 +312,21 @@ namespace HB.TestFrameworkHelper.Editor
             public string GameObjectPath;
             public string ComponentName;
             public List<SlotValidationIssue> Issues;
+            /// <summary>스캔 대상인 원본 프리팹의 같은 컴포넌트. 원본이 없거나 스캔 대상 밖이면 null.</summary>
+            public SerializedObject SourceObject;
+
+            /// <summary>
+            /// 스캔 대상인 원본 프리팹에서 덮어쓰지 않고 물려받은 값인지 (원본에서 보고되므로 여기서는 건너뛴다).
+            /// 이 프리팹에서 늘린 배열 원소는 prefabOverride가 false여도 원본에 그 경로가 없으므로 물려받은 값이 아니다.
+            /// 원본도 같은 상태(빈 칸 / Missing)일 때만 원본에서 보고되므로, 원본 값이 있으면 여기서 보고한다 (원본만 정상인 경우를 놓치지 않게).
+            /// </summary>
+            public bool IsInheritedValue(SerializedProperty prop)
+            {
+                if (SourceObject == null || prop.prefabOverride) return false;
+
+                var sourceProp = SourceObject.FindProperty(prop.propertyPath);
+                return sourceProp != null && sourceProp.objectReferenceValue == null && IsMissingReference(sourceProp) == IsMissingReference(prop);
+            }
 
             public void Add(string fieldName, string description, EValidationIssueType type, EValidationSeverity severity)
             {
