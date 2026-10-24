@@ -27,6 +27,12 @@ namespace HB.E2String.Editor
         public bool HasFlagsAttribute; // [Flags]가 [E2String]과 다른 대괄호에 있어도 인식하도록 따로 저장
         public List<string> Members = new List<string>();
 
+        // AttributeName(대괄호 전체)에서 E2String(...) 괄호 안 인자만 뽑은 것. 처음 쓸 때 계산한다 (예전에 저장된 목록도 그대로 쓰도록 직렬화하지 않음)
+        [NonSerialized] private string m_OptionsText;
+
+        private static readonly Regex s_E2StringCallRegex = new Regex(
+            @"(?<![\w.])(?:\w+\.)*E2String(?:Attribute)?(?![\w.])\s*\(", RegexOptions.Compiled);
+
         /// <summary>네임스페이스를 제외한 타입 이름 (예: Outer.MyEnum)</summary>
         public string TypeName => string.IsNullOrEmpty(ContainingTypes) ? EnumName : $"{ContainingTypes}.{EnumName}";
 
@@ -35,11 +41,32 @@ namespace HB.E2String.Editor
         /// <summary>Source Generator가 생성하는 확장 클래스 이름 (중첩 경로의 '.'을 '_'로 치환)</summary>
         public string ExtensionClassName => $"{TypeName.Replace('.', '_')}Extensions";
 
-        /// <summary>어트리뷰트 텍스트에 옵션 이름(또는 All)이 있는지 확인합니다. 숫자 캐스트로 지정한 옵션은 인식하지 않습니다.</summary>
+        /// <summary>
+        /// E2String(...) 인자에 옵션 이름(또는 All)이 있는지 확인합니다. 숫자 캐스트로 지정한 옵션은 인식하지 않습니다.
+        /// 같은 대괄호의 다른 어트리뷰트 인자([Foo(Mode.All), E2String])는 보지 않습니다.
+        /// </summary>
         public bool HasOption(string optionName)
         {
             if (string.IsNullOrEmpty(AttributeName)) return false;
-            return Regex.IsMatch(AttributeName, $@"\b(?:All|{optionName})\b");
+            m_OptionsText ??= ExtractE2StringArguments(AttributeName);
+            return m_OptionsText.Length > 0 && Regex.IsMatch(m_OptionsText, $@"\b(?:All|{optionName})\b");
+        }
+
+        /// <summary>대괄호 텍스트에서 E2String(...)의 괄호 안 인자만 꺼냅니다 (괄호 짝을 맞춤). 인자가 없으면 빈 문자열.</summary>
+        internal static string ExtractE2StringArguments(string attributeSection)
+        {
+            Match call = s_E2StringCallRegex.Match(attributeSection);
+            if (!call.Success) return string.Empty;
+
+            int start = call.Index + call.Length;
+            int depth = 1;
+            for (int i = start; i < attributeSection.Length; i++)
+            {
+                char c = attributeSection[i];
+                if (c == '(') depth++;
+                else if (c == ')' && --depth == 0) return attributeSection.Substring(start, i - start);
+            }
+            return string.Empty;
         }
 
         public bool IsFlags => HasFlagsAttribute;
@@ -69,8 +96,12 @@ namespace HB.E2String.Editor
         private const string ATTRIBUTE_ASMDEF_NAME = "HB.E2String.Attributes";
 
         // 스캔용 정규식 (주석·문자열·전처리 지시문이 제거된 코드에 적용)
+        // - 파일 범위 네임스페이스(namespace X;)는 fns로 따로 잡는다 (닫는 괄호가 없음)
+        // - 타입: class · struct · interface · record (record class/struct는 앞 대안이 통째로 잡음)
+        // - "where T : class where U : struct"의 class/struct 뒤 where는 타입 이름이 아니다
         private static readonly Regex s_ScopeTokenRegex = new Regex(
-            @"\{|\}|\bnamespace\s+(?<ns>[\w.]+)|\b(?:class|struct)\s+(?<type>\w+)|\benum\s+(?<enum>\w+)",
+            @"\{|\}|\bnamespace\s+(?<fns>[\w.]+)\s*;|\bnamespace\s+(?<ns>[\w.]+)" +
+            @"|\b(?:record\s+(?:class|struct)|record|class|struct|interface)\s+(?!where\b)(?<type>\w+)|\benum\s+(?<enum>\w+)",
             RegexOptions.Compiled);
         private static readonly Regex s_E2StringAttrRegex = new Regex(
             @"\[[^\]]*?(?<![\w.])(?:\w+\.)*E2String(?:Attribute)?(?![\w.])[^\]]*\]",
@@ -655,7 +686,10 @@ namespace HB.E2String.Editor
             return sb.ToString();
         }
 
-        /// <summary>생성기(EString.dll)가 읽는 옵션 비트. 값은 생성기 쪽 상수와 같아야 한다.</summary>
+        /// <summary>
+        /// 생성기(EString.dll)가 읽는 옵션 비트. 값은 생성기 쪽 상수(OptionIntConversion = 1 &lt;&lt; 1, OptionCollections = 1 &lt;&lt; 2)와 같아야 한다.
+        /// 1 &lt;&lt; 0은 비워 둔 자리다 — 다시 매기면 이미 만든 어트리뷰트 파일 · 생성기와 어긋난다.
+        /// </summary>
         private static void AppendOptionsEnum(StringBuilder sb, string indent)
         {
             sb.AppendLine($"{indent}[Flags]");
@@ -733,6 +767,13 @@ namespace HB.E2String.Editor
                 if (token == "}")
                 {
                     if (scopes.Count > 0) scopes.RemoveAt(scopes.Count - 1);
+                    continue;
+                }
+
+                if (m.Groups["fns"].Success)
+                {
+                    // 파일 범위 네임스페이스는 파일 끝까지 유지되는 맨 아래 범위로 둔다
+                    scopes.Insert(0, new Scope { Namespace = m.Groups["fns"].Value });
                     continue;
                 }
 
