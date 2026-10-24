@@ -10,6 +10,12 @@
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Cheat
 ```
 
+- 버전 고정: URL 끝에 `#<태그>` 또는 `#<전체 40자 커밋 해시>`를 붙입니다. 짧은 해시(예: `#869e2614`)는 UPM이 받지 않습니다.
+
+```text
+https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Cheat#<40자 커밋 해시>
+```
+
 UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생성 코드는 모두 프로젝트 `Assets` 아래**에 둡니다.
 
 ---
@@ -166,6 +172,7 @@ CheatSystem.ResumeServerQueue();
 
 - `com.hb.ingameconsole`이 설치돼 있으면 연동 어셈블리가 자동으로 컴파일됩니다 (`versionDefines`). 콘솔이 패키지가 아니라 Assets 폴더에 있다면, 치트 심볼을 켤 때 `HB_CHEAT_HAS_CONSOLE`도 함께 켜집니다.
 - `CheatSystem`이 초기화되는 시점에 콘솔이 있으면 콘솔의 `Cheat` 탭으로 들어갑니다. 콘솔이 자동 시작 설정이면 순서와 관계없이 콘솔을 먼저 초기화합니다. 콘솔이 없거나, 수동 초기화 설정인데 아직 초기화되지 않았다면 **독립 패널**로 뜹니다.
+- 콘솔 탭으로 들어가면 **독립 패널과 화면의 `CHEAT` 버튼은 만들지 않습니다.** 열 때는 콘솔을 열고 `Cheat` 탭을 고르거나 열기 키(`F8`)를 누릅니다(콘솔의 `Cheat` 탭이 열림). 콘솔이 있어도 독립 패널 · `CHEAT` 버튼을 쓰려면 `Tools > HB > Cheat` 설정의 **Prefer Console Tab**을 끕니다 (코드로는 `CheatSystem.Initialize` 전에 `CheatSystem.Options.PreferConsoleTab = false`).
 - 독립 패널에서 한글이 깨지면 `CheatSystem.Options.PanelSettings`에 프로젝트 UI의 PanelSettings(테마, 한글 폰트 포함)를 지정하세요. 기본은 내장 폰트와 OS 폴백입니다.
 
 ---
