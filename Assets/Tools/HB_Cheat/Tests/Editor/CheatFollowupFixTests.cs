@@ -40,6 +40,30 @@ namespace HB.Cheat.Tests
             Assert.AreEqual(expected, CheatCodeGenerator.Str(input));
         }
 
+        [TestCase("DEV_CHEAT", "DEV_CHEAT")]
+        [TestCase("  QA_CHEAT2  ", "QA_CHEAT2")]
+        [TestCase("_cheat", "_cheat")]
+        [TestCase("DEV CHEAT", "DEV_CHEAT")]
+        [TestCase("DEV-CHEAT", "DEV_CHEAT")]
+        [TestCase("1ST_CHEAT", "DEV_CHEAT")]
+        [TestCase("A;B", "DEV_CHEAT")]
+        [TestCase("", "DEV_CHEAT")]
+        public void UserDefine_InvalidNameFallsBackToDefault(string value, string expected)
+        {
+            var settings = UnityEngine.ScriptableObject.CreateInstance<CheatSettings>();
+            try
+            {
+                var so = new UnityEditor.SerializedObject(settings);
+                so.FindProperty("userDefine").stringValue = value;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                Assert.AreEqual(expected, settings.UserDefine);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(settings);
+            }
+        }
+
         [TestCase(float.NaN)]
         [TestCase(float.PositiveInfinity)]
         [TestCase(float.NegativeInfinity)]

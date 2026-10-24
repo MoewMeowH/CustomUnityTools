@@ -21,7 +21,7 @@ namespace HB.Cheat.Editor
         public const string DefaultUserDefine = "DEV_CHEAT";
 
         [Header("Define")]
-        [Tooltip("프로젝트 치트 코드용 심볼. 패키지는 HB_CHEAT를 쓰며 둘은 항상 함께 켜고 끈다.")]
+        [Tooltip("프로젝트 치트 코드용 심볼. 패키지는 HB_CHEAT를 쓰며 둘은 항상 함께 켜고 끈다. 영문자 · 숫자 · '_'만 (숫자로 시작 불가), 아니면 DEV_CHEAT를 쓴다.")]
         [Delayed] [SerializeField] private string userDefine = DefaultUserDefine;
 
         [Header("Code")]
@@ -60,7 +60,39 @@ namespace HB.Cheat.Editor
         [Tooltip("릴리즈 빌드에서 컴파일된 스크립트 어셈블리를 하나도 검사하지 못하면 빌드를 실패시킨다")]
         [SerializeField] private bool failWhenUnverifiable = true;
 
-        public string UserDefine => string.IsNullOrWhiteSpace(userDefine) ? DefaultUserDefine : userDefine.Trim();
+        public string UserDefine
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(userDefine)) return DefaultUserDefine;
+                string trimmed = userDefine.Trim();
+                if (IsValidDefine(trimmed)) return trimmed;
+
+                // 생성 코드 #if가 깨지거나(공백 · 하이픈) PlayerSettings에서 둘로 쪼개지는(;) 이름 → 기본값
+                if (s_WarnedInvalidDefine != trimmed)
+                {
+                    s_WarnedInvalidDefine = trimmed;
+                    Debug.LogWarning($"[HB_Cheat] Project define '{trimmed}' is not a valid symbol name (letters, digits, '_', not starting with a digit). Using '{DefaultUserDefine}'.");
+                }
+                return DefaultUserDefine;
+            }
+        }
+
+        private static string s_WarnedInvalidDefine;
+
+        /// <summary>전처리기 심볼로 쓸 수 있는 이름인지 (ASCII 영문자 · 숫자 · '_', 숫자로 시작하지 않음)</summary>
+        internal static bool IsValidDefine(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            for (int i = 0; i < name.Length; i++)
+            {
+                char c = name[i];
+                bool letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+                bool digit = c >= '0' && c <= '9';
+                if (!(letter || (digit && i > 0))) return false;
+            }
+            return true;
+        }
         public string CheatFolder => Normalize(cheatFolder, "Assets/Cheats");
         public string AssemblyCSharpOutputFolder => Normalize(assemblyCSharpOutputFolder, "Assets/Cheats/Generated");
         public string CheatAsmdefName => string.IsNullOrWhiteSpace(cheatAsmdefName) ? "Game.Cheats" : cheatAsmdefName.Trim();
