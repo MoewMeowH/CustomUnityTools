@@ -80,14 +80,11 @@ namespace HB.Cheat.Editor
                 string error = CheatProtocol.PlayModeRequestError(true, EditorApplication.isPlaying, IsPlayModeChanging());
                 if (error != null) return error;
 
-                var settings = CheatSettings.Load();
-                var decision = CliPlayRunInBackgroundHook.Begin(settings.RunInBackgroundDuringCliPlay);
-                var unfocused = CliPlayUnfocusedHook.Begin(settings.PlayUnfocusedDuringCliPlay);
+                var decision = CliPlayRunInBackgroundHook.Begin(CheatSettings.Load().RunInBackgroundDuringCliPlay);
                 EditorApplication.isPlaying = true;
                 var pipeline = decision.Pipeline;
                 return CheatProtocol.PlayEntering(decision.Active, decision.Original, decision.Reason,
-                    PipelineConfigName(pipeline.State), pipeline.EnableInBuilds, pipeline.AutoStart,
-                    unfocused.Active, unfocused.Original, unfocused.Reason);
+                    PipelineConfigName(pipeline.State), pipeline.EnableInBuilds, pipeline.AutoStart);
             });
         }
 

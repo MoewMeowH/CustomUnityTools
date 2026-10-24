@@ -51,8 +51,6 @@ namespace HB.Cheat.Editor
         [SerializeField] private bool allowRawFromAutomation;
         [Tooltip("Unity CLI cheat_play로 시작한 Play 동안만 Application.runInBackground를 켜고 끝나면 되돌린다 (창이 뒤에 있어도 프레임 진행). 디스크 설정은 쓰지 않고, 원래 true면 아무것도 하지 않는다. editor_play와 사람이 누른 Play에는 영향 없음.")]
         [SerializeField] private bool runInBackgroundDuringCliPlay = true;
-        [Tooltip("Unity CLI cheat_play로 시작한 Play 동안만 메인 Game 뷰를 Play Unfocused로 바꿔, Play에 들어갈 때 Unity가 맨 앞으로 나오지 않게 한다 (원래 Play Focused일 때만, 끝나면 되돌림). Unity 내부 API를 쓰므로 버전에 따라 동작하지 않을 수 있다 (그때는 아무것도 하지 않음).")]
-        [SerializeField] private bool playUnfocusedDuringCliPlay;
 
         [Header("Release Guard")]
         [Tooltip("Development Build가 아닌 빌드를 릴리즈로 본다 (치트 심볼이 켜져 있으면 빌드 실패)")]
@@ -111,7 +109,6 @@ namespace HB.Cheat.Editor
         public bool DontDestroyOnLoad => dontDestroyOnLoad;
         public bool AllowRawFromAutomation => allowRawFromAutomation;
         public bool RunInBackgroundDuringCliPlay => runInBackgroundDuringCliPlay;
-        public bool PlayUnfocusedDuringCliPlay => playUnfocusedDuringCliPlay;
 
         public bool TreatNonDevelopmentAsRelease => treatNonDevelopmentAsRelease;
         public IReadOnlyList<string> ReleaseDefines => releaseDefines;
