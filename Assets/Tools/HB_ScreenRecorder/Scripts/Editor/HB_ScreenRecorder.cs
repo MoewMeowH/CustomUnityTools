@@ -30,8 +30,15 @@ public static class HB_ScreenRecorder
         public List<string> rootGameObjectNames;
         public bool isPlayMode;
         public float timeSinceStartup;
-        public long allocatedMemoryBytes;
-        public string allocatedMemoryMB;
+        /// <summary> 녹화 길이(초). 스크린샷은 0 </summary>
+        public float recordingDurationSeconds;
+        /// <summary> 관리 힙 크기 (GC.GetTotalMemory, C# 객체만) </summary>
+        public long managedHeapBytes;
+        public string managedHeapMB;
+        /// <summary> Unity 네이티브 할당 (Profiler.GetTotalAllocatedMemoryLong — Unity 내부 할당자, 관리 힙은 들어가지 않음) </summary>
+        public long unityAllocatedBytes;
+        public string unityAllocatedMB;
+        /// <summary> Game 뷰 렌더 해상도 (에디터 창 크기가 아님) </summary>
         public string screenResolution;
         public string operatingSystem;
         public string graphicsDeviceName;
@@ -39,6 +46,10 @@ public static class HB_ScreenRecorder
         public string issueTag;
         public string qaNotes;
     }
+
+    // 영상 출력 해상도 (Game 뷰 크기와 무관하게 고정)
+    private const int VideoOutputWidth = 1920;
+    private const int VideoOutputHeight = 1080;
 
     private static RecorderController s_RecorderController;
     private static RecorderControllerSettings s_ControllerSettings;
@@ -65,6 +76,14 @@ public static class HB_ScreenRecorder
         // Recorder는 Play Mode에서만 녹화되므로, Play Mode를 나가면 자동으로 녹화를 마무리하고 진단 파일을 저장한다
         EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
         EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+
+        // Recorder가 스스로 멈추면 그때 바로 마무리한다 (다음 시작 · Play 종료까지 미루면 녹화 길이 · 상태가 늦은 시점 값이 된다)
+        EditorApplication.update -= FinalizeIfRecorderStopped;
+        EditorApplication.update += FinalizeIfRecorderStopped;
+
+        // 녹화 중 스크립트 재컴파일이면 정적 상태가 사라지기 전에 마무리한다 (MP4 마무리 · 진단 저장 · 설정 SO 파괴)
+        AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+        AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
     }
 
     private static void OnPlayModeStateChanged(PlayModeStateChange state)
@@ -75,28 +94,53 @@ public static class HB_ScreenRecorder
             StopRecording();
         }
     }
+
+    private static void FinalizeIfRecorderStopped()
+    {
+        if (s_IsRecording && !IsRecording)
+        {
+            Debug.LogWarning("[HB_ScreenRecorder] Recorder가 녹화를 멈춰 세션을 마무리합니다.");
+            StopRecording();
+        }
+    }
+
+    private static void OnBeforeAssemblyReload()
+    {
+        if (s_IsRecording)
+        {
+            Debug.Log("[HB_ScreenRecorder] 스크립트 재컴파일로 녹화를 자동 저장합니다.");
+            StopRecording();
+        }
+    }
 #endif
 
     public static bool IsRecording => s_IsRecording && s_RecorderController != null && s_RecorderController.IsRecording();
     public static float ElapsedTime => s_IsRecording ? (float)(EditorApplication.timeSinceStartup - s_StartTime) : 0f;
     public static string CurrentSessionFolder => s_CurrentSessionFolder;
 
-    public static bool IsRecorderAvailable()
-    {
-        return Type.GetType("UnityEditor.Recorder.RecorderController, Unity.Recorder.Editor") != null;
-    }
-
-    public static string GetRecordingRootDirectory()
+    /// <summary> 저장 루트 경로 (프로젝트 루트/Recording). 폴더를 만들지 않는다 — 창 표시처럼 자주 부르는 곳용 </summary>
+    public static string GetRecordingRootPath()
     {
         string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-        string recordingDir = Path.Combine(projectRoot, "Recording");
+        return Path.Combine(projectRoot, "Recording");
+    }
 
+    /// <summary> 저장 루트 경로. 없으면 만든다 (저장할 때용) </summary>
+    public static string GetRecordingRootDirectory()
+    {
+        string recordingDir = GetRecordingRootPath();
         if (!Directory.Exists(recordingDir))
         {
             Directory.CreateDirectory(recordingDir);
         }
-
         return recordingDir;
+    }
+
+    /// <summary> Game 뷰 렌더 해상도. 에디터 창 버튼(OnGUI)에서 Screen.width/height는 그 창 크기라 쓰지 않는다 </summary>
+    public static string GetGameViewResolution()
+    {
+        Vector2 size = Handles.GetMainGameViewSize();
+        return $"{(int)size.x}x{(int)size.y}";
     }
 
     public static bool StartRecording(int targetFps = 30, string issueTag = "", string notes = "")
@@ -105,6 +149,14 @@ public static class HB_ScreenRecorder
         {
             Debug.LogWarning("[HB_ScreenRecorder] 이미 녹화가 진행 중입니다.");
             return false;
+        }
+
+        // Recorder가 스스로 멈췄는데(IsRecording false) 이쪽 상태가 남아 있으면, 이전 세션을 마무리하고 설정 SO를 정리한 뒤 새로 시작한다
+        // (보통은 FinalizeIfRecorderStopped가 먼저 마무리한다 — 같은 프레임에 다시 시작하는 경우의 안전망)
+        if (s_IsRecording)
+        {
+            Debug.LogWarning("[HB_ScreenRecorder] 이전 녹화가 Recorder에서 이미 멈춰 있어 먼저 마무리합니다.");
+            StopRecording();
         }
 
         if (!EditorApplication.isPlaying)
@@ -146,18 +198,29 @@ public static class HB_ScreenRecorder
 
         movieSettings.ImageInputSettings = new GameViewInputSettings
         {
-            OutputWidth = 1920,
-            OutputHeight = 1080
+            OutputWidth = VideoOutputWidth,
+            OutputHeight = VideoOutputHeight
         };
 
         controllerSettings.AddRecorderSettings(movieSettings);
 
         s_ControllerSettings = controllerSettings;
-        s_RecorderController = new RecorderController(controllerSettings);
-        s_StartTime = EditorApplication.timeSinceStartup;
+        try
+        {
+            s_RecorderController = new RecorderController(controllerSettings);
+            s_StartTime = EditorApplication.timeSinceStartup;
 
-        s_RecorderController.PrepareRecording();
-        s_RecorderController.StartRecording();
+            s_RecorderController.PrepareRecording();
+            s_RecorderController.StartRecording();
+        }
+        catch (Exception ex)
+        {
+            // 시작에 실패하면 이번에 만든 설정 SO가 남지 않게 정리한다
+            Debug.LogError($"[HB_ScreenRecorder] 녹화 시작 실패: {ex.Message}");
+            s_RecorderController = null;
+            DestroyControllerSettings();
+            return false;
+        }
         s_IsRecording = true;
 
         Debug.Log($"[HB_ScreenRecorder] 녹화 시작: {s_CurrentSessionFolder} (Target FPS: {s_TargetFps})");
@@ -198,28 +261,60 @@ public static class HB_ScreenRecorder
         s_ControllerSettings = null;
     }
 
+    /// <summary> 스크린샷을 요청하고 상태 · 로그 파일을 저장합니다. PNG 경로를 반환하고, 폴더를 만들지 못하면 null </summary>
     public static string TakeScreenshot(string issueTag = "", string notes = "")
     {
-        string rootDir = GetRecordingRootDirectory();
-        string screenshotsDir = Path.Combine(rootDir, "Screenshots");
-        if (!Directory.Exists(screenshotsDir))
+        string screenshotsDir;
+        try
         {
-            Directory.CreateDirectory(screenshotsDir);
+            screenshotsDir = Path.Combine(GetRecordingRootDirectory(), "Screenshots");
+            if (!Directory.Exists(screenshotsDir))
+            {
+                Directory.CreateDirectory(screenshotsDir);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[HB_ScreenRecorder] 스크린샷 폴더를 만들지 못했습니다: {ex.Message}");
+            return null;
         }
 
         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         string tagPart = string.IsNullOrEmpty(issueTag) ? "" : $"_{SanitizeFileName(issueTag)}";
         string baseFileName = $"Screenshot_{timestamp}{tagPart}";
 
+        // 같은 초에 다시 찍으면 이름이 겹친다 → 이전 파일을 덮어쓰지 않고, 창이 이전 PNG를 보고 "저장됨"으로 오판하지 않게 번호를 붙인다
+        // (상태 JSON은 바로 쓰므로, PNG가 아직 안 생긴 직전 요청도 이것으로 걸러진다)
+        for (int n = 1; File.Exists(Path.Combine(screenshotsDir, $"{baseFileName}.png")) || File.Exists(Path.Combine(screenshotsDir, $"{baseFileName}_State.json")); n++)
+        {
+            baseFileName = $"Screenshot_{timestamp}{tagPart}_{n}";
+        }
+
         string imagePath = Path.Combine(screenshotsDir, $"{baseFileName}.png");
 
         ScreenCapture.CaptureScreenshot(imagePath);
 
-        string infoPrefix = Path.Combine(screenshotsDir, baseFileName);
-        SaveStateFile($"{infoPrefix}_State.json", issueTag, notes, 0f);
-        SaveLogDumpFile($"{infoPrefix}_Logs.txt");
+        // 캡처는 Game 뷰가 다음에 그릴 때 실행된다. 창 버튼만 누른 Edit Mode에서는 다시 그릴 계기가 없으므로 직접 요청한다
+        if (!EditorApplication.isPlaying)
+        {
+            EditorApplication.QueuePlayerLoopUpdate();
+        }
+        UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
 
-        Debug.Log($"[HB_ScreenRecorder] 스크린샷 저장 완료: {imagePath}");
+        // 상태 · 로그 저장 실패(IO)가 창 버튼까지 올라가지 않게 한다 (이미지는 이미 요청됨)
+        string infoPrefix = Path.Combine(screenshotsDir, baseFileName);
+        try
+        {
+            SaveStateFile($"{infoPrefix}_State.json", issueTag, notes, 0f);
+            SaveLogDumpFile($"{infoPrefix}_Logs.txt");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[HB_ScreenRecorder] 스크린샷 진단 데이터 저장 실패: {ex.Message}");
+        }
+
+        // CaptureScreenshot은 Game 뷰가 다음에 그릴 때 파일을 쓴다 → 여기서는 요청만 (창이 파일이 생기는지 확인해 알림)
+        Debug.Log($"[HB_ScreenRecorder] 스크린샷 요청: {imagePath}");
         return imagePath;
     }
 
@@ -247,7 +342,8 @@ public static class HB_ScreenRecorder
             sb.AppendLine($"Play Mode       : {(Application.isPlaying ? "Active (Playing)" : "Edit Mode")}");
             sb.AppendLine($"Unity Version   : {Application.unityVersion}");
             sb.AppendLine($"OS Platform     : {SystemInfo.operatingSystem}");
-            sb.AppendLine($"Resolution      : {Screen.width}x{Screen.height}");
+            sb.AppendLine($"Video Output    : {VideoOutputWidth}x{VideoOutputHeight} (MP4)");
+            sb.AppendLine($"Resolution      : {GetGameViewResolution()} (Game view)");
             sb.AppendLine($"QA Notes        : {s_CurrentNotes}");
             sb.AppendLine("--------------------------------------------------");
             sb.AppendLine("Saved Files:");
@@ -274,7 +370,8 @@ public static class HB_ScreenRecorder
             rootNames.Add(r.name);
         }
 
-        long memBytes = GC.GetTotalMemory(false);
+        long managedBytes = GC.GetTotalMemory(false);
+        long unityBytes = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
         var state = new HB_DiagnosticState
         {
             timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -283,9 +380,12 @@ public static class HB_ScreenRecorder
             rootGameObjectNames = rootNames,
             isPlayMode = Application.isPlaying,
             timeSinceStartup = (float)Math.Round(EditorApplication.timeSinceStartup, 2),
-            allocatedMemoryBytes = memBytes,
-            allocatedMemoryMB = $"{memBytes / (1024f * 1024f):F2} MB",
-            screenResolution = $"{Screen.width}x{Screen.height}",
+            recordingDurationSeconds = (float)Math.Round(duration, 2),
+            managedHeapBytes = managedBytes,
+            managedHeapMB = $"{managedBytes / (1024f * 1024f):F2} MB",
+            unityAllocatedBytes = unityBytes,
+            unityAllocatedMB = $"{unityBytes / (1024f * 1024f):F2} MB",
+            screenResolution = GetGameViewResolution(),
             operatingSystem = SystemInfo.operatingSystem,
             graphicsDeviceName = SystemInfo.graphicsDeviceName,
             unityVersion = Application.unityVersion,

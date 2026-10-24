@@ -1,8 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
-using UnityEditor.PackageManager;
-using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 
 #if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
@@ -14,32 +13,36 @@ using Unity.Scripting.LifecycleManagement;
 #endif
 public class HB_ScreenRecorderWindow : EditorWindow
 {
-    private int targetFps = 30;
-    private string issueTag = "BUG_101";
-    private string qaNotes = "인게임 플레이 테스트 중 재현 현상 기록";
+    // 도메인 리로드 · 창 레이아웃 저장 후에도 입력값이 남도록 직렬화한다
+    [SerializeField] private int targetFps = 30;
+    [SerializeField] private string issueTag = "BUG_101";
+    [SerializeField] private string qaNotes = "인게임 플레이 테스트 중 재현 현상 기록";
     private Vector2 scrollPosition;
 
-    private static AddRequest s_InstallRequest;
+    // 스크린샷은 Game 뷰가 다음에 그릴 때 저장된다 → 파일이 생길 때까지 확인한 뒤 알린다.
+    // 도메인 리로드는 창의 private 필드도 되살리며 null 문자열을 ""로 돌려주므로 리로드 대상에서 뺀다 (빈 경로로 "저장 안 됨" 경고가 나지 않게)
+    private const double ScreenshotWaitSeconds = 5.0;
+    [NonSerialized] private string pendingScreenshotPath;
+    [NonSerialized] private double pendingScreenshotDeadline;
 
-#if UNITY_EDITOR
-    [InitializeOnLoadMethod]
-    private static void ResetStaticsOnDomainReload()
-    {
-        s_InstallRequest = null;
-    }
-#endif
+    // 최근 세션 목록은 디스크를 읽으므로 그릴 때마다가 아니라 바뀔 만한 때만 다시 읽는다
+    private const int RecentSessionCount = 5;
+    private readonly List<string> recentSessions = new List<string>();
+    private bool isRecentSessionsDirty = true;
+    private bool wasRecording;
 
     [MenuItem("Tools/HB/Screen Recorder")]
     public static void ShowWindow()
     {
         var window = GetWindow<HB_ScreenRecorderWindow>("HB Recorder");
-        window.minSize = new Vector2(380, 560);
+        window.minSize = new Vector2(380, 520);
         window.Show();
     }
 
     private void OnEnable()
     {
         EditorApplication.update += OnEditorUpdate;
+        isRecentSessionsDirty = true;
     }
 
     private void OnDisable()
@@ -47,27 +50,42 @@ public class HB_ScreenRecorderWindow : EditorWindow
         EditorApplication.update -= OnEditorUpdate;
     }
 
+    private void OnFocus()
+    {
+        // 다른 곳(탐색기 등)에서 폴더를 지웠을 수 있다
+        isRecentSessionsDirty = true;
+    }
+
     private void OnEditorUpdate()
     {
-        if (HB_ScreenRecorder.IsRecording)
+        bool isRecording = HB_ScreenRecorder.IsRecording;
+        if (isRecording)
         {
             Repaint();
         }
 
-        if (s_InstallRequest != null && s_InstallRequest.IsCompleted)
+        // 녹화가 끝나면(정지 버튼 · Play Mode 종료 · Recorder가 스스로 멈춤) 새 세션 폴더가 생겼으므로 목록을 다시 읽는다
+        if (wasRecording != isRecording)
         {
-            if (s_InstallRequest.Status == StatusCode.Success)
-            {
-                Debug.Log("[HB_ScreenRecorder] Unity Recorder 패키지 설치 완료");
-                EditorUtility.DisplayDialog("설치 완료", "Unity Recorder 패키지가 설치되었습니다.", "확인");
-            }
-            else
-            {
-                Debug.LogError($"[HB_ScreenRecorder] 패키지 설치 실패: {s_InstallRequest.Error?.message}");
-                EditorUtility.DisplayDialog("설치 실패", $"패키지 설치 중 오류가 발생했습니다:\n{s_InstallRequest.Error?.message}", "확인");
-            }
-            s_InstallRequest = null;
+            wasRecording = isRecording;
+            isRecentSessionsDirty = true;
             Repaint();
+        }
+
+        if (!string.IsNullOrEmpty(pendingScreenshotPath))
+        {
+            if (File.Exists(pendingScreenshotPath))
+            {
+                ShowNotification(new GUIContent($"Screenshot Saved: {Path.GetFileName(pendingScreenshotPath)}"));
+                pendingScreenshotPath = null;
+            }
+            else if (EditorApplication.timeSinceStartup > pendingScreenshotDeadline)
+            {
+                // 캡처 요청은 취소되지 않는다 → Game 뷰가 나중에 그려지면 그 시점 화면이 이 이름으로 저장된다
+                ShowNotification(new GUIContent("Screenshot not saved yet (waiting for Game view)"));
+                Debug.LogWarning($"[HB_ScreenRecorder] 스크린샷이 {ScreenshotWaitSeconds:F0}초 안에 저장되지 않았습니다. 요청은 남아 있어 Game 뷰가 그려질 때 그 시점 화면으로 저장됩니다(상태 · 로그 파일은 요청 시점). Game 뷰 탭이 보이는지 확인하세요: {pendingScreenshotPath}");
+                pendingScreenshotPath = null;
+            }
         }
     }
 
@@ -76,9 +94,6 @@ public class HB_ScreenRecorderWindow : EditorWindow
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
         DrawHeader();
-        EditorGUILayout.Space(8);
-
-        DrawPackageStatusBanner();
         EditorGUILayout.Space(10);
 
         DrawRecordingSection();
@@ -104,59 +119,6 @@ public class HB_ScreenRecorderWindow : EditorWindow
         GUILayout.Label("HB Screen Recorder (Unity Recorder & QA Tool)", EditorStyles.boldLabel);
         GUILayout.Label("MP4 녹화, 스크린샷 및 런타임 상태/로그 덤프 도구", EditorStyles.miniLabel);
         EditorGUILayout.EndVertical();
-    }
-
-    private void DrawPackageStatusBanner()
-    {
-        bool hasRecorder = HB_ScreenRecorder.IsRecorderAvailable();
-
-        if (hasRecorder)
-        {
-            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-            GUI.color = new Color(0.4f, 0.9f, 0.4f);
-            GUILayout.Label("[Active] Unity Recorder Engine (MP4 녹화 지원)", EditorStyles.miniBoldLabel);
-            GUI.color = Color.white;
-            EditorGUILayout.EndHorizontal();
-        }
-        else
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUI.color = new Color(1f, 0.4f, 0.4f);
-            GUILayout.Label("Unity Recorder (com.unity.recorder) 미설치", EditorStyles.boldLabel);
-            GUI.color = Color.white;
-            EditorGUILayout.LabelField("MP4 녹화 기능을 사용하려면 Unity Recorder 패키지가 필요합니다.", EditorStyles.wordWrappedMiniLabel);
-
-            if (s_InstallRequest != null)
-            {
-                EditorGUILayout.HelpBox("Unity Recorder 패키지 설치 진행 중...", MessageType.Info);
-            }
-            else
-            {
-                GUI.backgroundColor = new Color(0.3f, 0.7f, 1f);
-                if (GUILayout.Button("Unity Recorder 패키지 설치", GUILayout.Height(30)))
-                {
-                    PromptInstallRecorderPackage();
-                }
-                GUI.backgroundColor = Color.white;
-            }
-
-            EditorGUILayout.EndVertical();
-        }
-    }
-
-    private void PromptInstallRecorderPackage()
-    {
-        bool confirm = EditorUtility.DisplayDialog(
-            "Unity Recorder 패키지 설치",
-            "com.unity.recorder 패키지를 설치하시겠습니까?",
-            "설치",
-            "취소"
-        );
-
-        if (confirm)
-        {
-            s_InstallRequest = Client.Add("com.unity.recorder");
-        }
     }
 
     private void DrawRecordingSection()
@@ -194,14 +156,7 @@ public class HB_ScreenRecorderWindow : EditorWindow
             using (new EditorGUI.DisabledScope(!canRecord))
             if (GUILayout.Button("Start MP4 Recording", GUILayout.Height(38)))
             {
-                if (!HB_ScreenRecorder.IsRecorderAvailable())
-                {
-                    PromptInstallRecorderPackage();
-                }
-                else
-                {
-                    HB_ScreenRecorder.StartRecording(targetFps, issueTag, qaNotes);
-                }
+                HB_ScreenRecorder.StartRecording(targetFps, issueTag, qaNotes);
             }
             GUI.backgroundColor = Color.white;
         }
@@ -211,6 +166,7 @@ public class HB_ScreenRecorderWindow : EditorWindow
             if (GUILayout.Button("Stop Recording & Save Diagnostics", GUILayout.Height(38)))
             {
                 HB_ScreenRecorder.StopRecording();
+                isRecentSessionsDirty = true;
             }
             GUI.backgroundColor = Color.white;
         }
@@ -227,12 +183,13 @@ public class HB_ScreenRecorderWindow : EditorWindow
         GUI.backgroundColor = new Color(0.35f, 0.7f, 1f);
         if (GUILayout.Button("Take Screenshot & Capture Diagnostics", GUILayout.Height(32)))
         {
-            string savedPath = HB_ScreenRecorder.TakeScreenshot(issueTag, qaNotes);
-            ShowNotification(new GUIContent($"Screenshot Saved: {Path.GetFileName(savedPath)}"));
+            pendingScreenshotPath = HB_ScreenRecorder.TakeScreenshot(issueTag, qaNotes);
+            pendingScreenshotDeadline = EditorApplication.timeSinceStartup + ScreenshotWaitSeconds;
+            ShowNotification(new GUIContent(pendingScreenshotPath != null ? "Screenshot requested..." : "Screenshot failed (see Console)"));
         }
         GUI.backgroundColor = Color.white;
 
-        EditorGUILayout.HelpBox("스크린샷 캡처 시 화면 이미지와 당시의 상태/로그 파일이 함께 저장됩니다.", MessageType.None);
+        EditorGUILayout.HelpBox("스크린샷 캡처 시 화면 이미지와 당시의 상태/로그 파일이 함께 저장됩니다. 이미지는 Game 뷰가 다음에 그릴 때 저장됩니다.", MessageType.None);
         EditorGUILayout.EndVertical();
     }
 
@@ -258,7 +215,8 @@ public class HB_ScreenRecorderWindow : EditorWindow
         EditorGUILayout.BeginVertical("box");
         GUILayout.Label("저장 경로 (Project Root / Recording)", EditorStyles.boldLabel);
 
-        string rootDir = HB_ScreenRecorder.GetRecordingRootDirectory();
+        // 그릴 때마다 폴더를 만들지 않는다 (경로만 계산, 여는 버튼에서 만든다)
+        string rootDir = HB_ScreenRecorder.GetRecordingRootPath();
         EditorGUILayout.SelectableLabel(rootDir, EditorStyles.textField, GUILayout.Height(20));
 
         EditorGUILayout.BeginHorizontal();
@@ -277,41 +235,61 @@ public class HB_ScreenRecorderWindow : EditorWindow
         EditorGUILayout.EndVertical();
     }
 
-    private void DrawRecentSessions()
+    private void RefreshRecentSessions()
     {
-        EditorGUILayout.BeginVertical("box");
-        GUILayout.Label("최근 녹화 세션 히스토리", EditorStyles.boldLabel);
+        isRecentSessionsDirty = false;
+        recentSessions.Clear();
 
-        string rootDir = HB_ScreenRecorder.GetRecordingRootDirectory();
-        if (Directory.Exists(rootDir))
+        string rootDir = HB_ScreenRecorder.GetRecordingRootPath();
+        if (!Directory.Exists(rootDir)) return;
+
+        try
         {
             var directories = Directory.GetDirectories(rootDir);
             Array.Sort(directories, (a, b) => Directory.GetCreationTime(b).CompareTo(Directory.GetCreationTime(a)));
-
-            int shown = 0;
-            for (int i = 0; i < directories.Length; i++)
+            foreach (string dir in directories)
             {
-                string dir = directories[i];
-                string dirName = Path.GetFileName(dir);
-                if (dirName.Equals("Screenshots", StringComparison.OrdinalIgnoreCase)) continue;
-
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(dirName, EditorStyles.miniLabel);
-
-                if (GUILayout.Button("폴더 열기", GUILayout.Width(70)))
-                {
-                    HB_ScreenRecorder.OpenFolder(dir);
-                }
-                EditorGUILayout.EndHorizontal();
-
-                shown++;
-                if (shown >= 5) break;
+                if (Path.GetFileName(dir).Equals("Screenshots", StringComparison.OrdinalIgnoreCase)) continue;
+                recentSessions.Add(dir);
+                if (recentSessions.Count >= RecentSessionCount) break;
             }
+        }
+        catch (Exception ex) // IOException · UnauthorizedAccessException · 정렬 비교자 예외(InvalidOperationException으로 감싸짐)
+        {
+            Debug.LogWarning($"[HB_ScreenRecorder] 최근 세션 목록을 읽지 못했습니다: {ex.Message}");
+        }
+    }
 
-            if (shown == 0)
+    private void DrawRecentSessions()
+    {
+        // 목록 개수가 바뀌면 컨트롤 수가 달라지므로, 버튼 이벤트 중이 아니라 다음 Layout 패스에서만 다시 읽는다
+        if (isRecentSessionsDirty && Event.current.type == EventType.Layout) RefreshRecentSessions();
+
+        EditorGUILayout.BeginVertical("box");
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label("최근 녹화 세션 히스토리", EditorStyles.boldLabel);
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("새로고침", GUILayout.Width(70)))
+        {
+            isRecentSessionsDirty = true;
+        }
+        EditorGUILayout.EndHorizontal();
+
+        foreach (string dir in recentSessions)
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(Path.GetFileName(dir), EditorStyles.miniLabel);
+
+            if (GUILayout.Button("폴더 열기", GUILayout.Width(70)))
             {
-                EditorGUILayout.LabelField("녹화된 세션이 없습니다.", EditorStyles.miniLabel);
+                HB_ScreenRecorder.OpenFolder(dir);
             }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        if (recentSessions.Count == 0)
+        {
+            EditorGUILayout.LabelField("녹화된 세션이 없습니다.", EditorStyles.miniLabel);
         }
 
         EditorGUILayout.EndVertical();
