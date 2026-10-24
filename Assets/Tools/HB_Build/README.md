@@ -29,7 +29,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
   | `DevBuild` · `DeepProfile` · `CleanBuild` | Development Build · Deep Profiling Support · Clean Build Cache |
   | `IsAab` | Android 전용. 켜면 `.aab`, 끄면 `.apk` |
   | `ZipPackage` | PC 전용. 빌드 폴더를 ZIP으로 압축 |
-  | `ProvisionUUID` | iOS 전용. 값이 있으면 수동 Provisioning Profile(Distribution)로 설정 |
+  | `ProvisionUUID` | iOS 전용. 값이 있으면 자동 서명을 끄고 이 Provisioning Profile로 수동 서명 (종류는 `CustomEntries`의 `ProvisionType`, 기본 Distribution. 아래 "iOS 서명") |
   | `OutputPath` | 비우면 `BuildOutput/<Target>`. 프로젝트 기준 상대 경로 권장 |
   | `Scenes` | 비우면(공백 항목만 있어도) Build Settings의 활성 씬 |
   | `SceneDefineAsset` · `ProjectDefineAsset` | 선택 설정 에셋. 비우면 기본 위치 → 프로젝트 검색 순으로 찾습니다 |
@@ -62,14 +62,14 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
   | 스텝 | Order | 실행 조건 | 하는 일 |
   |---|---|---|---|
   | `PreBuildStep_FilterScenes` | 5 | 항상 (SceneDefine 없으면 건너뜀) | 빌드 타입의 `IgnoreSceneList` 씬을 목록에서 뺍니다 |
-  | `PreBuildStep_PlayerSettings` | 10 | 항상 | `stripEngineCode` 끔, `QualitySettings.skinWeights` = FourBones, Player Log = Development Build 여부. 스택트레이스: Error · Exception은 ScriptOnly, Log · Warning · Assert는 Development 또는 DEV면 ScriptOnly, 아니면 None |
+  | `PreBuildStep_PlayerSettings` | 10 | 항상 | `stripEngineCode` 끔, Player Log = Development Build 여부. 스택트레이스: Error · Exception은 ScriptOnly, Log · Warning · Assert는 Development 또는 DEV면 ScriptOnly, 아니면 None |
   | `PreBuildStep_ConfigDefines` | 20 | 항상 (LIVE는 끌 수 없음) | DefineContainer의 심볼을 적용합니다 (아래 "전처리기 심볼") |
   | `PreBuildStep_AndroidSettings` | 30 | Android | 버전 · versionCode, Development · Deep Profiling · Autoconnect Profiler, AAB 여부, Android Build Type(Development면 Debug, 아니면 Release), IL2CPP, ARM64 |
   | `PreBuildStep_WindowsSettings` | 30 | Windows | 버전, Development · Deep Profiling · Autoconnect Profiler |
-  | `PreBuildStep_IOSSettings` | 30 | iOS | 버전 · buildNumber, `ProvisionUUID`가 있으면 Distribution 프로필 + UUID, Development · Deep Profiling · Autoconnect Profiler |
-  | `PostBuildStep_ZipArchive` | 100 | Windows + `ZipPackage` | 빌드 폴더를 `<출력경로>/<이름>.zip`으로 압축합니다 |
+  | `PreBuildStep_IOSSettings` | 30 | iOS | 버전 · buildNumber, 서명(아래 "iOS 서명"), Development · Deep Profiling · Autoconnect Profiler |
+  | `PostBuildStep_ZipArchive` | 100 | Windows + `ZipPackage` | 빌드 폴더를 `<출력경로>/<이름>.zip`으로 압축합니다 (이미 있으면 지우지 않고 `<이름> (2).zip` …) |
 
-  - HB_TestFrameworkHelper를 함께 설치하면 `HB.TestFrameworkHelper.Editor.PreBuildStep_ValidateInspectorSlots`(Order 1)가 더해집니다.
+  - HB_TestFrameworkHelper를 함께 설치하면 `HB.TestFrameworkHelper.Editor.PreBuildStep_ValidateInspectorSlots`(Order 1)가 더해집니다. HB_Build가 UPM 패키지로 설치됐을 때만 켜집니다 (`versionDefines`가 패키지를 보고 정하므로, 이 저장소처럼 `Assets`에 직접 둔 배치에서는 꺼짐).
 - **확장 (커스텀 스텝)**: `IPreBuildStep`(`OnPreBuild`) · `IPostBuildStep`(`OnPostBuild`)을 구현한 클래스를 Editor 어셈블리에 두면 자동 등록됩니다. 따로 등록할 필요가 없습니다.
 
   | 멤버 | 설명 |
@@ -81,17 +81,19 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
 
   - `BuildContext`로 빌드 값(`Target` · `BuildType` · `Version` · `VersionCode` · `Scenes` · `OutputPath` 등), `PlayerOptions`, 빌드 뒤 `Report`, `Warnings`를 읽고 씁니다. 컨텍스트 값을 바꾼 뒤에는 `RebuildPlayerOptions()`를 불러야 실제 빌드 옵션에 반영됩니다.
   - `AddWarning(message)`: 빌드를 막지 않는 경고를 로그와 경고 파일에 남깁니다. 빌드를 멈추려면 예외를 던지세요 (`BuildHelper.ThrowError(msg)`가 예외 객체를 돌려줌 → `throw`).
-  - 스텝 사이 데이터는 `SetCustomData` · `GetCustomData<T>`로 주고받습니다. HB_Build는 `SceneDefine` · `ProjectDefine` · `ProvisionUUID` 키를 쓰고, 프로필의 `CustomEntries`가 같은 키면 덮어쓰므로 피하세요.
+  - 스텝 사이 데이터는 `SetCustomData` · `GetCustomData<T>`로 주고받습니다. HB_Build는 `SceneDefine` · `ProjectDefine` · `ProvisionUUID` · `ProvisionType` 키를 쓰고, 프로필의 `CustomEntries`가 같은 키면 덮어쓰므로 피하세요.
   - 프로필 빌드(창 · `-buildProfile`)에만 `CustomEntries`가 들어갑니다. 프로필 없는 창 빌드와 전체 풀기 CLI 빌드에는 없습니다.
 - **Jenkinsfile (Groovy) 생성 및 CLI 연동**:
   - 에디터 설정값을 바탕으로 Jenkins Declarative Pipeline 스크립트를 생성합니다.
   - CLI 환경에서 `-executeMethod HB.CustomBuild.Editor.ProjectBuild.JenkinsBuild` 호출을 통한 배치를 지원합니다.
-  - 창의 CLI 명령어 생성기는 같은 명령을 복사하거나 `.bat` · `.ps1`로 저장합니다. `.ps1`은 Unity 종료를 기다린 뒤 종료 코드를 그대로 돌려줍니다.
+  - 창의 CLI 명령어 생성기는 같은 명령을 복사하거나 `.bat` · `.ps1`로 저장합니다. `.ps1`은 Unity 종료를 기다린 뒤 종료 코드를 그대로 돌려줍니다. `.bat`은 UTF-8(BOM 없음)로 쓰고 첫머리에서 `chcp 65001`로 코드 페이지를 맞춰 한글 경로가 깨지지 않게 합니다 (끝나면 원래 코드 페이지로 되돌림).
+  - 생성한 Jenkinsfile은 `skipDefaultCheckout()`로 기본 checkout을 끄고 `Checkout SCM` 단계에서 한 번만 받습니다. 명령줄은 인자 하나마다 줄을 바꿉니다 (값 안의 ` -`는 그대로).
 - **빌드 전 검증**: 아래 조건이면 빌드하지 않고 실패합니다.
-  - Product Name · 버전에 파일 이름에 못 쓰는 문자, `/` · `\`, `..`가 있음 (출력 경로 밖으로 벗어나는 것 방지)
-  - 인스턴스를 만들지 못한 스텝이 있음
+  - Product Name · 버전에 파일 이름에 못 쓰는 문자, `/` · `\`, `..`가 있음 (출력 경로 밖으로 벗어나는 것 방지, 사전 스텝이 바꾼 값까지 보도록 스텝 뒤에 확인)
+  - 지원하지 않는 빌드 대상 (Windows · Android · iOS 밖, 예: `StandaloneOSX`) — 창 · 프로필 · CLI 모두, 플랫폼 전환 전에
+  - 인스턴스를 만들지 못한 스텝이 있음, 같은 `StepId`로 둘 이상 등록된 스텝이 있음 (예: 같은 기본 스텝을 덮어쓴 형제 클래스 둘 — 한쪽이 다른 쪽을 상속하거나 각자 `StepId`를 정의)
   - 비활성 목록에 등록되지 않은 스텝 ID가 있음 (LIVE · 배치 모드만, 로컬 DEV · QA는 경고)
-  - LIVE인데 심볼 설정 스텝을 껐거나 DefineContainer · 해당 항목이 없음
+  - LIVE인데 심볼 설정 스텝을 껐거나 DefineContainer · 해당 항목이 없음, 기본 경로에 없는 DefineContainer · SceneDefine이 여러 개 (아래 "전처리기 심볼")
   - 모바일 버전 코드가 비었거나 형식이 틀림, 빌드할 씬이 없음, 배치 모드의 활성 플랫폼이 빌드 대상과 다름
 - **네임스페이스**: 모든 타입은 `HB.CustomBuild.Editor`에 있습니다. 커스텀 스텝(`IPreBuildStep` · `IPostBuildStep`)을 만들 때 `using HB.CustomBuild.Editor;`를 추가하세요.
   - 스텝 ID(`StepId`)는 기본적으로 타입의 전체 이름입니다. 기본 스텝은 ID가 고정되어 있어 클래스 이름이 바뀌어도 그대로입니다 (예: `HB.CustomBuild.Editor.PreBuildStep_PlayerSettings`). 커스텀 스텝은 `StepId`를 직접 정의하면 이름을 바꿔도 프로필이 깨지지 않습니다. 기본 스텝을 상속해 오버라이드한 스텝은 부모의 고정 ID를 그대로 이어받습니다 (부모 대신 등록되므로 같은 ID로 끄고 켭니다).
@@ -136,8 +138,9 @@ Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
 | `-outputPath` | 경로 | 없으면 `BuildOutput/<Target>`. 상대 경로는 프로젝트 루트 기준 |
 | `-sceneList` | `"씬1;씬2"` (`;` · `,` · `$` 구분) | 프로필 없는 빌드만. 없거나 `NONE`이면 Build Settings의 활성 씬 |
 | `-disabledSteps` | `"ID1;ID2"` | 이번 빌드에서 끌 스텝 ID. `NONE` 또는 빈 값이면 비활성 목록을 비웁니다 |
-| `-autoProfile` | `true` · `false` | 플랫폼 설정 스텝이 Autoconnect Profiler(`EditorUserBuildSettings.connectProfiler`)를 켭니다 |
+| `-autoProfile` | `true` · `false` | Development Build면 플레이어가 에디터 Profiler에 자동 연결합니다 (`BuildOptions.ConnectWithProfiler` + `EditorUserBuildSettings.connectProfiler`) |
 
+- 인자 이름은 `-`로 시작하는 토큰만 봅니다 (다른 인자의 값이 우연히 이름과 같아도 이름으로 보지 않음).
 - `-buildType`, `-devBuild` 등에 잘못된 값을 주면 기본값으로 대체하지 않고 빌드를 실패시킵니다. `true` · `false` 인자를 값 없이 쓰거나 다른 값을 줘도 실패합니다.
 - `-disabledSteps "StepFullName1;StepFullName2"`: 이번 빌드에서 제외할 스텝 ID. 프로필 빌드는 프로필의 `DisabledStepIds`를 쓰고, `-disabledSteps`를 넘기면 그 목록으로 바꿉니다 (합치지 않음).
 - 프로필 빌드에서 덮어쓸 수 있는 인자: `-buildType` · `-buildVersion` · `-versionCode` · `-devBuild` · `-deepProfile` · `-cleanBuild` · `-isAab` · `-zipPackage` · `-outputPath` · `-disabledSteps`. `-sceneList`는 읽지 않습니다.
@@ -149,26 +152,33 @@ Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
   - iOS `buildNumber`(CFBundleVersion): 점으로 구분한 정수 1~3개 (예: `12`, `1.0.3`). 같은 표시 버전 안에서만 고유하면 되고, 표시 버전이 바뀌면 다시 시작할 수 있습니다. 그래서 두 플랫폼은 따로 관리하세요.
 
 ## 빌드 동작 메모
-- **빌드 순서**: 이전 경고 파일 삭제 → 활성 플랫폼 확인 → `git status` 기록 → 설정 스냅샷 → 빌드 전 검증 → 사전 스텝 → 버전 코드 · 씬 확인 → `BuildPipeline.BuildPlayer` → 사후 스텝 → 설정 복원 → 바뀐 파일 목록 → 경고 파일 작성.
+- **빌드 순서**: 이전 경고 파일 삭제 → 지원 대상 · 활성 플랫폼 확인 → `git status` 기록 → 설정 스냅샷 → 빌드 전 검증 → 사전 스텝 → 출력 이름 · 버전 코드 · 씬 확인 → `BuildPipeline.BuildPlayer` → 사후 스텝 → 설정 복원 → 바뀐 파일 목록 → 경고 파일 작성.
 - **활성 플랫폼**: 로컬(에디터) 빌드는 활성 플랫폼이 다르면 빌드 전에 전환하고, 빌드 뒤 되돌리지 않습니다 (전환 비용이 큼). 배치 모드는 전환하지 않고 실패합니다.
 - **스텝 On/Off**: Build Manager 창의 체크박스 상태는 빌드 프로필 에셋(`DisabledStepIds`)에 저장되어 로컬과 CI에서 동일하게 적용됩니다.
 - **설정 복원**: 기본 스텝이 변경한 PlayerSettings / QualitySettings / EditorUserBuildSettings(버전, 심볼, 로그 설정 등)는 빌드 성공·실패와 관계없이 빌드 전 값으로 복원됩니다. 커스텀 스텝이 다른 설정을 바꾸면 직접 복원해야 합니다.
-  - 복원 대상: `stripEngineCode` · `usePlayerLog` · `bundleVersion` · 스택트레이스(5종) · Scripting Define Symbols · Scripting Backend · `QualitySettings.skinWeights` · Development · Deep Profiling · Autoconnect Profiler. Android는 versionCode · AAB · Android Build Type · Target Architectures, iOS는 buildNumber · 수동 Provisioning Profile 타입 · ID.
+  - 복원 대상: `stripEngineCode` · `usePlayerLog` · `bundleVersion` · 스택트레이스(5종) · Scripting Define Symbols · Scripting Backend · Development · Deep Profiling · Autoconnect Profiler. Android는 versionCode · AAB · Android Build Type · Target Architectures, iOS는 buildNumber · 수동 Provisioning Profile 타입 · ID · 자동 서명 여부.
+  - `QualitySettings.skinWeights`는 기본 스텝이 바꾸지 않습니다 (프로젝트 품질 설정을 그대로 씀).
   - 심볼 · Scripting Backend는 바뀐 경우에만 되돌립니다 (같은 값을 다시 써도 재컴파일될 수 있음). 저장은 PlayerSettings · QualitySettings 에셋만 합니다 (사용자의 저장하지 않은 다른 에셋은 저장하지 않음).
   - 빌드가 성공했는데 복원이 실패하면 빌드를 실패로 처리합니다. 빌드가 이미 실패했으면 원래 오류를 가리지 않도록 경고만 남깁니다.
 - **전처리기 심볼**: 항목이 있는데 리스트가 비어 있으면 심볼을 모두 제거합니다. DefineContainer 또는 해당 빌드 타입/플랫폼 항목이 없거나 심볼 설정 스텝을 끄면 **LIVE는 실패**하고(커밋된 ProjectSettings의 개발용 심볼이 그대로 들어가는 것 방지), DEV · QA는 기존 심볼을 유지합니다 (항목이 없으면 경고).
-  - DefineContainer는 프로필(또는 창)에 넣은 에셋 → `Assets/Editor/HBBuild/DefineContainer.asset` → 프로젝트에서 처음 찾은 `ProjectDefine` 에셋 순으로 씁니다. `SceneDefine`도 같은 순서입니다.
+  - DefineContainer는 프로필(또는 창)에 넣은 에셋 → `Assets/Editor/HBBuild/DefineContainer.asset`(있는데 읽지 못하면 실패) → 프로젝트에서 찾은 `ProjectDefine` 에셋 순으로 씁니다. 마지막 단계에서 여러 개가 나오면 **LIVE는 실패**, DEV · QA는 경로 순 첫 번째를 쓰고 경고합니다. `SceneDefine`도 같은 규칙입니다. 창은 기본 경로에 없고 여러 개면 자동으로 연결하지 않습니다 (빌드 때 위 규칙으로 처리).
   - HB_InGameConsole을 쓰면 LIVE 항목에서 `USE_HLOG`를 빼서 출시 빌드의 HLog를 끕니다 (켜진 채 릴리즈 빌드하면 InGameConsole이 경고).
+- **iOS 서명**: 프로필 `CustomEntries`의 `ProvisionType`과 `ProvisionUUID`로 정합니다. `ProvisionType`은 대소문자 무시, 없으면 `Distribution`, 아래 값 밖이면 빌드 실패.
+  - `Development` · `Distribution` · `Automatic`: Unity `ProvisioningProfileType`과 같은 뜻입니다 (`Automatic` = 프로필 종류를 Xcode 빌드 때 자동 판정). UUID가 있으면 자동 서명을 끄고 그 종류 · UUID로 수동 서명합니다 (빌드 뒤 원래 값으로 복원).
+  - `AutoSign`(HB_Build 전용): 자동 서명을 켜고 UUID는 넣지 않습니다 (UUID가 있으면 경고). Team ID는 프로젝트 설정 값을 씁니다.
+  - UUID가 없으면 프로젝트의 서명 설정을 그대로 씁니다 (`ProvisionType`만 넣었으면 경고).
 - **LIVE + Development Build**: 라이브 환경 프로파일링 · 로그 확인용으로 막지 않습니다. 대신 산출물 이름에 `_DEVBUILD`가 붙고(예: `Game_v1.0.0_LIVE_DEVBUILD.apk`), 빌드 시작 · 끝에 경고 블록이 찍히고, 로컬 빌드는 확인 창을 띄우고, Jenkins는 결과가 UNSTABLE이 됩니다.
 - **경고 파일**: 빌드를 막지 않는 경고(LIVE + Development, 심볼 항목 없음, 등록되지 않은 비활성 ID 등)가 있으면 `BuildOutput/HB_BUILD_WARNINGS.txt`에 남깁니다. 생성한 Jenkinsfile은 이 파일이 있으면 내용을 출력하고 UNSTABLE로 표시합니다.
   - 출력 경로와 관계없이 항상 프로젝트의 `BuildOutput/`에 씁니다. 빌드를 시작할 때 이전 파일을 지우고, 빌드가 실패해도 그때까지의 경고를 씁니다. 로컬 빌드는 완료 창에 경고 수를 보입니다.
 - **빌드가 바꾼 파일**: 빌드 전후 `git status`를 비교해 빌드 중 바뀐 파일(ProjectSettings 재저장 등)을 로그에 출력합니다. 자동으로 되돌리지 않으니 직접 확인하고 되돌리세요 (git이 PATH에 없으면 건너뜀).
   - 새로 바뀐 파일, 이미 바뀐 상태에서 다시 쓰인 파일(수정 시각), 빌드 중 원래대로 돌아간 파일을 모두 보입니다. `BuildOutput/` · 이번 출력 경로 · 빌드 로그 파일은 뺍니다.
+  - 다시 쓰인 파일은 수정 시각으로 판단하므로 내용이 같게 재저장된 파일도 목록에 나옵니다 (내용 비교는 하지 않음).
   - 프로젝트가 저장소의 하위 폴더여도 저장소 루트 기준으로 봅니다. git 명령이 15초 안에 끝나지 않으면 건너뜁니다.
 - **직접 빌드 경고**: Unity 기본 빌드(File > Build 등)처럼 HB_Build를 거치지 않은 플레이어 빌드는 콘솔에 경고합니다. HB_Build 스텝(심볼, 검증, 설정 복원)이 실행되지 않으므로 팀 빌드는 Build Manager로 하세요.
-- **출력 경로**: 기본값은 프로젝트 기준 `BuildOutput/<Target>`입니다. Windows 빌드는 `<출력경로>/<이름>/<이름>.exe`처럼 버전별 하위 폴더에 생성되고, ZIP은 `<출력경로>/<이름>.zip`으로 생성됩니다. 같은 이름의 폴더가 이미 있으면 덮어쓰지 않고 `<이름> (2)`, `<이름> (3)` 폴더로 분리합니다. ZIP에는 `*_DoNotShip`, `*_ButDontShipItWithYourGame` 폴더가 포함되지 않습니다.
+- **출력 경로**: 기본값은 프로젝트 기준 `BuildOutput/<Target>`입니다. Windows 빌드는 `<출력경로>/<이름>/<이름>.exe`처럼 버전별 하위 폴더에 생성되고, ZIP은 `<출력경로>/<이름>.zip`으로 생성됩니다. 같은 이름의 폴더나 ZIP이 이미 있으면 덮어쓰지 않고 `<이름> (2)`, `<이름> (3)` 폴더(와 ZIP)로 분리합니다. ZIP에는 `*_DoNotShip`, `*_ButDontShipItWithYourGame` 폴더가 포함되지 않습니다.
   - 창의 폴더 선택으로 프로젝트 안 폴더를 고르면 상대 경로로 저장합니다. 절대 경로는 다른 PC · Jenkins에서도 그대로 쓰이므로 창이 경고합니다.
 - **로컬 빌드**: 프로필 빌드는 저장된 프로필 값으로 실행됩니다. 창에 저장하지 않은 변경이 있으면 빌드 전에 저장 여부를 묻고, 자동 저장하지 않습니다.
+- **프로필 복제**: 창에 저장하지 않은 변경이 있으면 복사본에 적용할지, 버리고 복제할지 묻습니다. 원본 프로필은 바꾸지 않습니다.
   - 선택지는 "저장 후 빌드" · "저장된 값으로 빌드" · "취소"입니다. 프로필을 고르지 않으면 창의 현재 값으로 빌드합니다.
   - 빌드는 창 그리기(OnGUI)가 끝난 뒤 실행하고, 끝나면 성공 · 실패 창을 띄웁니다.
 - **Jenkinsfile**: 생성된 파이프라인은 빌드 전에 `BuildOutput/` 폴더만 지웁니다 (`Library/` 캐시는 유지). 소스 정리는 Jenkins job의 checkout 설정을 사용하세요.

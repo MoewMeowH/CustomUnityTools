@@ -148,10 +148,12 @@ namespace HB.CustomBuild.Editor
             if (string.IsNullOrEmpty(argName) || s_Args == null || s_Args.Count == 0)
                 return string.Empty;
 
+            string name = argName.TrimStart('-');
             for (int i = 0; i < s_Args.Count - 1; i++)
             {
-                string current = s_Args[i].TrimStart('-');
-                if (current.Equals(argName.TrimStart('-'), StringComparison.OrdinalIgnoreCase))
+                // 이름은 '-'로 시작하는 토큰만 (다른 인자의 값이 우연히 같은 글자여도 이름으로 보지 않음, HasArg와 같은 규칙)
+                if (!s_Args[i].StartsWith("-")) continue;
+                if (s_Args[i].TrimStart('-').Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
                     return s_Args[i + 1].Trim('\"', '\'');
                 }
@@ -193,7 +195,14 @@ namespace HB.CustomBuild.Editor
             Debug.LogWarning($"{LOG_HEAD} {str}");
         }
 
+        /// <summary>
+        /// 빌드 실패 예외를 만들어 돌려줍니다. 이름과 달리 직접 던지지 않으므로 호출부에서 <c>throw BuildHelper.ThrowError(...)</c>로 씁니다.
+        /// </summary>
         public static JenkinsBuildException ThrowError(string msg) => new JenkinsBuildException($"{LOG_HEAD} :: {msg}");
+
+        /// <summary> HB_Build가 지원하는 빌드 대상 (Windows · Android · iOS). 그 밖의 대상은 빌드 시작 전에 실패한다 </summary>
+        public static bool IsSupportedTarget(BuildTarget buildTarget) => buildTarget is
+            BuildTarget.StandaloneWindows or BuildTarget.StandaloneWindows64 or BuildTarget.Android or BuildTarget.iOS;
 
         public static BuildTargetGroup GetTargetGroup(BuildTarget buildTarget) => buildTarget switch
         {
@@ -212,6 +221,64 @@ namespace HB.CustomBuild.Editor
                 .Where(s => s.enabled && !string.IsNullOrEmpty(s.path))
                 .Select(s => s.path)
                 .ToArray();
+        }
+
+        /// <summary>
+        /// 빌드에 쓸 설정 에셋(DefineContainer · SceneDefine)을 찾습니다.
+        /// 기본 경로에 파일이 있으면 그것을 쓰고(읽지 못하면 실패), 없으면 프로젝트 전체에서 찾습니다.
+        /// 여러 개면 어느 것이 쓰일지 사람이 알 수 없으므로 LIVE는 실패, DEV · QA는 경로 순 첫 번째를 쓰고 경고합니다.
+        /// </summary>
+        internal static T LoadSettingsAssetForBuild<T>(string defaultPath, BuildContext context) where T : UnityEngine.Object
+        {
+            string typeName = typeof(T).Name;
+            if (File.Exists(defaultPath))
+            {
+                var asset = AssetDatabase.LoadAssetAtPath<T>(defaultPath);
+                if (asset == null)
+                {
+                    // 파일은 있는데 아직 임포트 전일 수 있다 (자동 Refresh 꺼짐, git pull 직후 등)
+                    AssetDatabase.ImportAsset(defaultPath);
+                    asset = AssetDatabase.LoadAssetAtPath<T>(defaultPath);
+                }
+                if (asset == null)
+                    throw ThrowError($"{defaultPath} exists but cannot be loaded as {typeName} (different type, import error, or missing script).");
+                return asset;
+            }
+
+            var paths = FindAssetPaths<T>();
+            if (paths.Count == 0) return null;
+            if (paths.Count > 1)
+            {
+                string list = string.Join(", ", paths);
+                if (context.BuildType == EBuildType.LIVE)
+                    throw ThrowError($"Multiple {typeName} assets found and none at {defaultPath}: {list}. Move the one to use to {defaultPath} or set it in the build profile.");
+                context.AddWarning($"Multiple {typeName} assets found and none at {defaultPath}: {list}. Using '{paths[0]}' (LIVE builds fail on this).");
+            }
+            return AssetDatabase.LoadAssetAtPath<T>(paths[0]);
+        }
+
+        /// <summary>
+        /// 빌드 밖(창의 자동 연결 등)에서 설정 에셋 찾기: 기본 경로, 없으면 프로젝트에 하나뿐일 때 그것.
+        /// 여러 개면 null (임의로 고르지 않는다 — 빌드 때 LoadSettingsAssetForBuild가 LIVE 실패 · DEV · QA 경고로 처리)
+        /// </summary>
+        internal static T LoadSettingsAsset<T>(string defaultPath) where T : UnityEngine.Object
+        {
+            if (File.Exists(defaultPath))
+                return AssetDatabase.LoadAssetAtPath<T>(defaultPath);
+
+            var paths = FindAssetPaths<T>();
+            return paths.Count == 1 ? AssetDatabase.LoadAssetAtPath<T>(paths[0]) : null;
+        }
+
+        private static List<string> FindAssetPaths<T>() where T : UnityEngine.Object
+        {
+            // "t:"는 짧은 타입 이름으로 찾으므로 이름이 같은 다른 타입(다른 네임스페이스) 에셋은 메인 에셋 타입으로 거른다
+            return AssetDatabase.FindAssets($"t:{typeof(T).Name}")
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(p => !string.IsNullOrEmpty(p) && typeof(T).IsAssignableFrom(AssetDatabase.GetMainAssetTypeAtPath(p)))
+                .Distinct()
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .ToList();
         }
 
         /// <summary>

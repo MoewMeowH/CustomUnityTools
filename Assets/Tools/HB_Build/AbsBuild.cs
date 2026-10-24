@@ -33,7 +33,18 @@ namespace HB.CustomBuild.Editor
         {
             // 플랫폼 확인에서 실패해도 이전 빌드의 경고 파일이 남지 않도록 가장 먼저 지운다
             DeleteWarningsFile();
+            // 지원하지 않는 대상(StandaloneOSX 등)은 Standalone으로 취급돼 PC용 스텝이 돌므로 플랫폼 전환 전에 막는다
+            if (!IsSupportedTarget(context.Target))
+                throw ThrowError($"Unsupported build target: {context.Target} (supported: StandaloneWindows, StandaloneWindows64, Android, iOS)");
             EnsureActiveBuildTarget(context.TargetGroup, context.Target);
+
+            // 딥 프로파일은 개발 빌드에서만 유효하다. 프로필 · 창 · CLI 모든 경로를 여기서 한 번에 맞춘다
+            // (프로필 값은 그대로 두어야 CLI가 -devBuild만 덮어써도 딥 프로파일 설정이 살아 있다)
+            if (!context.IsDevBuild && context.IsDeepProfile)
+            {
+                Log("[Pipeline] DeepProfile disabled because DevBuild is false.");
+                context.IsDeepProfile = false;
+            }
 
             var changeReport = BuildChangeReport.Capture();
             var snapshot = BuildSettingsSnapshot.Capture(context.TargetGroup);
@@ -48,6 +59,7 @@ namespace HB.CustomBuild.Editor
 
             try
             {
+                // 입력값(CLI · 프로필 · 창)의 이름은 스텝이 설정을 바꾸기 전에 먼저 확인한다
                 ValidateOutputName(context);
                 ValidateStepRegistry();
                 ValidateDisabledSteps(context);
@@ -56,7 +68,8 @@ namespace HB.CustomBuild.Editor
                 // 1. 사전 빌드 스텝들 순차 실행 (IPreBuildStep)
                 BuildStepRegistry.ExecutePreBuildSteps(context);
 
-                // 버전 코드는 사전 스텝이 채울 수도 있으므로 스텝 뒤, 실제 빌드 전에 확인한다
+                // 버전 · 버전 코드는 사전 스텝이 채우거나 바꿀 수 있으므로 스텝 뒤, 실제 빌드 전에 다시 확인한다
+                ValidateOutputName(context);
                 ValidateVersionCode(context);
 
                 if (context.PlayerOptions.scenes == null || context.PlayerOptions.scenes.Length == 0)
@@ -344,7 +357,8 @@ namespace HB.CustomBuild.Editor
         private static string GetUniqueBuildFolderLocation(string locationPathName)
         {
             string buildFolder = Path.GetDirectoryName(locationPathName);
-            if (string.IsNullOrEmpty(buildFolder) || !Directory.Exists(buildFolder))
+            // 폴더는 없어도 예전 빌드의 "<이름>.zip"만 남아 있으면 같이 피한다 (폴더와 zip 이름을 짝으로 유지)
+            if (string.IsNullOrEmpty(buildFolder) || (!Directory.Exists(buildFolder) && !File.Exists(buildFolder + ".zip")))
                 return locationPathName;
 
             string parent = Path.GetDirectoryName(buildFolder) ?? string.Empty;
@@ -356,7 +370,7 @@ namespace HB.CustomBuild.Editor
                 string candidate = Path.Combine(parent, $"{folderName} ({i})");
                 if (!Directory.Exists(candidate) && !File.Exists(candidate + ".zip"))
                 {
-                    Log($"[Pipeline] Build folder '{folderName}' already exists. Using '{Path.GetFileName(candidate)}' instead.");
+                    Log($"[Pipeline] Build folder or zip '{folderName}' already exists. Using '{Path.GetFileName(candidate)}' instead.");
                     return Path.Combine(candidate, exeName);
                 }
             }
@@ -406,6 +420,10 @@ namespace HB.CustomBuild.Editor
             var errors = BuildStepRegistry.InstantiationErrors;
             if (errors.Count > 0)
                 throw ThrowError($"Failed to create build step(s): {string.Join("; ", errors)}. Fix the step class (public parameterless constructor, no exception).");
+
+            var duplicates = BuildStepRegistry.DuplicateStepIdErrors;
+            if (duplicates.Count > 0)
+                throw ThrowError($"Duplicate build step id(s): {string.Join("; ", duplicates)}. Each step id must be unique — derive one class from the other or give each its own StepId.");
         }
 
         /// <summary>
@@ -421,7 +439,7 @@ namespace HB.CustomBuild.Editor
 
             var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null);
             if (container == null)
-                container = ProjectDefine.LoadIfExists();
+                container = ProjectDefine.LoadIfExists(context);
             if (container == null)
                 throw ThrowError("LIVE build requires a DefineContainer (ProjectDefine) asset. Without it, the scripting define symbols committed in ProjectSettings are used as-is.");
 

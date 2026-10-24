@@ -112,6 +112,7 @@ namespace HB.CustomBuild.Editor
                 Version = Version,
                 VersionCode = VersionCode,
                 IsDevBuild = DevBuild,
+                // 저장된 값 그대로 넘긴다 (CLI가 -devBuild만 덮어써도 살아 있게). 개발 빌드가 아니면 AbsBuild.Execute가 끈다
                 IsDeepProfile = DeepProfile,
                 IsCleanBuild = CleanBuild,
                 IsAab = IsAab,

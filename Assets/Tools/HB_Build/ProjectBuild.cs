@@ -290,21 +290,35 @@ namespace HB.CustomBuild.Editor
         {
             if (m_SelectedProfile == null) return;
 
-            string currentPath = AssetDatabase.GetAssetPath(m_SelectedProfile);
-            string newPath = AssetDatabase.GenerateUniqueAssetPath(currentPath);
-            if (AssetDatabase.CopyAsset(currentPath, newPath))
+            // 창에 저장 안 한 변경이 있으면 버리지 않고 어디에 둘지 묻는다 (원본은 바꾸지 않음)
+            bool applyWindowChanges = false;
+            if (HasUnsavedProfileChanges())
             {
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-                RefreshProfileCache();
-                var duplicated = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(newPath);
-                if (duplicated != null)
-                {
-                    m_SelectedProfile = duplicated;
-                    EditorGUIUtility.PingObject(m_SelectedProfile);
-                    ShowNotification(new GUIContent($"프로필 복제 완료: {duplicated.name}"));
-                }
+                int choice = EditorUtility.DisplayDialogComplex(
+                    "저장되지 않은 변경",
+                    $"'{m_SelectedProfile.name}' 프로필에 저장되지 않은 창의 변경이 있습니다.\n\n" +
+                    "복사본에 적용하면 원본은 그대로 두고 복사본에 창의 값을 저장합니다.",
+                    "복사본에 적용", "취소", "변경 버리고 복제");
+                if (choice == 1) return;
+                applyWindowChanges = choice == 0;
             }
+
+            // CopyAsset은 디스크 파일을 복사하므로 Inspector에서 고치고 저장 안 한 값이 빠진다 → 메모리의 프로필을 복제해 만든다
+            string newPath = AssetDatabase.GenerateUniqueAssetPath(AssetDatabase.GetAssetPath(m_SelectedProfile));
+            var duplicated = Instantiate(m_SelectedProfile);
+            duplicated.name = Path.GetFileNameWithoutExtension(newPath);
+            AssetDatabase.CreateAsset(duplicated, newPath);
+            AssetDatabase.SaveAssets();
+            RefreshProfileCache();
+
+            m_SelectedProfile = duplicated;
+            if (applyWindowChanges)
+                SaveToCurrentProfile();
+            else
+                LoadFromProfile(duplicated);
+
+            EditorGUIUtility.PingObject(m_SelectedProfile);
+            ShowNotification(new GUIContent($"프로필 복제 완료: {duplicated.name}"));
         }
 
         private void LoadFromProfile(HBBuildProfile profile)
@@ -476,6 +490,7 @@ namespace HB.CustomBuild.Editor
                 Version = m_Version,
                 VersionCode = m_VersionCode,
                 IsDevBuild = m_DevBuild,
+                // 개발 빌드가 아니면 AbsBuild.Execute가 끈다 (모든 경로 공통)
                 IsDeepProfile = m_DeepProfile,
                 IsCleanBuild = m_CleanBuild,
                 IsAab = m_IsAab,
@@ -1072,12 +1087,18 @@ namespace HB.CustomBuild.Editor
             return $"\"{exe}\" {args}";
         }
 
+        private void BuildCommandParts(ECliCommandMode mode, bool isJenkinsVar, out string exe, out string args)
+        {
+            BuildCommandParts(mode, isJenkinsVar, out exe, out List<string> argList);
+            args = string.Join(" ", argList);
+        }
+
         /// <summary>
         /// 실행 파일과 인자를 분리해 생성합니다. (.ps1은 Start-Process에 둘을 따로 넘겨야 한다)
         /// Jenkins용(isJenkinsVar)은 Jenkinsfile의 parameters/environment 값을 참조합니다.
         /// (Unity Hub 헤드리스 CLI에는 프로젝트를 실행하는 명령이 없어 Unity.exe를 직접 호출한다)
         /// </summary>
-        private void BuildCommandParts(ECliCommandMode mode, bool isJenkinsVar, out string exe, out string args)
+        private void BuildCommandParts(ECliCommandMode mode, bool isJenkinsVar, out string exe, out List<string> argList)
         {
             string projectPath = isJenkinsVar ? "${PROJECT_PATH}" : BuildHelper.ProjectPath;
             if (string.IsNullOrEmpty(projectPath))
@@ -1094,64 +1115,69 @@ namespace HB.CustomBuild.Editor
                 ? "${profileTarget}"
                 : (m_SelectedProfile != null ? m_SelectedProfile.GetResolvedBuildTarget() : GetBuildTarget(m_Platform)).ToString();
 
-            var sb = new StringBuilder();
+            // 인자 하나(이름 + 값)가 한 항목이다. Jenkinsfile은 항목 사이에서만 줄을 바꾼다 (값 안의 " -"는 건드리지 않음)
+            var list = new List<string>();
 
             // Jenkins는 BuildJenkinsfileText가 에이전트 환경(UNITY_PATH 또는 ProjectVersion.txt)으로 찾은 unityPath를 쓴다
             exe = isJenkinsVar ? "${unityPath}" : EditorApplication.applicationPath;
-            sb.Append($"-batchmode -quit -projectPath \"{projectPath}\" -executeMethod HB.CustomBuild.Editor.ProjectBuild.JenkinsBuild -logFile \"{logPath}\"");
+            list.Add("-batchmode");
+            list.Add("-quit");
+            list.Add($"-projectPath \"{projectPath}\"");
+            list.Add("-executeMethod HB.CustomBuild.Editor.ProjectBuild.JenkinsBuild");
+            list.Add($"-logFile \"{logPath}\"");
 
             // Mode arguments
             switch (mode)
             {
                 case ECliCommandMode.ProfileOnly:
-                    sb.Append($" -buildTarget {profileTarget}");
-                    sb.Append($" -buildProfile \"{profilePath}\"");
+                    list.Add($"-buildTarget {profileTarget}");
+                    list.Add($"-buildProfile \"{profilePath}\"");
                     // Jenkins는 프로필의 출력 경로 대신 BuildOutput/<플랫폼>에 만든다 (Clean · archiveArtifacts 대상과 일치)
                     if (isJenkinsVar)
-                        sb.Append(" -outputPath \"BuildOutput/${profileTarget}\"");
+                        list.Add("-outputPath \"BuildOutput/${profileTarget}\"");
                     break;
 
                 case ECliCommandMode.FullUnpack:
                     string sceneArg = m_ScenePath.Count > 0 ? string.Join(";", m_ScenePath) : BuildHelper.NONE_SCENE_LIST;
 
-                    sb.Append($" -buildTarget {(isJenkinsVar ? "${params.BUILD_TARGET}" : GetBuildTarget(m_Platform).ToString())}");
-                    sb.Append($" -buildType {(isJenkinsVar ? "${params.BUILD_TYPE}" : m_BuildType.ToString())}");
-                    sb.Append($" -buildVersion \"{(isJenkinsVar ? "${params.BUILD_VERSION}" : m_Version)}\"");
-                    sb.Append($" -versionCode \"{(isJenkinsVar ? "${params.VERSION_CODE}" : m_VersionCode)}\"");
+                    list.Add($"-buildTarget {(isJenkinsVar ? "${params.BUILD_TARGET}" : GetBuildTarget(m_Platform).ToString())}");
+                    list.Add($"-buildType {(isJenkinsVar ? "${params.BUILD_TYPE}" : m_BuildType.ToString())}");
+                    list.Add($"-buildVersion \"{(isJenkinsVar ? "${params.BUILD_VERSION}" : m_Version)}\"");
+                    list.Add($"-versionCode \"{(isJenkinsVar ? "${params.VERSION_CODE}" : m_VersionCode)}\"");
                     // Jenkins는 booleanParam(기본값 = 생성 시 창 값)을 참조해 빌드 실행 시 바꿀 수 있게 한다
-                    sb.Append($" -devBuild {(isJenkinsVar ? "${params.DEV_BUILD}" : BoolArg(m_DevBuild))}");
-                    sb.Append($" -deepProfile {(isJenkinsVar ? "${params.DEEP_PROFILE}" : BoolArg(m_DeepProfile))}");
-                    sb.Append($" -cleanBuild {(isJenkinsVar ? "${params.CLEAN_BUILD}" : BoolArg(m_CleanBuild))}");
-                    sb.Append($" -isAab {(isJenkinsVar ? "${params.IS_AAB}" : BoolArg(m_IsAab))}");
-                    sb.Append($" -zipPackage {(isJenkinsVar ? "${params.ZIP_PACKAGE}" : BoolArg(m_ZipPackage))}");
-                    sb.Append($" -sceneList \"{sceneArg}\"");
+                    list.Add($"-devBuild {(isJenkinsVar ? "${params.DEV_BUILD}" : BoolArg(m_DevBuild))}");
+                    list.Add($"-deepProfile {(isJenkinsVar ? "${params.DEEP_PROFILE}" : BoolArg(m_DeepProfile))}");
+                    list.Add($"-cleanBuild {(isJenkinsVar ? "${params.CLEAN_BUILD}" : BoolArg(m_CleanBuild))}");
+                    list.Add($"-isAab {(isJenkinsVar ? "${params.IS_AAB}" : BoolArg(m_IsAab))}");
+                    list.Add($"-zipPackage {(isJenkinsVar ? "${params.ZIP_PACKAGE}" : BoolArg(m_ZipPackage))}");
+                    list.Add($"-sceneList \"{sceneArg}\"");
 
                     // Jenkins는 기본 경로(workspace/BuildOutput/<Target>)를 써야 archiveArtifacts와 일치한다
                     if (!isJenkinsVar)
-                        sb.Append($" -outputPath \"{GetEffectiveOutputPath()}\"");
+                        list.Add($"-outputPath \"{GetEffectiveOutputPath()}\"");
 
                     if (m_DisabledStepIds.Count > 0)
-                        sb.Append($" -{BuildHelper.DISABLED_STEPS} \"{string.Join(";", m_DisabledStepIds)}\"");
+                        list.Add($"-{BuildHelper.DISABLED_STEPS} \"{string.Join(";", m_DisabledStepIds)}\"");
                     break;
 
                 case ECliCommandMode.ProfileOverride:
-                    sb.Append($" -buildTarget {profileTarget}");
-                    sb.Append($" -buildProfile \"{profilePath}\"");
+                    list.Add($"-buildTarget {profileTarget}");
+                    list.Add($"-buildProfile \"{profilePath}\"");
                     // Jenkins는 프로필의 출력 경로 대신 BuildOutput/<플랫폼>에 만든다 (Clean · archiveArtifacts 대상과 일치)
                     if (isJenkinsVar)
-                        sb.Append(" -outputPath \"BuildOutput/${profileTarget}\"");
+                        list.Add("-outputPath \"BuildOutput/${profileTarget}\"");
                     // Jenkins는 값을 넣은 파라미터만 Jenkinsfile 스크립트가 덧붙인다 (비우면 프로필 값 사용, BuildJenkinsfileText 참고)
                     if (!isJenkinsVar)
                     {
-                        sb.Append($" -buildVersion \"{m_Version}\"");
-                        sb.Append($" -versionCode \"{m_VersionCode}\"");
-                        sb.Append($" -buildType {m_BuildType}");
-                        sb.Append($" -devBuild {m_DevBuild.ToString().ToLower()}");
+                        list.Add($"-buildVersion \"{m_Version}\"");
+                        list.Add($"-versionCode \"{m_VersionCode}\"");
+                        list.Add($"-buildType {m_BuildType}");
+                        list.Add($"-devBuild {m_DevBuild.ToString().ToLower()}");
                     }
                     break;
             }
 
-            args = sb.ToString();
+            argList = list;
         }
 
         private void ExportBatchScript(string cmd)
@@ -1162,19 +1188,26 @@ namespace HB.CustomBuild.Editor
             {
                 var sb = new StringBuilder();
                 sb.AppendLine("@echo off");
+                sb.AppendLine("setlocal");
+                // 한글 경로가 깨지지 않게 UTF-8로 쓰고 코드 페이지를 맞춘다 (BOM이 있으면 cmd가 첫 줄을 명령으로 못 읽음)
+                // 열려 있던 cmd 창에서 실행해도 끝나면 원래 코드 페이지로 돌아가게 저장해 둔다 (setlocal은 chcp를 되돌리지 않음)
+                sb.AppendLine("for /f \"tokens=2 delims=:.\" %%a in ('chcp') do set \"HB_OLD_CP=%%a\"");
+                sb.AppendLine("chcp 65001 >nul");
                 sb.AppendLine("echo ===================================================");
                 sb.AppendLine("echo   Starting Automated Unity CLI Build Process");
                 sb.AppendLine("echo ===================================================");
                 sb.AppendLine(cmd);
+                sb.AppendLine("set \"HB_EXIT=%ERRORLEVEL%\"");
                 sb.AppendLine("echo.");
-                sb.AppendLine("if %ERRORLEVEL% EQU 0 (");
+                sb.AppendLine("if %HB_EXIT% EQU 0 (");
                 sb.AppendLine("    echo [SUCCESS] Unity Build finished with success code 0.");
                 sb.AppendLine(") else (");
                 sb.AppendLine("    echo [ERROR] Unity Build failed! Check build.log for details.");
                 sb.AppendLine(")");
+                sb.AppendLine("if defined HB_OLD_CP chcp %HB_OLD_CP% >nul");
                 sb.AppendLine("pause");
 
-                File.WriteAllText(selected, sb.ToString(), Encoding.Default);
+                File.WriteAllText(selected, sb.ToString(), new UTF8Encoding(false));
                 EditorUtility.DisplayDialog("저장 완료", $"배치 파일이 성공적으로 생성되었습니다:\n{selected}", "확인");
                 EditorUtility.RevealInFinder(selected);
             }
@@ -1371,6 +1404,11 @@ namespace HB.CustomBuild.Editor
             sb.AppendLine("pipeline {");
             sb.AppendLine("    agent any");
             sb.AppendLine();
+            // 체크아웃은 아래 'Checkout SCM' 단계에서 한 번만 한다 (Declarative 기본 checkout과 중복 방지)
+            sb.AppendLine("    options {");
+            sb.AppendLine("        skipDefaultCheckout()");
+            sb.AppendLine("    }");
+            sb.AppendLine();
             sb.AppendLine("    parameters {");
 
             if (m_CliMode == ECliCommandMode.ProfileOnly || m_CliMode == ECliCommandMode.ProfileOverride)
@@ -1425,7 +1463,7 @@ namespace HB.CustomBuild.Editor
             // 이전 빌드 산출물만 지운다 (Library 캐시는 유지, 소스 정리는 Jenkins job의 checkout 설정에 맡김)
             sb.AppendLine("        stage('Clean Build Output') {");
             sb.AppendLine("            steps {");
-            sb.AppendLine("                dir('BuildOutput') {");
+            sb.AppendLine("                dir(env.OUTPUT_DIR) {");
             sb.AppendLine("                    deleteDir()");
             sb.AppendLine("                }");
             sb.AppendLine("            }");
@@ -1478,8 +1516,8 @@ namespace HB.CustomBuild.Editor
                 sb.AppendLine();
             }
 
-            string rawCmd = BuildCommandLine(m_CliMode, true);
-            string formattedCmd = rawCmd.Replace(" -", " \\\n                        -");
+            BuildCommandParts(m_CliMode, true, out string jenkinsExe, out List<string> jenkinsArgs);
+            string formattedCmd = string.Join(" \\\n                        ", new[] { $"\"{jenkinsExe}\"" }.Concat(jenkinsArgs));
 
             sb.AppendLine("                    def unityArgs = \"\"\"");
             sb.AppendLine($"                        {formattedCmd}");

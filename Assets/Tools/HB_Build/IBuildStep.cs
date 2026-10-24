@@ -86,6 +86,9 @@ namespace HB.CustomBuild.Editor
                 PlayerOptions.options |= BuildOptions.Development;
                 if (IsDeepProfile)
                     PlayerOptions.options |= BuildOptions.EnableDeepProfilingSupport;
+                // -autoProfile: BuildPipeline.BuildPlayer는 EditorUserBuildSettings.connectProfiler가 아니라 이 옵션을 따른다
+                if (BuildHelper.IsAutoProfile)
+                    PlayerOptions.options |= BuildOptions.ConnectWithProfiler;
             }
 
             if (IsCleanBuild)
