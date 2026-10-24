@@ -44,12 +44,32 @@ namespace HB.Cheat.UI
             if (string.IsNullOrWhiteSpace(key)) return;
 
 #if HB_CHEAT_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM
-            m_HasToggleKey = Enum.TryParse(key.Trim(), true, out m_ToggleKey);
+            m_HasToggleKey = TryParseToggleKey(key, out m_ToggleKey);
 #elif ENABLE_LEGACY_INPUT_MANAGER
-            m_HasToggleKey = Enum.TryParse(key.Trim(), true, out m_ToggleKey);
+            m_HasToggleKey = TryParseToggleKey(key, out m_ToggleKey);
 #endif
             if (!m_HasToggleKey)
                 Debug.LogWarning($"[HB_Cheat] Unknown toggle key '{key}'.");
+        }
+
+        /// <summary>
+        /// 키 이름 하나만 받는다. 숫자("1" → Space, "999" → 정의 안 된 값), 쉼표로 이은 이름, None은 거절한다
+        /// (Input System은 범위 밖 Key로 키보드를 조회하면 매 프레임 예외).
+        /// </summary>
+        internal static bool TryParseToggleKey<TKey>(string text, out TKey key) where TKey : struct, Enum
+        {
+            key = default;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            string name = text.Trim();
+            char first = name[0];
+            if (char.IsDigit(first) || first == '-' || first == '+') return false;
+            // Enum.TryParse는 "F8,F9"를 비트 OR로 합쳐 다른 키로 만든다
+            if (name.IndexOf(',') >= 0) return false;
+
+            return Enum.TryParse(name, true, out key)
+                && Enum.IsDefined(typeof(TKey), key)
+                && !string.Equals(key.ToString(), "None", StringComparison.Ordinal);
         }
 
         /// <summary>콘솔에 붙지 못했을 때 자체 UIDocument로 띄운다.</summary>
@@ -95,7 +115,18 @@ namespace HB.Cheat.UI
         {
 #if HB_CHEAT_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM
             var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            return keyboard != null && keyboard[m_ToggleKey].wasPressedThisFrame;
+            if (keyboard == null) return false;
+            try
+            {
+                return keyboard[m_ToggleKey].wasPressedThisFrame;
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // 정의된 Key라도 이 Input System 버전의 키보드에 없을 수 있다 → 매 프레임 예외 대신 끈다
+                m_HasToggleKey = false;
+                Debug.LogWarning($"[HB_Cheat] Toggle key '{m_ToggleKey}' is not on this keyboard. The toggle key is disabled.");
+                return false;
+            }
 #elif ENABLE_LEGACY_INPUT_MANAGER
             return Input.GetKeyDown(m_ToggleKey);
 #else

@@ -22,15 +22,15 @@ namespace HB.Cheat.Editor
 
         [Header("Define")]
         [Tooltip("프로젝트 치트 코드용 심볼. 패키지는 HB_CHEAT를 쓰며 둘은 항상 함께 켜고 끈다.")]
-        [SerializeField] private string userDefine = DefaultUserDefine;
+        [Delayed] [SerializeField] private string userDefine = DefaultUserDefine;
 
         [Header("Code")]
         [Tooltip("치트 파일을 만들 기본 폴더")]
-        [SerializeField] private string cheatFolder = "Assets/Cheats";
+        [Delayed] [SerializeField] private string cheatFolder = "Assets/Cheats";
         [Tooltip("Assembly-CSharp에 있는 치트의 레지스트리 생성 폴더 (asmdef에 있는 치트는 해당 asmdef 폴더/Generated)")]
-        [SerializeField] private string assemblyCSharpOutputFolder = "Assets/Cheats/Generated";
+        [Delayed] [SerializeField] private string assemblyCSharpOutputFolder = "Assets/Cheats/Generated";
         [Tooltip("치트 asmdef 이름 (asmdef 방식으로 만들 때)")]
-        [SerializeField] private string cheatAsmdefName = "Game.Cheats";
+        [Delayed] [SerializeField] private string cheatAsmdefName = "Game.Cheats";
         [Tooltip("치트 asmdef가 참조할 게임 asmdef 이름")]
         [SerializeField] private List<string> cheatAsmdefReferences = new List<string>();
         [Tooltip("컴파일 후 레지스트리를 자동으로 다시 생성")]
@@ -41,9 +41,9 @@ namespace HB.Cheat.Editor
         [SerializeField] private bool preferConsoleTab = true;
         [SerializeField] private bool showFloatingButton = true;
         [Tooltip("PC 열기/닫기 키 (Input System Key 또는 KeyCode 이름). 비우면 사용 안 함.")]
-        [SerializeField] private string toggleKey = "F8";
-        [SerializeField] private float serverTimeoutSeconds = 10f;
-        [SerializeField] private int historyCapacity = 50;
+        [Delayed] [SerializeField] private string toggleKey = "F8";
+        [Delayed] [SerializeField] private float serverTimeoutSeconds = 10f;
+        [Delayed] [SerializeField] private int historyCapacity = 50;
         [SerializeField] private bool dontDestroyOnLoad = true;
 
         [Header("Automation")]
@@ -82,6 +82,8 @@ namespace HB.Cheat.Editor
         public bool FailWhenUnverifiable => failWhenUnverifiable;
 
         private static CheatSettings s_Cached;
+        // 에셋이 없을 때 쓰는 기본값 인스턴스. 호출마다 만들면 DontSave 객체가 쌓인다
+        private static CheatSettings s_Default;
 
         /// <summary>설정 에셋을 찾는다. 없으면 기본값 인스턴스 (저장하지 않음).</summary>
         public static CheatSettings Load()
@@ -98,12 +100,13 @@ namespace HB.Cheat.Editor
 
             if (asset == null)
             {
-                asset = CreateInstance<CheatSettings>();
-                asset.hideFlags = HideFlags.DontSave;
-                return asset;
+                if (s_Default == null)
+                    s_Default = FindLeftoverDefault() ?? CreateDefault();
+                return s_Default;
             }
 
             s_Cached = asset;
+            ReleaseDefault();
             return asset;
         }
 
@@ -119,8 +122,41 @@ namespace HB.Cheat.Editor
             AssetDatabase.CreateAsset(asset, DefaultAssetPath);
             AssetDatabase.SaveAssets();
             s_Cached = asset;
+            ReleaseDefault();
             return asset;
         }
+
+        private static CheatSettings CreateDefault()
+        {
+            var instance = CreateInstance<CheatSettings>();
+            instance.hideFlags = HideFlags.DontSave;
+            return instance;
+        }
+
+        // DontSave 객체는 도메인 리로드를 넘겨 남고 정적 참조만 사라진다 → 리로드 뒤에는 남은 것을 다시 쓴다
+        private static CheatSettings FindLeftoverDefault()
+        {
+            foreach (var candidate in Resources.FindObjectsOfTypeAll<CheatSettings>())
+            {
+                if ((candidate.hideFlags & HideFlags.DontSave) != 0 && string.IsNullOrEmpty(AssetDatabase.GetAssetPath(candidate)))
+                    return candidate;
+            }
+            return null;
+        }
+
+        private static void ReleaseDefault()
+        {
+            if (s_Default == null) s_Default = FindLeftoverDefault();
+            if (s_Default == null) return;
+            DestroyImmediate(s_Default);
+            s_Default = null;
+        }
+
+        /// <summary>생성 레지스트리 코드에 들어가는 값 (바뀌었는지 비교용)</summary>
+        internal string RegistryInputs => string.Join("|",
+            UserDefine, AssemblyCSharpOutputFolder, AutoGenerate, InitMode, PreferConsoleTab, ShowFloatingButton,
+            ToggleKey, ServerTimeoutSeconds.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            HistoryCapacity, DontDestroyOnLoad, AllowRawFromAutomation);
 
         private static string Normalize(string path, string fallback)
         {

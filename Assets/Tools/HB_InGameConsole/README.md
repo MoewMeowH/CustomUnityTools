@@ -14,7 +14,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_InGameCon
 설치하면 프로젝트에 `Assets/Scripts/LogChannels.cs`가 **한 번만** 자동 생성(Auto-Bootstrap)되어 바로 `HLog`를 호출할 수 있습니다.
 
 - **자동 생성은 프로젝트당 1회**: 생성했다는 표시를 `ProjectSettings/HB_InGameConsole.LogChannels.generated.txt`에 남깁니다(Git으로 공유). 이 파일이 있으면 `LogChannels.cs`를 지워도 다시 만들지 않습니다. 다시 만들려면 Generator 창의 **스크립트 파일 갱신**을 누르거나 표시 파일을 지우세요.
-- **콘솔 설정 (InitMode, AutoCreateUI 등)**: UPM으로 설치된 패키지는 읽기 전용이라 패키지 안의 기본 설정은 수정할 수 없습니다. `Tools > HB > In-Game Console > Settings` 메뉴를 실행하면 기본값을 복사한 `Assets/Resources/HB_InGameConsoleUserSettings.asset`이 생성되며, 이 에셋이 있으면 패키지 기본 설정보다 우선 적용됩니다. 에디터와 빌드 모두 이 경로의 에셋만 읽습니다(다른 위치에 있으면 에디터에서 경고).
+- **콘솔 설정 (InitMode, AutoCreateUI 등)**: 패키지에는 설정 에셋이 없고, 에셋이 없으면 코드에 있는 기본값을 씁니다. `Tools > HB > In-Game Console > Settings` 메뉴를 실행하면 기본값으로 채운 `Assets/Resources/HB_InGameConsoleUserSettings.asset`이 생성되며, 이 에셋이 있으면 그 값을 씁니다. 에디터와 빌드 모두 이 경로의 에셋만 읽습니다(다른 위치에 있으면 에디터에서 경고).
 - **asmdef를 쓰는 프로젝트**: 기본 생성 위치(`Assets/Scripts`)는 Assembly-CSharp에 포함되어 asmdef 코드에서 `HLog`를 참조할 수 없습니다. LogChannel Generator 설정에서 출력 폴더를 해당 asmdef 폴더 안으로 지정하세요.
 
 ---

@@ -46,7 +46,7 @@ namespace HB.Cheat
                         return Run(tokens[1], pairs, source);
                     case "raw":
                         if (tokens.Count < 2) return Error("Usage: raw <command...>", CheatErrorCode.InvalidUsage);
-                        return Raw(line.Substring(line.IndexOf("raw", StringComparison.OrdinalIgnoreCase) + 3).Trim(), source);
+                        return Raw(RestAfterFirstToken(line), source);
                     case "status":
                         if (tokens.Count < 2 || !int.TryParse(tokens[1], out int id)) return Error("Usage: status <executionId> [session=S]", CheatErrorCode.InvalidUsage);
                         if (!TryParsePairs(tokens, 2, out pairs, out pairError)) return Error(pairError, CheatErrorCode.MalformedArgument);
@@ -390,6 +390,23 @@ namespace HB.Cheat
             return tokens;
         }
 
+        /// <summary>첫 토큰(명령어) 뒤의 원문. 첫 토큰은 Tokenize와 같은 규칙으로 끝을 찾는다 ("raw"처럼 따옴표로 감싸도 된다)</summary>
+        private static string RestAfterFirstToken(string line)
+        {
+            int i = 0;
+            while (i < line.Length && char.IsWhiteSpace(line[i])) i++;
+
+            bool inQuote = false;
+            for (; i < line.Length; i++)
+            {
+                char c = line[i];
+                if (c == '\\' && inQuote && i + 1 < line.Length) i++;
+                else if (c == '"') inQuote = !inQuote;
+                else if (char.IsWhiteSpace(c) && !inQuote) break;
+            }
+            return line.Substring(i).Trim();
+        }
+
         /// <summary>"k=v k2=v2" 형식 (CLI 인자 하나로 받을 때). 형식이 틀리면 FormatException (예외 없이 받으려면 TryParsePairs)</summary>
         public static Dictionary<string, string> ParsePairs(string text) => ParsePairs(Tokenize(text), 0);
 
@@ -448,7 +465,15 @@ namespace HB.Cheat
 
         public CheatJsonWriter Value(string value) { Separator(); WriteString(value); m_NeedComma = true; return this; }
         public CheatJsonWriter Value(bool value) { Separator(); m_Sb.Append(value ? "true" : "false"); m_NeedComma = true; return this; }
-        public CheatJsonWriter Value(double value) { Separator(); m_Sb.Append(value.ToString("R", CultureInfo.InvariantCulture)); m_NeedComma = true; return this; }
+        /// <summary>NaN · Infinity는 JSON 숫자가 아니므로 null로 쓴다</summary>
+        public CheatJsonWriter Value(double value)
+        {
+            Separator();
+            if (double.IsNaN(value) || double.IsInfinity(value)) m_Sb.Append("null");
+            else m_Sb.Append(value.ToString("R", CultureInfo.InvariantCulture));
+            m_NeedComma = true;
+            return this;
+        }
 
         public CheatJsonWriter Prop(string key, string value) => Key(key).Value(value);
         public CheatJsonWriter Prop(string key, bool value) => Key(key).Value(value);

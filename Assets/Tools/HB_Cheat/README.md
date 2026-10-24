@@ -22,6 +22,8 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
 4. 컴파일이 끝나면 레지스트리(`HBCheatRegistry.g.cs`)가 자동으로 생성됩니다.
 5. Play를 누르면 열 수 있습니다. PC는 `F8`, 모바일은 화면의 `CHEAT` 버튼(끌어서 이동 가능)을 씁니다. InGameConsole이 있으면 콘솔의 `Cheat` 탭으로 들어갑니다.
 
+Settings의 Runtime 값(열기 키, 서버 대기 시간 등)은 생성 레지스트리 코드에 들어갑니다. 설정 창에서 바꾸면 레지스트리를 바로 다시 생성하고(Play 중이면 에디트 모드로 돌아온 뒤), 글자 칸은 Enter나 다른 칸으로 옮길 때 적용됩니다. `Auto Generate`를 끄면 `Generate Registry`를 눌러야 반영됩니다. 열기 키는 키 이름만 받습니다(`F8`, `BackQuote` 등 — 숫자·`None`은 경고 후 사용 안 함).
+
 ```csharp
 #if DEV_CHEAT   // Assembly-CSharp에 둘 때 (asmdef 방식이면 필요 없음)
 using System.Collections.Generic;
@@ -189,6 +191,7 @@ unity command cheat_stop   # Play 종료
 
 - 성공은 `{"ok":true,...}`, 실패는 예외가 아니라 항상 `{"ok":false,"error":"...","code":"..."}`입니다.
 - **인자·요청 문제는 `ok:false` + `code`**, **실행 결과 문제**(로컬 치트의 실패·예외, 서버 응답 실패, 전송 실패, 시간 초과)는 `ok:true` + `execution.status`(`Failed` / `TimedOut`)입니다. 범위 밖·목록에 없는 값처럼 인자 문제는 자동화 경로에서 실행을 만들지 않습니다(패널은 기존대로 실행 후 `Failed`로 남김).
+- 숫자가 NaN · 무한대면 `null`로 씁니다 (예: `cheat_list`에서 `[CheatRange]`의 `min`/`max`를 무한대로 둔 경우).
 - `code`는 **계약**입니다. 이름을 바꾸지 않습니다. `error` 문구는 사람용이라 바뀔 수 있으니 분기는 `code`로 합니다. 상수: `HB.Cheat.CheatErrorCode`.
 
   | code | 언제 나오나 |
@@ -273,7 +276,7 @@ unity command cheat_stop   # Play 종료
 
 ### 예약 인자 이름
 
-`query`, `limit`은 프로토콜 옵션으로 쓰므로 치트 인자 이름으로 쓰면 자동화에서 값을 넣을 수 없습니다.
+`query`, `limit`은 프로토콜 옵션으로 쓰므로 치트 인자 이름으로 쓰면 자동화에서 값을 넣을 수 없습니다. `Tools > HB > Cheat`의 Cheats 탭에 경고로 표시합니다(`Generate Registry`를 누르면 Console에도 남음).
 
 ### 테스트
 

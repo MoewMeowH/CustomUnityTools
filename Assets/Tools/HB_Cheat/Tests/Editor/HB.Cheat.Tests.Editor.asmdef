@@ -5,7 +5,8 @@
         "HB.Cheat",
         "HB.Cheat.Editor",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"
@@ -21,6 +22,12 @@
         "HB_CHEAT",
         "UNITY_INCLUDE_TESTS"
     ],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "1.0.0",
+            "define": "HB_CHEAT_INPUT_SYSTEM"
+        }
+    ],
     "noEngineReferences": false
 }

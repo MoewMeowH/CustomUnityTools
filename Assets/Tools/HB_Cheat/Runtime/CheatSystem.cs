@@ -352,7 +352,8 @@ namespace HB.Cheat
                 if (arg.HasRange && arg.Editor == CheatEditorKind.Number)
                 {
                     double d = CheatValueParser.ToDouble(value);
-                    if (d < arg.Min || d > arg.Max)
+                    // NaN은 어떤 비교도 거짓이라 따로 막는다 (자동화 run x=NaN)
+                    if (double.IsNaN(d) || d < arg.Min || d > arg.Max)
                     {
                         error = $"'{arg.DisplayLabel}' must be in [{arg.Min}, {arg.Max}]";
                         code = CheatErrorCode.OutOfRangeValue;
