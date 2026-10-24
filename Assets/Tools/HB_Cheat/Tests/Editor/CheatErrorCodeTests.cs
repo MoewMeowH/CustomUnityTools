@@ -19,7 +19,6 @@ namespace HB.Cheat.Tests
 
         private sealed class OneTwoProvider : ICheatOptionProvider
         {
-            public int Version => 0;
             public void Collect(CheatOptionContext context, List<CheatOption> results)
             {
                 results.Add(new CheatOption(1, "One"));
@@ -29,7 +28,6 @@ namespace HB.Cheat.Tests
 
         private sealed class ThrowingProvider : ICheatOptionProvider
         {
-            public int Version => 0;
             public void Collect(CheatOptionContext context, List<CheatOption> results) => throw new InvalidOperationException("boom");
         }
 

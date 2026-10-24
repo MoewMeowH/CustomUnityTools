@@ -114,6 +114,8 @@ namespace HB.Cheat
 
             if (!TryBuildValues(def, args, allowMissing: true, out var values, out string error, out string code)) return Error(error, code);
 
+            // CLI 조회는 치트를 고르는 것과 같다 → 최신 후보를 다시 모은다
+            CheatOptionCache.Invalidate(def.Id);
             var options = CheatSystem.GetOptions(def, index, values, out string optionError);
             if (optionError != null) return Error(optionError, CheatErrorCode.OptionProviderFailed);
 

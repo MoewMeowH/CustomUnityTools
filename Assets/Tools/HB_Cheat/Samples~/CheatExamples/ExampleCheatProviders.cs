@@ -5,11 +5,9 @@ using UnityEngine.SceneManagement;
 
 namespace CheatExamples
 {
-    /// <summary>아이템 테이블 전체. 테이블이 다시 로드되면(Version 변경) 목록을 다시 만든다.</summary>
+    /// <summary>아이템 테이블 전체. 치트를 고를 때 · 실행할 때 다시 읽으므로 테이블을 다시 로드해도 따로 할 일이 없다.</summary>
     public sealed class ItemProvider : ICheatOptionProvider
     {
-        public int Version => ItemTable.Version;
-
         public void Collect(CheatOptionContext context, List<CheatOption> results)
         {
             foreach (var item in ItemTable.All)
@@ -20,8 +18,6 @@ namespace CheatExamples
     /// <summary>강화 가능한 아이템만 (MaxEnchant > 0)</summary>
     public sealed class EnchantableItemProvider : ICheatOptionProvider
     {
-        public int Version => ItemTable.Version;
-
         public void Collect(CheatOptionContext context, List<CheatOption> results)
         {
             foreach (var item in ItemTable.All)
@@ -38,8 +34,6 @@ namespace CheatExamples
     /// </summary>
     public sealed class EnchantLevelProvider : ICheatOptionProvider
     {
-        public int Version => ItemTable.Version;
-
         public void Collect(CheatOptionContext context, List<CheatOption> results)
         {
             if (!context.TryGet("itemId", out int itemId)) return;   // 아이템을 아직 안 골랐으면 빈 목록
@@ -55,8 +49,6 @@ namespace CheatExamples
     /// <summary>문자열 값도 목록으로 고를 수 있다 (Build Settings에 등록된 씬)</summary>
     public sealed class BuildSceneProvider : ICheatOptionProvider
     {
-        public int Version => 0;
-
         public void Collect(CheatOptionContext context, List<CheatOption> results)
         {
             for (int i = 0; i < SceneManager.sceneCountInBuildSettings; i++)

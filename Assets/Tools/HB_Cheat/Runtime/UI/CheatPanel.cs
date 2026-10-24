@@ -594,6 +594,9 @@ namespace HB.Cheat.UI
         {
             m_Selected = def;
 
+            // 치트를 고를 때 후보(테이블)를 새로 읽는다. 이 치트를 편집하는 동안은 캐시를 쓴다
+            CheatOptionCache.Invalidate(def.Id);
+
             // 열린 탭을 이 치트의 부모 경로로 맞춘다 (더 깊이 열려 있던 하위 탭이 선택된 채 남지 않도록)
             m_TabChain.Clear();
             var segments = def.PathSegments;

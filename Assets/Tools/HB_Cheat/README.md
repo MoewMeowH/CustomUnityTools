@@ -62,8 +62,7 @@ public static class ItemCheats
 
 public sealed class ItemTableProvider : ICheatOptionProvider
 {
-    public int Version => ItemTable.Version;   // 바뀌면 다시 수집 (고정이면 0)
-
+    // 치트를 고를 때 · 실행할 때 다시 불린다 (테이블을 다시 로드해도 따로 할 일 없음)
     public void Collect(CheatOptionContext context, List<CheatOption> results)
     {
         foreach (var item in ItemTable.All)
@@ -73,8 +72,6 @@ public sealed class ItemTableProvider : ICheatOptionProvider
 
 public sealed class EnchantLevelProvider : ICheatOptionProvider
 {
-    public int Version => 0;
-
     public void Collect(CheatOptionContext context, List<CheatOption> results)
     {
         if (!context.TryGet("itemId", out int itemId)) return;   // 앞 인자를 아직 안 골랐으면 빈 목록
@@ -234,7 +231,7 @@ CheatSystem.ResumeServerQueue();
 | 입력 방식 | 숫자는 스테퍼와 패널 키패드를 씁니다(OS 키보드 없음). `bool`은 토글, `enum`과 `[CheatOptions]`는 목록(검색, 가상화), `string`은 텍스트 입력입니다. |
 | `[CheatRange(min, max, Step = n)]` | 숫자 범위와 스테퍼 간격(기본 1)을 지정합니다. 숫자가 아닌 인자에 붙이면 경고, `min > max`는 에러입니다. |
 | `[CheatOptions(typeof(Provider), DependsOn = ...)]` | 목록 선택입니다. Provider는 `ICheatOptionProvider` 구현 + public 매개변수 없는 생성자가 필요합니다. `DependsOn`에는 **앞쪽** 매개변수 이름만 쓸 수 있고, 앞 인자가 바뀌면 이 인자는 초기화됩니다. |
-| Provider 동작 | 메인 스레드에서 불립니다. 결과는 (치트, 인자)마다 캐시되고 `Version`이나 `DependsOn` 값이 바뀔 때만 다시 수집합니다. 앞 인자 값은 `context.Get<T>(이름)` / `TryGet`으로 읽습니다. Provider 인스턴스는 레지스트리마다 타입당 하나입니다. 예외가 나면 그 목록은 비고 에러로 보고됩니다. |
+| Provider 동작 | 메인 스레드에서 불립니다. 치트를 고를 때(패널) · 실행할 때(CLI `cheat_run` 포함) · CLI로 후보를 조회할 때(`cheat_options`) 다시 수집하고, 같은 치트를 편집하는 동안은 (치트, 인자)마다 캐시합니다(`DependsOn` 값이 바뀌면 다시 수집). 열려 있는 목록을 바로 바꾸려면 `CheatSystem.InvalidateOptions()`를 부르세요. 앞 인자 값은 `context.Get<T>(이름)` / `TryGet`으로 읽습니다. Provider 인스턴스는 레지스트리마다 타입당 하나입니다. 예외가 나면 그 목록은 비고 에러로 보고됩니다. |
 | `enum` | 정의된 이름이 목록이 되고, 서버 문자열에는 정수 값이 들어갑니다. 자동화 입력은 이름(대소문자 무시) 또는 정의된 정수 값을 받습니다. |
 | 기본값 | C# 매개변수 기본값을 그대로 사용합니다. 없으면 숫자 0(범위 안으로 맞춤), `bool` false, `string` 빈 문자열, `enum` 첫 값이고, Provider 목록 인자는 고를 때까지 비어 있습니다. |
 | `CheatCommand.Join` | 문화권과 무관하게 직렬화합니다. 공백이나 따옴표 · `\`가 있는 문자열과 빈 문자열은 `"..."`로 감싸고(`\"` · `\\` 이스케이프), `bool`은 `true`/`false`, enum은 정수로 바꿉니다. |
@@ -273,6 +270,12 @@ CheatSystem.ResumeServerQueue();
 
 > `BuildPlayerOptions.extraScriptingDefines`로 넣은 심볼은 빌드 리포트에서 읽을 수 없습니다. 그 경로로 릴리즈를 빌드한다면 `HB_CHEAT_RELEASE=1`을 함께 설정하세요. (HB_Build는 PlayerSettings를 쓰므로 해당되지 않습니다.)
 > 빌드 가드는 산출물을 만들기 전에 멈추는 장치입니다. 배포 단계(CI)의 검사를 대신하지 않습니다.
+
+**라이브 환경에서 치트가 필요할 때**
+
+- 라이브 서버에 붙는 QA 빌드(Development Build, `LIVE` 심볼 없음)를 만들어 쓰세요. 접속할 서버 주소는 게임 쪽 설정이라 빌드 가드와 상관없습니다.
+- `LIVE` 심볼이 켜진 빌드나 Development가 아닌 빌드는 릴리즈로 보고 치트를 막습니다(위 판정 기준). LIVE + Development 빌드(HB_Build의 `_DEVBUILD`)도 `LIVE` 심볼 때문에 막힙니다.
+- 서버 치트(`CheatTarget.Server`)가 라이브 서버에서 동작할지는 서버가 정합니다(클라가 보낸 치트 명령을 받아 줄지).
 
 ### IDE(Rider · Visual Studio) 표시
 
