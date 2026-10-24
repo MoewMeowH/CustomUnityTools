@@ -313,6 +313,22 @@ namespace HB.Cheat
         /// </summary>
         public static string PlayEntering(bool active, bool? original, string reason, string pipelineConfig, bool? pipelineEnableInBuilds, bool? pipelineAutoStart)
         {
+            return BuildPlayEntering(active, original, reason, pipelineConfig, pipelineEnableInBuilds, pipelineAutoStart, false, default, null, null);
+        }
+
+        /// <summary>
+        /// playUnfocusedOverride를 함께 쓰는 cheat_play 응답. unfocusedActive가 false면 unfocusedReason에 이유
+        /// (disabled / api_unavailable / no_play_mode_view / not_focused). unfocusedOriginal은 Game 뷰의 원래 값(PlayFocused 등), 읽지 않았으면 null.
+        /// </summary>
+        public static string PlayEntering(bool active, bool? original, string reason, string pipelineConfig, bool? pipelineEnableInBuilds, bool? pipelineAutoStart,
+            bool unfocusedActive, string unfocusedOriginal, string unfocusedReason)
+        {
+            return BuildPlayEntering(active, original, reason, pipelineConfig, pipelineEnableInBuilds, pipelineAutoStart, true, unfocusedActive, unfocusedOriginal, unfocusedReason);
+        }
+
+        private static string BuildPlayEntering(bool active, bool? original, string reason, string pipelineConfig, bool? pipelineEnableInBuilds, bool? pipelineAutoStart,
+            bool writeUnfocused, bool unfocusedActive, string unfocusedOriginal, string unfocusedReason)
+        {
             var w = new CheatJsonWriter().BeginObject()
                 .Prop("ok", true)
                 .Prop("playMode", "entering")
@@ -324,7 +340,17 @@ namespace HB.Cheat
                 .Prop("config", pipelineConfig);
             NullableProp(w, "enableInBuilds", pipelineEnableInBuilds);
             NullableProp(w, "autoStart", pipelineAutoStart);
-            return w.EndObject().EndObject().EndObject().ToString();
+            w.EndObject().EndObject();
+
+            if (writeUnfocused)
+            {
+                w.Key("playUnfocusedOverride").BeginObject()
+                    .Prop("active", unfocusedActive)
+                    .Prop("original", unfocusedOriginal)
+                    .Prop("reason", unfocusedReason)
+                    .EndObject();
+            }
+            return w.EndObject().ToString();
         }
 
         /// <summary>cheat_stop 응답. runInBackground 복원은 에디트 모드에 들어간 뒤라 응답 시점에는 아직 켜져 있을 수 있다.</summary>
