@@ -36,8 +36,8 @@ namespace CheatExamples
             Application.targetFrameRate = fps;
         }
 
-        // 테이블 다시 읽기 → Provider.Version이 바뀌어 목록이 다시 만들어진다
-        [Cheat("system.reloadtables", "System/Reload Tables", Order = 10, Description = "테이블 리로드 (치트 목록 캐시도 갱신)")]
+        // 테이블 다시 읽기 → 다음에 치트를 고르거나 실행할 때 후보 목록을 새로 읽는다
+        [Cheat("system.reloadtables", "System/Reload Tables", Order = 10, Description = "테이블 리로드")]
         public static string ReloadTables()
         {
             ItemTable.Reload();

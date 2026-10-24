@@ -80,11 +80,9 @@ namespace HB.Cheat.Editor
             sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();
-            sb.AppendLine("// 테이블을 읽어 후보를 만든다. Version이 바뀔 때만 다시 수집한다.");
+            sb.AppendLine("// 테이블을 읽어 후보를 만든다. 치트를 고를 때 · 실행할 때 다시 수집한다.");
             sb.AppendLine($"public sealed class {className}SampleProvider : ICheatOptionProvider");
             sb.AppendLine("{");
-            sb.AppendLine("    public int Version => 0;");
-            sb.AppendLine();
             sb.AppendLine("    public void Collect(CheatOptionContext context, List<CheatOption> results)");
             sb.AppendLine("    {");
             sb.AppendLine("        results.Add(new CheatOption(1001, \"Sample A\"));");

@@ -27,7 +27,7 @@ unity command cheat_status --execution <id> --session <session>
 | `ItemCheats.cs` | 서버 치트: 목록 + 개수(`Step = 10`), `DependsOn`, enum(서버로는 정수 값, `Epic` → 3), 인자 없음, `Order` |
 | `AccountCheats.cs` | 서버 치트: enum + `long`(`Step = 1000`), 공백이 있는 문자열(`"..."`로 감쌈), 기본값이 있는 목록 인자, 3단 경로(`Account/Currency/Add`, `Account/Mail/Send`) |
 | `ActorCheats.cs` | 클라 치트: 반환형 `void` / `string` / `bool` / `CheatResult`, 토글, 텍스트 입력, 인자 없음, enum + 소수 step(`Step = 0.5`), 3단 경로(`Actor/Stat/Set`) |
-| `SystemCheats.cs` | 클라 치트: 배속(소수 step), 씬 이동(문자열 목록), FPS, 테이블 리로드(목록 캐시 갱신), `Order` |
+| `SystemCheats.cs` | 클라 치트: 배속(소수 step), 씬 이동(문자열 목록), FPS, 테이블 리로드(다음에 고르거나 실행할 때 목록을 새로 읽음), `Order` |
 | `ExampleCheatTransport.cs` | `ICheatServerTransport` 연결과 `ReportServerResult` 응답 처리. `BeforeSceneLoad`에서 등록합니다. `ExampleNetwork.IsConnected`가 false면 전송 실패(`Failed`)가 됩니다. 독립 패널에 프로젝트 `PanelSettings`를 넣는 예는 주석으로 들어 있습니다. |
 
 ## 치트 목록

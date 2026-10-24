@@ -392,7 +392,11 @@ namespace HB.Cheat
             var execution = new CheatExecution(s_NextExecutionId++, definition, copy, Time.realtimeSinceStartup, source);
 
             if (definition != null)
+            {
                 s_LastValues[definition.Id] = copy;
+                // 실행은 최신 후보 목록으로 검증한다 (테이블이 다시 로드됐을 수 있음)
+                CheatOptionCache.Invalidate(definition.Id);
+            }
 
             if (!Validate(definition, copy, out string error))
             {
@@ -538,7 +542,7 @@ namespace HB.Cheat
             return CheatOptionCache.Get(definition, argIndex, values, out error);
         }
 
-        /// <summary>Provider 캐시를 모두 버린다 (테이블 리로드 후 등).</summary>
+        /// <summary>Provider 캐시를 모두 버린다. 치트를 고를 때 · 실행할 때는 자동으로 다시 수집하므로, 열려 있는 목록을 바로 바꾸고 싶을 때만 쓴다.</summary>
         public static void InvalidateOptions() => CheatOptionCache.Clear();
 
         private static void RunLocal(CheatExecution execution)

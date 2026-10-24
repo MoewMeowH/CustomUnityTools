@@ -8,14 +8,11 @@ using UnityEngine;
 namespace HB.Cheat
 {
     /// <summary>
-    /// 인자 후보 목록 (테이블 조회 등). 결과는 캐시되며 Version이나 의존 인자 값이 바뀔 때만 다시 수집한다.
-    /// 메인 스레드에서 호출된다.
+    /// 인자 후보 목록 (테이블 조회 등). 메인 스레드에서 호출된다.
+    /// 치트를 고를 때(패널) · 실행할 때 · CLI로 후보를 조회할 때 다시 수집하고, 같은 치트를 편집하는 동안은 결과를 캐시한다 (의존 인자 값이 바뀌면 다시 수집).
     /// </summary>
     public interface ICheatOptionProvider
     {
-        /// <summary>데이터가 바뀌면 다른 값을 반환한다 (캐시 무효화). 고정 데이터면 0.</summary>
-        int Version { get; }
-
         /// <summary>results에 후보를 채운다. Value는 인자 타입과 같아야 한다 (int 인자면 int).</summary>
         void Collect(CheatOptionContext context, List<CheatOption> results);
     }
@@ -52,7 +49,7 @@ namespace HB.Cheat
     }
 
     /// <summary>
-    /// Provider 결과 캐시. 키: (치트, 인자) / 무효화: Provider.Version, 의존 인자 값.
+    /// Provider 결과 캐시. 키: (치트, 인자) / 무효화: 의존 인자 값, Invalidate(치트 선택 · 실행 · CLI 조회), Clear.
     /// </summary>
 #if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
     [AutoStaticsCleanup]
@@ -61,7 +58,6 @@ namespace HB.Cheat
     {
         private sealed class Entry
         {
-            public int Version;
             public object[] DependencyValues;
             public readonly List<CheatOption> Options = new List<CheatOption>();
             public string Error;
@@ -77,20 +73,18 @@ namespace HB.Cheat
             if (arg.Provider == null)
                 return (IReadOnlyList<CheatOption>)arg.FixedOptions ?? Array.Empty<CheatOption>();
 
-            int version = SafeVersion(arg.Provider);
             var key = (def.Id, argIndex);
             if (!s_Entries.TryGetValue(key, out var entry))
             {
                 entry = new Entry();
                 s_Entries.Add(key, entry);
             }
-            else if (entry.DependencyValues != null && entry.Version == version && SameDependencies(arg, values, entry.DependencyValues))
+            else if (entry.DependencyValues != null && SameDependencies(arg, values, entry.DependencyValues))
             {
                 error = entry.Error;
                 return entry.Options;
             }
 
-            entry.Version = version;
             entry.DependencyValues = CaptureDependencies(arg, values);
             entry.Options.Clear();
             entry.Error = null;
@@ -111,17 +105,19 @@ namespace HB.Cheat
 
         public static void Clear() => s_Entries.Clear();
 
-        private static int SafeVersion(ICheatOptionProvider provider)
+        private static readonly List<(string, int)> s_RemoveBuffer = new List<(string, int)>();
+
+        /// <summary>이 치트의 후보 캐시만 버린다 (다음 Get에서 다시 수집).</summary>
+        public static void Invalidate(string cheatId)
         {
-            try
+            if (cheatId == null) return;
+            s_RemoveBuffer.Clear();
+            foreach (var key in s_Entries.Keys)
             {
-                return provider.Version;
+                if (key.Item1 == cheatId) s_RemoveBuffer.Add(key);
             }
-            catch (Exception e)
-            {
-                Debug.LogException(e);
-                return int.MinValue;
-            }
+            foreach (var key in s_RemoveBuffer) s_Entries.Remove(key);
+            s_RemoveBuffer.Clear();
         }
 
         private static object[] CaptureDependencies(CheatArgDefinition arg, object[] values)
