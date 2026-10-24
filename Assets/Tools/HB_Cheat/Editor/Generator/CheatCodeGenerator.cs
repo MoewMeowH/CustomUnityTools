@@ -357,7 +357,7 @@ namespace HB.Cheat.Editor
             sb.AppendLine($"            options.ToggleKey = {Str(settings.ToggleKey)};");
             sb.AppendLine($"            options.ServerTimeoutSeconds = {Flt(settings.ServerTimeoutSeconds)};");
             sb.AppendLine($"            options.HistoryCapacity = {settings.HistoryCapacity};");
-            sb.AppendLine($"            options.DontDestroyOnLoad = {Bool(settings.DontDestroyOnLoad)};");
+            sb.AppendLine($"            options.DontDestroyOnLoad = {Bool(settings.PersistAcrossScenes)};");
             sb.AppendLine($"            options.AllowRawFromAutomation = {Bool(settings.AllowRawFromAutomation)};");
             sb.AppendLine();
 

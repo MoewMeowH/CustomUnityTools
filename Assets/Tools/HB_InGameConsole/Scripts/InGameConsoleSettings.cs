@@ -55,7 +55,7 @@ namespace InGameConsoleSystem
             set => initMode = value;
         }
 
-        public bool DontDestroyOnLoad
+        public bool PersistAcrossScenes
         {
             get => dontDestroyOnLoad;
             set => dontDestroyOnLoad = value;

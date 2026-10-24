@@ -54,10 +54,11 @@ public class HB_InGameConsoleUI : MonoBehaviour
 
 #if UNITY_6000_5_OR_NEWER
     private PanelRenderer panelRenderer;
+    // OnPanelReloaded(6.5+)에서만 쓴다 (밖에 두면 6.3에서 CS0414)
+    private int handledUIVersion = -1;
 #endif
     private UIDocument uiDocument;
     private VisualElement rootElement;
-    private int handledUIVersion = -1;
 
     // View Mode elements
     private Button viewLogsBtn;
@@ -188,7 +189,7 @@ public class HB_InGameConsoleUI : MonoBehaviour
         var settings = InGameConsoleSettings.Instance;
         if (settings != null)
         {
-            dontDestroyOnLoad = settings.DontDestroyOnLoad;
+            dontDestroyOnLoad = settings.PersistAcrossScenes;
             showFpsGraph = settings.ShowFpsGraph;
             autoScroll = settings.AutoScroll;
         }

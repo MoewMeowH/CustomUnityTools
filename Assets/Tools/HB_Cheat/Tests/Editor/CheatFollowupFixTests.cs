@@ -1,9 +1,15 @@
 using HB.Cheat.Editor;
 using NUnit.Framework;
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
 
 namespace HB.Cheat.Tests
 {
     /// <summary>2026-10-24 후속: long 스테퍼 경계, 생성 코드 문자열 이스케이프 · float 기본값 리터럴</summary>
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+    [NoAutoStaticsCleanup]
+#endif
     public class CheatFollowupFixTests
     {
         private static readonly CheatArgDefinition s_Long = new CheatArgDefinition { Name = "n", ValueType = CheatValueType.Long, Editor = CheatEditorKind.Number };
