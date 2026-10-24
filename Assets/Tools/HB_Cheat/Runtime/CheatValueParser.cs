@@ -98,6 +98,8 @@ namespace HB.Cheat
             }
         }
 
+        private const double LongMaxAsDouble = 9223372036854775807d;
+
         /// <summary>double을 인자 타입으로 (정수형은 반올림, 범위 적용)</summary>
         public static object FromDouble(CheatArgDefinition arg, double value)
         {
@@ -106,7 +108,11 @@ namespace HB.Cheat
             switch (arg.ValueType)
             {
                 case CheatValueType.Int: return (int)Math.Round(Math.Max(int.MinValue, Math.Min(int.MaxValue, value)));
-                case CheatValueType.Long: return (long)Math.Round(Math.Max(long.MinValue, Math.Min(long.MaxValue, value)));
+                case CheatValueType.Long:
+                    // (double)long.MaxValue는 2^63으로 반올림돼 long 범위 밖이다 → 캐스트 전에 끝값으로 자른다
+                    if (value >= LongMaxAsDouble) return long.MaxValue;
+                    if (value <= long.MinValue) return long.MinValue;
+                    return (long)Math.Round(value);
                 case CheatValueType.Float: return (float)value;
                 default: return value;
             }

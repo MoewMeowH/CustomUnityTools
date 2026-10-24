@@ -22,7 +22,7 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
 4. 컴파일이 끝나면 레지스트리(`HBCheatRegistry.g.cs`)가 자동으로 생성됩니다.
 5. Play를 누르면 열 수 있습니다. PC는 `F8`, 모바일은 화면의 `CHEAT` 버튼(끌어서 이동 가능)을 씁니다. InGameConsole이 있으면 콘솔의 `Cheat` 탭으로 들어갑니다.
 
-Settings의 Runtime 값(열기 키, 서버 대기 시간 등)은 생성 레지스트리 코드에 들어갑니다. 설정 창에서 바꾸면 레지스트리를 바로 다시 생성하고(Play 중이면 에디트 모드로 돌아온 뒤), 글자 칸은 Enter나 다른 칸으로 옮길 때 적용됩니다. `Auto Generate`를 끄면 `Generate Registry`를 눌러야 반영됩니다. 열기 키는 키 이름만 받습니다(`F8`, `BackQuote` 등 — 숫자·`None`은 경고 후 사용 안 함).
+Settings의 Runtime 값(열기 키, 서버 대기 시간 등)은 생성 레지스트리 코드에 들어갑니다. 설정 창 · Inspector · Undo · VCS 풀 어느 경로로든 이 값이 바뀌면 레지스트리를 바로 다시 생성하고(Play 중이면 에디트 모드로 돌아온 뒤), 글자 칸은 Enter나 다른 칸으로 옮길 때 적용됩니다. `Auto Generate`를 끄면 `Generate Registry`를 눌러야 반영됩니다. 열기 키는 키 이름만 받습니다(`F8`, `BackQuote` 등 — 숫자·`None`은 경고 후 사용 안 함).
 
 ```csharp
 #if DEV_CHEAT   // Assembly-CSharp에 둘 때 (asmdef 방식이면 필요 없음)

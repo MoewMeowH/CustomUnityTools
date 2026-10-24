@@ -71,7 +71,8 @@ namespace HB.Cheat.Editor
         public bool PreferConsoleTab => preferConsoleTab;
         public bool ShowFloatingButton => showFloatingButton;
         public string ToggleKey => toggleKey ?? string.Empty;
-        public float ServerTimeoutSeconds => Mathf.Max(0.5f, serverTimeoutSeconds);
+        // NaN · 무한대는 Mathf.Max를 통과하고 생성 코드 리터럴로도 쓸 수 없다 → 기본값
+        public float ServerTimeoutSeconds => float.IsNaN(serverTimeoutSeconds) || float.IsInfinity(serverTimeoutSeconds) ? 10f : Mathf.Max(0.5f, serverTimeoutSeconds);
         public int HistoryCapacity => Mathf.Max(1, historyCapacity);
         public bool DontDestroyOnLoad => dontDestroyOnLoad;
         public bool AllowRawFromAutomation => allowRawFromAutomation;
