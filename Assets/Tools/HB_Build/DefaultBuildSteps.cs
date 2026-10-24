@@ -27,7 +27,7 @@ namespace HB.CustomBuild.Editor
             // UnityEngine.Object는 ?? 로 판정하지 않는다 (파괴/누락된 참조가 null로 취급되지 않음)
             var sceneDefine = context.GetCustomData<SceneDefine>("SceneDefine", null);
             if (sceneDefine == null)
-                sceneDefine = SceneDefine.LoadIfExists();
+                sceneDefine = SceneDefine.LoadIfExists(context);
 
             if (sceneDefine == null) return;
 
@@ -58,7 +58,6 @@ namespace HB.CustomBuild.Editor
         public virtual void OnPreBuild(BuildContext context)
         {
             PlayerSettings.stripEngineCode = false;
-            QualitySettings.skinWeights = SkinWeights.FourBones;
 
             // 로그 및 스택트레이스 설정
             PlayerSettings.usePlayerLog = context.IsDevBuild;
@@ -92,7 +91,7 @@ namespace HB.CustomBuild.Editor
         {
             var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null);
             if (container == null)
-                container = ProjectDefine.LoadIfExists();
+                container = ProjectDefine.LoadIfExists(context);
 
             // LIVE에서 심볼 설정이 없으면 커밋된 ProjectSettings의 개발용 심볼(USE_HLOG 등)이 그대로 들어가므로 실패시킨다
             if (container == null)
@@ -199,16 +198,55 @@ namespace HB.CustomBuild.Editor
             PlayerSettings.bundleVersion = context.Version;
             PlayerSettings.iOS.buildNumber = context.VersionCode?.Trim() ?? string.Empty;
 
-            string provisionUuid = context.GetCustomData<string>("ProvisionUUID", null);
-            if (!string.IsNullOrEmpty(provisionUuid))
-            {
-                PlayerSettings.iOS.iOSManualProvisioningProfileType = ProvisioningProfileType.Distribution;
-                PlayerSettings.iOS.iOSManualProvisioningProfileID = provisionUuid;
-            }
+            ApplySigning(context);
 
             EditorUserBuildSettings.development = context.IsDevBuild;
             EditorUserBuildSettings.buildWithDeepProfilingSupport = context.IsDeepProfile;
             EditorUserBuildSettings.connectProfiler = BuildHelper.IsAutoProfile;
+        }
+
+        /// <summary> ProvisionType 값: 자동 서명 (Unity ProvisioningProfileType에는 없는 HB_Build 전용 값) </summary>
+        public const string PROVISION_TYPE_AUTO_SIGN = "AutoSign";
+
+        /// <summary>
+        /// CustomData "ProvisionType"과 "ProvisionUUID"로 서명 방식을 정합니다.
+        /// ProvisionType은 Unity ProvisioningProfileType 그대로(Development / Distribution / Automatic = 프로필 종류를 Xcode 빌드 때 자동 판정,
+        /// 대소문자 무시, 없으면 Distribution)이고 UUID가 있으면 자동 서명을 끄고 그 프로필로 수동 서명합니다.
+        /// "AutoSign"이면 UUID 없이 자동 서명을 켭니다.
+        /// </summary>
+        protected virtual void ApplySigning(BuildContext context)
+        {
+            string provisionUuid = context.GetCustomData<string>("ProvisionUUID", null)?.Trim();
+            string typeText = context.GetCustomData<string>("ProvisionType", null)?.Trim();
+
+            if (string.Equals(typeText, PROVISION_TYPE_AUTO_SIGN, StringComparison.OrdinalIgnoreCase))
+            {
+                PlayerSettings.iOS.appleEnableAutomaticSigning = true;
+                if (!string.IsNullOrEmpty(provisionUuid))
+                    context.AddWarning($"[iOS] ProvisionType is {PROVISION_TYPE_AUTO_SIGN}, so ProvisionUUID is ignored (Xcode picks the profile).");
+                return;
+            }
+
+            var profileType = ProvisioningProfileType.Distribution;
+            if (!string.IsNullOrEmpty(typeText) &&
+                (!Enum.TryParse(typeText, true, out profileType) || !Enum.IsDefined(typeof(ProvisioningProfileType), profileType)))
+            {
+                throw BuildHelper.ThrowError($"Invalid ProvisionType '{typeText}' (allowed: Development, Distribution, Automatic, {PROVISION_TYPE_AUTO_SIGN})");
+            }
+
+            if (string.IsNullOrEmpty(provisionUuid))
+            {
+                // 프로필을 지정하지 않으면 프로젝트의 서명 설정을 그대로 쓴다 (기존 동작)
+                if (!string.IsNullOrEmpty(typeText))
+                    context.AddWarning($"[iOS] ProvisionType '{typeText}' is set without ProvisionUUID. Keeping the project's signing settings.");
+                return;
+            }
+
+            // 수동 프로필은 자동 서명이 켜져 있으면 Xcode가 무시하므로 끈다 (빌드 뒤 스냅샷이 원래 값으로 되돌림)
+            PlayerSettings.iOS.appleEnableAutomaticSigning = false;
+            PlayerSettings.iOS.iOSManualProvisioningProfileType = profileType;
+            PlayerSettings.iOS.iOSManualProvisioningProfileID = provisionUuid;
+            BuildHelper.Log($"[iOS] Manual signing: {profileType} profile {provisionUuid}");
         }
     }
 
@@ -238,10 +276,7 @@ namespace HB.CustomBuild.Editor
             // 실행 파일은 버전별 하위 폴더(OutputPath/<이름>/<이름>.exe)에 있으므로 그 폴더만 압축하고,
             // zip은 압축 대상 밖(상위 OutputPath)에 폴더 이름으로 생성한다 (중복 빌드 시 "<이름> (2).zip")
             string buildFolder = Path.GetDirectoryName(exePath);
-            string zipPath = Path.Combine(Path.GetDirectoryName(buildFolder), $"{Path.GetFileName(buildFolder)}.zip");
-
-            if (File.Exists(zipPath))
-                File.Delete(zipPath);
+            string zipPath = GetUniqueZipPath(Path.GetDirectoryName(buildFolder), Path.GetFileName(buildFolder));
 
             BuildHelper.Log($"[PostBuild] Creating ZIP package -> {zipPath}");
             int skipped = 0;
@@ -259,6 +294,17 @@ namespace HB.CustomBuild.Editor
                 }
             }
             BuildHelper.Log($"[PostBuild] ZIP package created successfully! (excluded {skipped} debug/backup file(s))");
+        }
+
+        /// <summary>
+        /// "&lt;이름&gt;.zip"이 이미 있으면 지우지 않고 "&lt;이름&gt; (2).zip", "&lt;이름&gt; (3).zip" ... 중 비어 있는 이름을 씁니다.
+        /// </summary>
+        private static string GetUniqueZipPath(string parent, string name)
+        {
+            string zipPath = Path.Combine(parent, name + ".zip");
+            for (int i = 2; File.Exists(zipPath); i++)
+                zipPath = Path.Combine(parent, $"{name} ({i}).zip");
+            return zipPath;
         }
 
         /// <summary>

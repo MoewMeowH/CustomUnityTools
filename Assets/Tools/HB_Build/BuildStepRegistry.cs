@@ -22,9 +22,16 @@ namespace HB.CustomBuild.Editor
         private static List<IPreBuildStep> s_AllPreBuildSteps;
         private static List<IPostBuildStep> s_AllPostBuildSteps;
         private static List<string> s_InstantiationErrors = new List<string>();
+        private static List<string> s_DuplicateStepIdErrors = new List<string>();
 
         /// <summary> 마지막 ReloadSteps에서 인스턴스를 만들지 못한 스텝 (빌드 경로에서는 실패 처리) </summary>
         public static IReadOnlyList<string> InstantiationErrors => s_InstantiationErrors;
+
+        /// <summary>
+        /// 마지막 ReloadSteps에서 같은 StepId로 둘 이상 등록된 스텝 (예: 같은 기본 스텝을 덮어쓴 형제 클래스 둘 — 둘 다 돌고 하나만 끌 수 없음).
+        /// 빌드 경로에서는 실패 처리
+        /// </summary>
+        public static IReadOnlyList<string> DuplicateStepIdErrors => s_DuplicateStepIdErrors;
 
     #if UNITY_EDITOR
         [InitializeOnLoadMethod]
@@ -33,6 +40,7 @@ namespace HB.CustomBuild.Editor
             s_AllPreBuildSteps = null;
             s_AllPostBuildSteps = null;
             s_InstantiationErrors = new List<string>();
+            s_DuplicateStepIdErrors = new List<string>();
         }
     #endif
 
@@ -87,6 +95,7 @@ namespace HB.CustomBuild.Editor
             s_AllPreBuildSteps = new List<IPreBuildStep>();
             s_AllPostBuildSteps = new List<IPostBuildStep>();
             s_InstantiationErrors = new List<string>();
+            s_DuplicateStepIdErrors = new List<string>();
 
             // 1. IPreBuildStep 타입 수집 및 상속 오버라이드 필터링
             var preTypes = TypeCache.GetTypesDerivedFrom<IPreBuildStep>()
@@ -138,6 +147,18 @@ namespace HB.CustomBuild.Editor
                     s_InstantiationErrors.Add($"{type.FullName}: {cause.GetType().Name}: {cause.Message}");
                 }
             }
+
+            // 비활성 목록은 Pre/Post 구분 없이 ID로 끄므로 둘을 합쳐 검사한다
+            // (한 클래스가 Pre · Post를 함께 구현하면 두 목록에 같은 타입으로 들어가므로 서로 다른 타입만 센다)
+            s_DuplicateStepIdErrors = s_AllPreBuildSteps.Select(s => (s.StepId, Type: s.GetType()))
+                .Concat(s_AllPostBuildSteps.Select(s => (s.StepId, Type: s.GetType())))
+                .GroupBy(x => x.StepId)
+                .Select(g => (Id: g.Key, Types: g.Select(x => x.Type).Distinct().ToList()))
+                .Where(g => g.Types.Count > 1)
+                .Select(g => $"'{g.Id}' ({string.Join(", ", g.Types.Select(t => t.FullName))})")
+                .ToList();
+            foreach (var error in s_DuplicateStepIdErrors)
+                Debug.LogError($"[BuildStepRegistry] Duplicate step id {error}");
 
             // 우선순위 정렬
             s_AllPreBuildSteps = s_AllPreBuildSteps.OrderBy(x => x.ExecutionOrder).ToList();

@@ -23,7 +23,6 @@ namespace HB.CustomBuild.Editor
 
         // 공통
         private bool m_StripEngineCode;
-        private SkinWeights m_SkinWeights;
         private bool m_UsePlayerLog;
         private readonly StackTraceLogType[] m_StackTraceTypes = new StackTraceLogType[s_LogTypes.Length];
         private string m_Defines;
@@ -43,6 +42,7 @@ namespace HB.CustomBuild.Editor
         private string m_IOSBuildNumber;
         private ProvisioningProfileType m_IOSProfileType;
         private string m_IOSProfileId;
+        private bool m_IOSAutomaticSigning;
 
         private BuildSettingsSnapshot() { }
 
@@ -53,7 +53,6 @@ namespace HB.CustomBuild.Editor
                 m_Group = group,
                 m_NamedTarget = NamedBuildTarget.FromBuildTargetGroup(group),
                 m_StripEngineCode = PlayerSettings.stripEngineCode,
-                m_SkinWeights = QualitySettings.skinWeights,
                 m_UsePlayerLog = PlayerSettings.usePlayerLog,
                 m_BundleVersion = PlayerSettings.bundleVersion,
                 m_Development = EditorUserBuildSettings.development,
@@ -79,6 +78,7 @@ namespace HB.CustomBuild.Editor
                 s.m_IOSBuildNumber = PlayerSettings.iOS.buildNumber;
                 s.m_IOSProfileType = PlayerSettings.iOS.iOSManualProvisioningProfileType;
                 s.m_IOSProfileId = PlayerSettings.iOS.iOSManualProvisioningProfileID;
+                s.m_IOSAutomaticSigning = PlayerSettings.iOS.appleEnableAutomaticSigning;
             }
 
             return s;
@@ -92,7 +92,6 @@ namespace HB.CustomBuild.Editor
             var errors = new List<string>();
 
             TryRestore(errors, "stripEngineCode", () => PlayerSettings.stripEngineCode = m_StripEngineCode);
-            TryRestore(errors, "skinWeights", () => QualitySettings.skinWeights = m_SkinWeights);
             TryRestore(errors, "usePlayerLog", () => PlayerSettings.usePlayerLog = m_UsePlayerLog);
             TryRestore(errors, "bundleVersion", () => PlayerSettings.bundleVersion = m_BundleVersion);
             TryRestore(errors, "development", () => EditorUserBuildSettings.development = m_Development);
@@ -130,6 +129,7 @@ namespace HB.CustomBuild.Editor
                 TryRestore(errors, "iOS.buildNumber", () => PlayerSettings.iOS.buildNumber = m_IOSBuildNumber);
                 TryRestore(errors, "iOS.ProvisioningProfileType", () => PlayerSettings.iOS.iOSManualProvisioningProfileType = m_IOSProfileType);
                 TryRestore(errors, "iOS.ProvisioningProfileID", () => PlayerSettings.iOS.iOSManualProvisioningProfileID = m_IOSProfileId);
+                TryRestore(errors, "iOS.appleEnableAutomaticSigning", () => PlayerSettings.iOS.appleEnableAutomaticSigning = m_IOSAutomaticSigning);
             }
 
             // 전역 SaveAssets는 사용자의 미저장 에셋까지 저장하므로, 복원한 설정 에셋만 저장한다
