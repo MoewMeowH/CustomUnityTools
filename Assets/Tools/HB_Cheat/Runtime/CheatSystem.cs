@@ -682,6 +682,17 @@ namespace HB.Cheat
             }
         }
 
+        private static void RaiseFavoritesChanged()
+        {
+            var handlers = FavoritesChanged;
+            if (handlers == null) return;
+            foreach (Action handler in handlers.GetInvocationList())
+            {
+                try { handler(); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
+        }
+
         private static void RaiseServerQueueChanged()
         {
             var handlers = ServerQueueChanged;
@@ -748,7 +759,7 @@ namespace HB.Cheat
 
             PlayerPrefs.SetString(FavoritesPrefsKey, string.Join("\n", s_Favorites));
             PlayerPrefs.Save();
-            FavoritesChanged?.Invoke();
+            RaiseFavoritesChanged();
         }
 
         private static void EnsureFavoritesLoaded()

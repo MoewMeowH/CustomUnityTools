@@ -22,7 +22,7 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
 
 | 패키지 | 켜지는 심볼 | 켜지는 기능 |
 |---|---|---|
-| `com.unity.inputsystem` | `HB_CHEAT_INPUT_SYSTEM` | 열기 키를 Input System `Key`로 읽습니다. 없으면 구 Input Manager `KeyCode`로 읽습니다. |
+| `com.unity.inputsystem` | `HB_CHEAT_INPUT_SYSTEM` | 열기 키를 Input System `Key`로 읽습니다. 없으면 구 Input Manager `KeyCode`로 읽습니다. 패키지가 없어도 `HB.Cheat` asmdef의 `Unity.InputSystem` 참조는 Unity가 무시하므로 컴파일 에러가 나지 않습니다. |
 | `com.unity.pipeline` | `HB_CHEAT_PIPELINE` | Unity CLI 명령 어셈블리(`HB.Cheat.Editor.Cli`)가 컴파일됩니다. |
 | `com.hb.ingameconsole` | `HB_CHEAT_HAS_CONSOLE` | InGameConsole 연동 어셈블리(`HB.Cheat.InGameConsole`)가 컴파일됩니다. |
 
@@ -31,15 +31,15 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
 ## 🚀 시작하기
 
 1. `Tools > HB > Cheat`를 엽니다. 탭은 **Settings** · **Cheats** 두 개입니다.
-2. **Settings** 탭의 **Cheat Defines**에서 플랫폼별 `Turn On`을 누릅니다(Standalone · Android · iOS). `HB_CHEAT`(패키지)와 `DEV_CHEAT`(프로젝트, 이름 변경 가능 — 영문자 · 숫자 · `_`만, 숫자로 시작 불가. 규칙에 안 맞으면 경고 후 `DEV_CHEAT`)가 함께 켜집니다. 상태는 `ON` / `OFF` / `MISMATCH`(한쪽만 켜짐)로 보입니다.
+2. **Settings** 탭의 **Cheat Defines**에서 플랫폼별 `Turn On`을 누릅니다(Standalone · Android · iOS, 현재 활성 플랫폼이 그 밖이면 — WebGL · Dedicated Server 등 — 그 플랫폼 줄도 보입니다). `HB_CHEAT`(패키지)와 `DEV_CHEAT`(프로젝트, 이름 변경 가능 — 영문자 · 숫자 · `_`만, 숫자로 시작 불가. 규칙에 안 맞으면 경고 후 `DEV_CHEAT`)가 함께 켜집니다. 상태는 `ON` / `OFF` / `MISMATCH`(한쪽만 켜짐)로 보입니다.
 3. 설정 에셋이 없으면 기본값으로 동작합니다. `Create Settings Asset`을 누르면 `Assets/Editor/HBCheat/HBCheatSettings.asset`을 만듭니다(Editor 폴더라 빌드에 들어가지 않음).
 4. `Class Name`을 적고 `Create Cheat File`로 치트 파일을 만듭니다. 생성 위치는 `Cheat Folder`(기본 `Assets/Cheats`)입니다.
 5. 컴파일이 끝나면 레지스트리(`HBCheatRegistry.g.cs`)가 자동으로 생성됩니다.
 6. Play를 누르면 열 수 있습니다. PC는 `F8`, 모바일은 화면의 `CHEAT` 버튼(끌어서 이동 가능)을 씁니다. InGameConsole이 있으면 콘솔의 `Cheat` 탭으로 들어갑니다.
 
-Settings의 Runtime 값(Init Mode, Prefer Console Tab, Show Floating Button, 열기 키, 서버 대기 시간, 히스토리 용량, Dont Destroy On Load)과 `Allow Raw From Automation`은 생성 레지스트리 코드에 들어갑니다. 설정 창 · Inspector · Undo · VCS 풀 어느 경로로든 이 값이 바뀌면 레지스트리를 바로 다시 생성하고(Play 중이면 에디트 모드로 돌아온 뒤), 글자 칸은 Enter나 다른 칸으로 옮길 때 적용됩니다. `Auto Generate`를 끄면 `Generate Registry`를 눌러야 반영됩니다. 열기 키는 키 이름 하나만 받습니다(`F8`, `BackQuote` 등, 대소문자 무시 — 숫자 · `None` · 쉼표로 이은 이름은 경고 후 사용 안 함). Input System 키보드에 없는 키면 Play 중에 경고 후 끕니다.
+Settings의 Runtime 값(Init Mode, Prefer Console Tab, Show Floating Button, 열기 키, 서버 대기 시간, 히스토리 용량, Dont Destroy On Load)과 `Allow Raw From Automation`은 생성 레지스트리 코드에 들어갑니다. 설정 창 · Inspector · Undo · VCS 풀 어느 경로로든 이 값이 바뀌면 레지스트리를 바로 다시 생성하고(Play 중이면 에디트 모드로 돌아온 뒤), 글자 칸은 Enter나 다른 칸으로 옮길 때 적용됩니다. `Auto Generate`를 끄면 `Generate Registry`를 눌러야 반영됩니다. 열기 키는 키 이름 하나만 받습니다(`F8`, `BackQuote` 등, 대소문자 무시 — 숫자 · `None` · 쉼표로 이은 이름은 경고 후 사용 안 함). Input System 키보드에 없는 키면 Play 중에 경고 후 끕니다. 키를 읽을 입력 시스템이 없으면(Active Input Handling이 Input System인데 패키지가 없는 등) 키 이름과 따로 그 사실을 경고합니다.
 
-프로젝트 심볼 이름(`User Define`)을 바꾸면 Standalone · Android · iOS의 PlayerSettings 심볼도 옛 이름에서 새 이름으로 바꿉니다. 치트 파일의 `#if`와 치트 asmdef의 `defineConstraints`는 직접 고쳐야 합니다(Console에 경고).
+프로젝트 심볼 이름(`User Define`)을 바꾸면 옛 이름이 있는 모든 플랫폼(Standalone · Android · iOS · Dedicated Server · 예전에 켜 둔 WebGL 등)의 PlayerSettings 심볼도 옛 이름에서 새 이름으로 바꿉니다. 치트 파일의 `#if`와 치트 asmdef의 `defineConstraints`는 직접 고쳐야 합니다(Console에 경고).
 
 ```csharp
 #if DEV_CHEAT   // Assembly-CSharp에 둘 때 (asmdef 방식이면 필요 없음)
@@ -52,7 +52,7 @@ public static class ItemCheats
     [Cheat("actor.level", "Actor/Level")]
     public static void SetLevel([CheatRange(1, 100)] int level) => Player.Local.SetLevel(level);
 
-    // Server: 반환한 문자열을 서버로 보낸다
+    // Server: 반환한 문자열을 서버로 보낸다 (패널 미리보기가 값이 바뀔 때마다 부르므로 문자열만 만들 것)
     [Cheat("item.enchant", "Item/Enchant", Target = CheatTarget.Server)]
     public static string Enchant(
         [CheatArg("아이템"), CheatOptions(typeof(ItemTableProvider))] int itemId,
@@ -77,8 +77,10 @@ public sealed class EnchantLevelProvider : ICheatOptionProvider
 
     public void Collect(CheatOptionContext context, List<CheatOption> results)
     {
-        int max = ItemTable.Get(context.Get<int>("itemId")).MaxEnchant;   // 앞 인자 값
-        for (int i = 1; i <= max; i++) results.Add(new CheatOption(i, $"+{i}"));
+        if (!context.TryGet("itemId", out int itemId)) return;   // 앞 인자를 아직 안 골랐으면 빈 목록
+        var item = ItemTable.Get(itemId);
+        if (item == null) return;
+        for (int i = 1; i <= item.MaxEnchant; i++) results.Add(new CheatOption(i, $"+{i}"));
     }
 }
 #endif
@@ -90,7 +92,7 @@ public sealed class EnchantLevelProvider : ICheatOptionProvider
 |---|---|---|---|
 | Define | `User Define` | `DEV_CHEAT` | 프로젝트 치트 코드용 심볼. `HB_CHEAT`와 항상 함께 켜고 끕니다. |
 | Code | `Cheat Folder` | `Assets/Cheats` | `Create Cheat File` · `Create Cheat asmdef`가 파일을 만드는 폴더입니다. |
-| Code | `Assembly CSharp Output Folder` | `Assets/Cheats/Generated` | Assembly-CSharp에 있는 치트의 레지스트리 생성 폴더입니다. asmdef에 있는 치트는 그 asmdef 폴더의 `Generated`에 만듭니다. |
+| Code | `Assembly C Sharp Output Folder` | `Assets/Cheats/Generated` | Assembly-CSharp에 있는 치트의 레지스트리 생성 폴더입니다. asmdef에 있는 치트는 그 asmdef 폴더의 `Generated`에 만듭니다. |
 | Code | `Cheat Asmdef Name` | `Game.Cheats` | `Create Cheat asmdef`가 만드는 asmdef 이름입니다. |
 | Code | `Cheat Asmdef References` | (비어 있음) | 치트 asmdef가 `HB.Cheat`에 더해 참조할 게임 asmdef 이름입니다. |
 | Code | `Auto Generate` | 켬 | 컴파일 후 · 설정 변경 후 레지스트리를 자동으로 다시 생성합니다. |
@@ -114,13 +116,15 @@ public sealed class EnchantLevelProvider : ICheatOptionProvider
 ### 치트 파일 · asmdef 만들기
 
 - `Create Cheat File`: `<Cheat Folder>/<Class Name>.cs`를 만듭니다. Local 예제(`<분류>.log`), Server 예제(`<분류>.add`), 예제 Provider(`<Class Name>SampleProvider`)가 들어갑니다. 분류는 클래스 이름에서 `Cheats`를 뗀 값입니다(`ItemCheats` → `Item/Log`, id `item.log`).
+  - `Class Name`은 C# 식별자여야 합니다(글자 · 숫자 · `_`, 숫자로 시작 불가, 키워드 불가). 생성 코드가 쓰는 이름(`System` · `UnityEngine` · `HB` · `Debug` · `List` · `Cheat*` 타입)도 그것을 가려 컴파일되지 않으므로 쓸 수 없습니다. 아니면 만들지 않고 알립니다.
+  - 같은 파일, 같은 이름의 전역 타입, 같은 이름의 스크립트 파일(심볼이 꺼져 컴파일되지 않은 치트 파일 포함, 예제 Provider 포함)이 이미 있으면 `ItemCheats2`, `ItemCheats3` … 처럼 뒤에 번호를 붙여 만듭니다. 이때 분류와 id에도 번호가 붙습니다(`ItemCheats2` → `Item2/Log`, id `item2.log`).
 - 폴더가 Assembly-CSharp면 파일 전체를 `#if <User Define>`로 감쌉니다. asmdef 폴더면 감싸지 않습니다(asmdef의 `defineConstraints`가 막음). 설정 화면에 그 폴더가 어느 어셈블리인지 보입니다.
 - `Create Cheat asmdef in '<폴더>'`: 폴더가 Assembly-CSharp일 때만 보입니다. `Cheat Asmdef Name`으로 asmdef를 만들고 `HB.Cheat` + `Cheat Asmdef References`를 참조, `defineConstraints`에 `HB_CHEAT` + `User Define`을 넣습니다. 이미 있으면 경고만 냅니다.
 
 ### 레지스트리 생성
 
 - `[Cheat]` 메서드를 `TypeCache`로 찾아 **어셈블리마다** `HBCheatRegistry.g.cs` 하나를 만듭니다. 런타임 리플렉션 없이 호출 코드를 미리 만들어 둡니다.
-- 생성 위치: Assembly-CSharp는 `Assembly CSharp Output Folder`, asmdef는 `<asmdef 폴더>/Generated`. `Assets` 밖 asmdef, Assembly-CSharp도 asmdef도 아닌 어셈블리, 생성 폴더가 다른 어셈블리로 컴파일되는 경우는 에러로 보고하고 쓰지 않습니다.
+- 생성 위치: Assembly-CSharp는 `Assembly C Sharp Output Folder`, asmdef는 `<asmdef 폴더>/Generated`. `Assets` 밖 asmdef, Assembly-CSharp도 asmdef도 아닌 어셈블리, 생성 폴더가 다른 어셈블리로 컴파일되는 경우는 에러로 보고하고 쓰지 않습니다.
 - 내용이 같으면 파일을 쓰지 않습니다. 치트가 없어진 어셈블리의 파일, 출력 폴더를 바꾼 뒤 남은 이전 파일은 지웁니다.
 - 생성기는 **현재 에디터 플랫폼**에서 치트 심볼이 켜져 있을 때만 있습니다. 꺼져 있으면 `Generate Registry`가 비활성이고, 켜지면 생성기가 로드되며 생성합니다.
 - `Generate Registry`: 지금 생성합니다(경고도 Console에 남김). `Delete Generated`: `Assets` 아래의 생성 파일을 모두 지웁니다(심볼이 꺼져 있어도 찾음). 생성된 파일 목록은 버튼 아래 `Generated:`에 보입니다.
@@ -222,7 +226,7 @@ CheatSystem.ResumeServerQueue();
 | 항목 | 내용 |
 |---|---|
 | `[Cheat(id, path)]` | `static` 메서드(public/internal)에 붙입니다. **id는 고정 식별자**로 즐겨찾기, 히스토리, 자동 QA가 사용하며 path를 옮겨도 바꾸지 않습니다. path의 `/`는 탭을 나누고, 마지막 마디가 치트 이름입니다. |
-| `Target` | `Local`(기본): 클라에서 메서드를 실행합니다. `Server`: 메서드가 반환한 문자열을 `ICheatServerTransport`로 보냅니다. |
+| `Target` | `Local`(기본): 클라에서 메서드를 실행합니다. `Server`: 메서드가 반환한 문자열을 `ICheatServerTransport`로 보냅니다. **Server 치트 메서드는 명령 문자열만 만들고 부작용이 없어야 합니다** — 패널 미리보기가 인자 값이 바뀔 때마다 불러 보낼 문자열을 보여 줍니다. |
 | `Description` · `Order` | 패널 제목 아래 설명, 같은 탭 안 정렬 순서(작을수록 앞, 기본 0). |
 | 반환형 | Local: `void`(예외 없으면 성공) · `bool`(false면 실패) · `string`(성공 + 메시지) · `CheatResult`(직접 지정). 예외는 `Failed`와 예외 메시지가 됩니다. Server: `string`(보낼 명령)만. |
 | 인자 타입 | `int`, `long`, `float`, `double`, `bool`, `string`, `enum`. `ref` · `out` · `params`는 안 됩니다. |
@@ -257,9 +261,9 @@ CheatSystem.ResumeServerQueue();
 **빌드 가드** (`CheatBuildGuard`)
 
 1. **빌드 전**: 릴리즈 빌드인데 치트 심볼이 켜져 있으면 실패합니다. 두 심볼 중 하나만 켜져 있으면 릴리즈가 아니어도 실패합니다. 다른 빌드 단계가 심볼을 바꾼 뒤에 검사하도록 늦게(`callbackOrder` 10000) 돕니다.
-2. **스크립트 컴파일 직후**: 릴리즈 빌드라면 컴파일된 DLL에 `HB.Cheat`로 시작하는 어셈블리가 있거나, DLL 안에 `HB.Cheat` 문자열(참조)이 있으면 실패합니다. 검사할 DLL이 하나도 없어도 기본적으로 실패합니다(`Fail When Unverifiable`).
+2. **스크립트 컴파일 직후**: 릴리즈 빌드라면 컴파일된 DLL에 패키지 어셈블리(`HB.Cheat.dll` · `HB.Cheat.*.dll`)가 있거나, DLL 메타데이터에 `HB.Cheat` 어셈블리 참조나 `HB.Cheat.*` 네임스페이스 이름이 있으면 실패합니다(이름 끝이 맞을 때만 — `HB.CheatSheet` 같은 다른 이름이나 문자열 상수는 걸리지 않음. 컴파일러가 끝이 같은 이름을 접어 저장해도 놓치지 않도록 앞쪽은 보지 않아 `MyHB.Cheat` 같은 이름은 걸립니다). 검사할 DLL이 하나도 없어도 기본적으로 실패합니다(`Fail When Unverifiable`).
 
-검사하는 심볼은 빌드 대상 플랫폼의 PlayerSettings 심볼과 **활성 Build Profile**의 Scripting Defines를 합친 것입니다. 설정 창은 활성 Build Profile에도 치트 심볼이 있으면 경고합니다(`Turn On`/`Turn Off`는 PlayerSettings만 바꿈).
+검사하는 심볼은 빌드 대상 플랫폼(Dedicated Server 빌드면 Server — 에디터 설정이 아니라 그 빌드의 서브타깃)의 PlayerSettings 심볼과 **활성 Build Profile**의 Scripting Defines를 합친 것입니다. 설정 창은 활성 Build Profile에도 치트 심볼이 있으면 경고합니다(`Turn On`/`Turn Off`는 PlayerSettings만 바꿈).
 
 **릴리즈 판정 기준** (설정에서 변경)
 
@@ -312,7 +316,7 @@ unity command cheat_stop   # Play 종료
 
 | 명령 | 인자 | 내용 |
 |---|---|---|
-| `cheat_list` | 없음 | 등록된 치트와 인자 목록. Play Mode 검사를 하지 않습니다(치트는 Play 진입 때 등록되므로 Play 중에 부릅니다). |
+| `cheat_list` | 없음 | 등록된 치트와 인자 목록 (Play Mode에서만 — 치트는 Play 진입 때 등록됩니다). |
 | `cheat_options` | `--id` · `--arg`(필수), `--args`(앞 인자 값), `--query`(라벨 · 값 검색), `--limit`(기본 200) | 인자의 선택 목록. |
 | `cheat_run` | `--id`(필수), `--args` | 실행. 빠진 인자는 기본값을 씁니다. 서버 치트는 `Pending`으로 시작합니다. |
 | `cheat_status` | `--execution`(필수), `--session` | 실행 상태 조회. |
@@ -320,7 +324,8 @@ unity command cheat_stop   # Play 종료
 | `cheat_raw` | `--command`(필수) | raw 전송 (기본 꺼짐). |
 | `cheat_play` · `cheat_stop` | 없음 | Play 시작 · 종료. |
 
-- `cheat_list` · `cheat_play` · `cheat_stop`을 뺀 명령은 Play Mode가 아니거나 초기화되지 않았으면 `not_initialized`입니다.
+- `cheat_play` · `cheat_stop`을 뺀 명령은 Play Mode가 아니거나 초기화되지 않았으면 `not_initialized`입니다.
+- 코드에서 직접 부르는 `CheatProtocol.Status` · `History`는 초기화 전에도 남은 기록을 읽습니다(CLI는 위 규칙으로 막음).
 - `--args`는 `k=v`를 공백으로 나눕니다. 값에 공백이 있으면 `"..."`로 감싸고, 안의 `"`는 `\"`로 씁니다.
 
 실기기 연결(ADB, 로컬 소켓 등)은 `ICheatBridge`를 구현해 `CheatSystem.RegisterBridge`로 등록합니다. 받은 한 줄을 `CheatProtocol.Handle(line)`에 넘기고 결과 JSON을 돌려주면 됩니다(`list` / `options <id> <arg> [k=v ...] [query=텍스트] [limit=N]` / `run <id> [k=v ...]` / `raw <명령...>` / `status <id> [session=S]` / `history [limit=N]`, 동사는 대소문자 무시). `Handle`은 **메인 스레드에서** 부릅니다(소켓 스레드에서 받았다면 메인 스레드로 넘긴 뒤 호출). 브리지 경로의 실행 주체는 `Bridge`로 남고, `CheatProtocol.Handle(line, source)`로 주체를 지정할 수도 있습니다.

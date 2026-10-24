@@ -18,8 +18,16 @@ namespace HB.Cheat.Editor
     /// </summary>
     internal static class CheatCliCommands
     {
-        [CliCommand("cheat_list", "List registered HB_Cheat cheats with their arguments (JSON)")]
-        public static string List() => Guard(CheatProtocol.List);
+        [CliCommand("cheat_list", "List registered HB_Cheat cheats with their arguments in Play Mode (JSON)")]
+        public static string List()
+        {
+            // 에디트 모드의 레지스트리는 비었거나 직전 Play의 목록이라 다른 명령처럼 Play Mode에서만 답한다
+            return Guard(() =>
+            {
+                if (!TryRequirePlayMode(out string error)) return error;
+                return CheatProtocol.List();
+            });
+        }
 
         [CliCommand("cheat_options", "List selectable values of a cheat argument (JSON)")]
         public static string Options(

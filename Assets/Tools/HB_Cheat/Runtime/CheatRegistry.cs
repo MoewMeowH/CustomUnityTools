@@ -39,7 +39,7 @@ namespace HB.Cheat
 
             s_ById[definition.Id] = definition;
             s_Dirty = true;
-            Changed?.Invoke();
+            RaiseChanged();
         }
 
         /// <summary>테스트가 등록한 정의를 지운다</summary>
@@ -47,7 +47,19 @@ namespace HB.Cheat
         {
             if (id == null || !s_ById.Remove(id)) return;
             s_Dirty = true;
-            Changed?.Invoke();
+            RaiseChanged();
+        }
+
+        // 구독자(패널 등) 하나의 예외가 등록 · 해제를 끊지 않도록 구독자마다 격리한다 (CheatSystem 이벤트와 같은 규칙)
+        private static void RaiseChanged()
+        {
+            var handlers = Changed;
+            if (handlers == null) return;
+            foreach (Action handler in handlers.GetInvocationList())
+            {
+                try { handler(); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
         }
 
         public static bool TryGet(string id, out CheatDefinition definition)
