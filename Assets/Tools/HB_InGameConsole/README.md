@@ -28,8 +28,9 @@ HLog와 인게임 콘솔은 Scripting Define Symbol **`USE_HLOG`가 있을 때�
 | 있음 | 로그 수집, 인게임 콘솔, Watch가 동작. 개발 빌드가 아니어도(라이브와 같은 빌드) 동작합니다. |
 | 없음 | `HLog` 로그·Watch 호출이 **호출과 인자 계산까지 컴파일에서 제거**됩니다(`[Conditional("USE_HLOG")]`). 콘솔은 만들어지지 않고, 코어 API는 아무것도 하지 않으며 빈 값을 돌려줍니다. 에디터에서 프로파일링할 때 HLog 비용을 없앨 수 있습니다. |
 
+- **처음 설치하면 자동으로 켭니다**: 패키지를 처음 넣은 프로젝트에서 한 번만 Standalone · Android · iOS의 Scripting Define Symbols에 `USE_HLOG`를 추가하고, 표시 파일 `ProjectSettings/HB_InGameConsole.UseHLog.added.txt`를 남깁니다(Git으로 공유). 이 파일이 있으면 다시 추가하지 않으므로 일부러 끈 프로젝트에 다시 켜지지 않습니다. 배치 모드(CI)에서는 추가하지 않습니다.
 - 켜고 끄기: 에디터 콘솔 창 툴바의 `USE_HLOG: ON / OFF` 버튼 (현재 빌드 타깃의 Scripting Define Symbols를 바꿉니다).
-- ⚠️ **출시 빌드 전에 `USE_HLOG`를 끄는 것은 빌드하는 사람의 몫입니다.** Scripting Define Symbol은 플랫폼 단위라 Development/Release를 구분하지 않습니다.
+- ⚠️ **출시 빌드 전에 `USE_HLOG`를 끄는 것은 빌드하는 사람의 몫입니다.** Scripting Define Symbol은 플랫폼 단위라 Development/Release를 구분하지 않습니다. 대신 **릴리즈 빌드(Development 빌드가 아님 또는 `LIVE` 심볼)에 `USE_HLOG`가 켜져 있으면 빌드 시작 때 경고**합니다(빌드는 막지 않음). HB_Build를 쓰면 DefineContainer의 LIVE 항목에서 `USE_HLOG`를 빼면 LIVE 빌드에서 꺼집니다.
 - 대상은 `HLog`를 통한 호출뿐입니다. `Debug.Log`를 직접 호출한 로그는 제거되지 않으며, `USE_HLOG`가 켜진 빌드에서는 콘솔에 수집됩니다.
 - 심볼 이름은 `USE_HLOG`로 고정입니다(바꿀 수 없음).
 - **이전 버전으로 생성한 `LogChannels.cs`는 Generator 창에서 한 번 다시 생성하세요.** 이전 파일은 `UNITY_EDITOR`에서도 호출이 남는 예전 조건을 쓰고 있습니다.
@@ -166,6 +167,7 @@ private void Start()
    - 상단 채널 바: 다중 채널 구독/해제 (`✓ Common`, `✓ UI` 등), 마우스 휠 가로 스크롤.
    - 우클릭 메뉴: `Only '[채널명]'` (단독 표시), `Subscribe All` (전체 구독), `Toggle Mute` (채널 음소거).
    - 로그 상세 창: 스택트레이스 라인 클릭 시 소스 코드로 즉시 점프.
+   - **여러 줄 선택 · 복사**: 클릭(하나) · `Ctrl`(맥 `Cmd`)+클릭(추가/빼기) · `Shift`+클릭(범위) · `Ctrl/Cmd+A`(보이는 줄 전체). `Ctrl/Cmd+C`로 선택한 줄을 화면 순서대로 `HH:mm:ss [Type] [Tag] 메시지` 한 줄씩 복사합니다. 줄을 우클릭하면 `선택 복사` · `선택 복사 - 스택 포함` · `선택 해제`. 필터로 가려진 줄은 선택에서 빠집니다. 검색창 · 상세 창 텍스트에 포커스가 있으면 그쪽 복사가 먼저입니다.
 3. **Watch 탭**:
    - **Watch Values**: 실시간 변수 트리, 값 변경 시각화, `null` 강조 표시, `+ Trigger` 버튼으로 즉시 감시 조건 등록.
    - **Condition Triggers**: 변수 조건식(`==`, `!=`, `>`, `<`, `IsNull`, `IsNotNull`), `Pause`(자동 일시정지), `Report`(스냅샷 덤프), `Once`(단일 발동) 설정.

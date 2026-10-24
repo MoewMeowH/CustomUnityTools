@@ -53,6 +53,7 @@ Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
 - **스텝 On/Off**: Build Manager 창의 체크박스 상태는 빌드 프로필 에셋(`DisabledStepIds`)에 저장되어 로컬과 CI에서 동일하게 적용됩니다.
 - **설정 복원**: 기본 스텝이 변경한 PlayerSettings / EditorUserBuildSettings(버전, 심볼, 로그 설정 등)는 빌드 성공·실패와 관계없이 빌드 전 값으로 복원됩니다. 커스텀 스텝이 다른 설정을 바꾸면 직접 복원해야 합니다.
 - **전처리기 심볼**: 항목이 있는데 리스트가 비어 있으면 심볼을 모두 제거합니다. DefineContainer 또는 해당 빌드 타입/플랫폼 항목이 없거나 심볼 설정 스텝을 끄면 **LIVE는 실패**하고(커밋된 ProjectSettings의 개발용 심볼이 그대로 들어가는 것 방지), DEV · QA는 기존 심볼을 유지합니다 (항목이 없으면 경고).
+  - HB_InGameConsole을 쓰면 LIVE 항목에서 `USE_HLOG`를 빼서 출시 빌드의 HLog를 끕니다 (켜진 채 릴리즈 빌드하면 InGameConsole이 경고).
 - **LIVE + Development Build**: 라이브 환경 프로파일링 · 로그 확인용으로 막지 않습니다. 대신 산출물 이름에 `_DEVBUILD`가 붙고(예: `Game_v1.0.0_LIVE_DEVBUILD.apk`), 빌드 시작 · 끝에 경고 블록이 찍히고, 로컬 빌드는 확인 창을 띄우고, Jenkins는 결과가 UNSTABLE이 됩니다.
 - **경고 파일**: 빌드를 막지 않는 경고(LIVE + Development, 심볼 항목 없음, 등록되지 않은 비활성 ID 등)가 있으면 `BuildOutput/HB_BUILD_WARNINGS.txt`에 남깁니다. 생성한 Jenkinsfile은 이 파일이 있으면 내용을 출력하고 UNSTABLE로 표시합니다.
 - **빌드가 바꾼 파일**: 빌드 전후 `git status`를 비교해 빌드 중 바뀐 파일(ProjectSettings 재저장 등)을 로그에 출력합니다. 자동으로 되돌리지 않으니 직접 확인하고 되돌리세요 (git이 PATH에 없으면 건너뜀).
