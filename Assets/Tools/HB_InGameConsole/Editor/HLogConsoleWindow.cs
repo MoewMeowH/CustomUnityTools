@@ -89,7 +89,11 @@ namespace InGameConsoleSystem.Editor
         private float detailPanelHeight = 160f;
         private bool isResizingDetail = false;
 
+        // 상세 패널에 보이는 줄 (마지막에 클릭한 줄)
         private HLogCore.LogEntry selectedEntry;
+        // 다중 선택 (Ctrl/Cmd+클릭 · Shift+클릭 · Ctrl/Cmd+A) → Ctrl/Cmd+C로 한꺼번에 복사
+        private readonly HashSet<HLogCore.LogEntry> selectedEntries = new HashSet<HLogCore.LogEntry>();
+        private HLogCore.LogEntry selectionAnchor;
         private readonly List<HLogCore.LogEntry> filteredLogs = new List<HLogCore.LogEntry>();
         private bool isDirty = true;
 
@@ -274,6 +278,8 @@ namespace InGameConsoleSystem.Editor
             isStickToBottom = true;
             isScrollToBottomPending = true;
             selectedEntry = null;
+            selectedEntries.Clear();
+            selectionAnchor = null;
             isDirty = true;
             Repaint();
         }
@@ -485,6 +491,8 @@ namespace InGameConsoleSystem.Editor
                 isDirty = false;
             }
 
+            if (currentTab == ConsoleTab.Logs) HandleSelectionCommands();
+
             DrawMainToolbar();
 #if !USE_HLOG
             EditorGUILayout.HelpBox(
@@ -549,7 +557,122 @@ namespace InGameConsoleSystem.Editor
 
                 filteredLogs.Add(entry);
             }
+
+            // 필터로 가려지거나 기록에서 밀려난 줄은 선택 · 기준에서 뺀다 (보이지 않는 줄이 복사되지 않도록).
+            // 로그가 들어올 때마다 도는 곳이라, 선택이 실제로 줄었을 때만 정리한다
+            if (selectedEntries.Count > 0 || selectionAnchor != null)
+            {
+                int visibleSelected = 0;
+                bool anchorVisible = false;
+                for (int i = 0; i < filteredLogs.Count; i++)
+                {
+                    var entry = filteredLogs[i];
+                    if (selectedEntries.Contains(entry)) visibleSelected++;
+                    if (ReferenceEquals(entry, selectionAnchor)) anchorVisible = true;
+                }
+
+                if (!anchorVisible) selectionAnchor = null;
+                if (visibleSelected != selectedEntries.Count)
+                {
+                    var visible = new HashSet<HLogCore.LogEntry>(filteredLogs);
+                    selectedEntries.RemoveWhere(e => !visible.Contains(e));
+                }
+            }
         }
+
+        #region Selection
+
+        private void HandleSelectionCommands()
+        {
+            var e = Event.current;
+            if (e.type != EventType.ValidateCommand && e.type != EventType.ExecuteCommand) return;
+            // 검색창 · 상세 패널 텍스트에 포커스가 있으면 그쪽 복사 · 전체 선택을 그대로 둔다
+            if (GUIUtility.keyboardControl != 0) return;
+
+            bool execute = e.type == EventType.ExecuteCommand;
+            if (e.commandName == "Copy" && selectedEntries.Count > 0)
+            {
+                if (execute) CopySelection(withStack: false);
+                e.Use();
+            }
+            else if (e.commandName == "SelectAll" && filteredLogs.Count > 0)
+            {
+                if (execute)
+                {
+                    selectedEntries.Clear();
+                    selectedEntries.UnionWith(filteredLogs);
+                    selectionAnchor = filteredLogs[0];
+                    Repaint();
+                }
+                e.Use();
+            }
+        }
+
+        private void CopySelection(bool withStack)
+        {
+            var entries = HLogConsoleSelection.InDisplayOrder(filteredLogs, selectedEntries);
+            if (entries.Count == 0) return;
+            EditorGUIUtility.systemCopyBuffer = HLogConsoleSelection.Format(entries, withStack);
+        }
+
+        private void ClearSelection()
+        {
+            selectedEntries.Clear();
+            selectionAnchor = null;
+            Repaint();
+        }
+
+        /// <param name="range">Shift</param>
+        /// <param name="toggle">Ctrl(맥 Cmd) — EditorGUI.actionKey</param>
+        private void OnRowClicked(HLogCore.LogEntry entry, int index, bool range, bool toggle)
+        {
+            // 줄을 누르면 검색창 등에서 포커스를 빼서 Ctrl/Cmd+C가 줄 복사로 가게 한다
+            GUIUtility.keyboardControl = 0;
+
+            if (range && selectionAnchor != null)
+            {
+                // 기준 줄이 가려졌거나 밀려났으면 누른 줄을 새 기준으로 (다음 Shift+클릭부터 범위가 된다)
+                if (!HLogConsoleSelection.SelectRange(filteredLogs, selectionAnchor, index, selectedEntries))
+                    selectionAnchor = entry;
+            }
+            else if (toggle)
+            {
+                selectionAnchor = entry;
+                // 뺀 줄은 상세 패널에 새로 띄우지 않는다
+                if (selectedEntries.Remove(entry)) return;
+                selectedEntries.Add(entry);
+            }
+            else
+            {
+                selectedEntries.Clear();
+                selectedEntries.Add(entry);
+                selectionAnchor = entry;
+            }
+            selectedEntry = entry;
+        }
+
+        private void ShowRowContextMenu(HLogCore.LogEntry entry)
+        {
+            // 선택 밖의 줄을 오른쪽 클릭하면 그 줄만 선택
+            if (!selectedEntries.Contains(entry))
+            {
+                selectedEntries.Clear();
+                selectedEntries.Add(entry);
+                selectionAnchor = entry;
+                selectedEntry = entry;
+            }
+
+            int count = selectedEntries.Count;
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent($"선택 복사 ({count})"), false, () => CopySelection(withStack: false));
+            menu.AddItem(new GUIContent($"선택 복사 - 스택 포함 ({count})"), false, () => CopySelection(withStack: true));
+            menu.AddSeparator(string.Empty);
+            menu.AddItem(new GUIContent("선택 해제"), false, ClearSelection);
+            menu.ShowAsContext();
+            Repaint();
+        }
+
+        #endregion
 
         #region Toolbar Drawing
 
@@ -785,7 +908,7 @@ namespace InGameConsoleSystem.Editor
             for (int i = 0; i < filteredLogs.Count; i++)
             {
                 var entry = filteredLogs[i];
-                bool isSelected = selectedEntry == entry;
+                bool isSelected = selectedEntries.Contains(entry);
 
                 var rowStyle = new GUIStyle(EditorStyles.label)
                 {
@@ -807,9 +930,14 @@ namespace InGameConsoleSystem.Editor
                 }
 
                 // Click Selection & Double Click Open (컴파일 에러 및 일반 로그 모두 지원)
-                if (Event.current.type == EventType.MouseDown && bgRect.Contains(Event.current.mousePosition))
+                if (Event.current.type == EventType.ContextClick && bgRect.Contains(Event.current.mousePosition))
                 {
-                    selectedEntry = entry;
+                    ShowRowContextMenu(entry);
+                    Event.current.Use();
+                }
+                else if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && bgRect.Contains(Event.current.mousePosition))
+                {
+                    OnRowClicked(entry, i, Event.current.shift, EditorGUI.actionKey);
                     if (Event.current.clickCount == 2)
                     {
                         OpenTopStackLocation(entry);
