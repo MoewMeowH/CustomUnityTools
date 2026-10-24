@@ -68,7 +68,7 @@ namespace HB.Cheat.Editor
                 checkedCount++;
 
                 string fileName = Path.GetFileName(file.path);
-                if (fileName.StartsWith("HB.Cheat", StringComparison.Ordinal))
+                if (IsCheatAssemblyFileName(fileName))
                     throw new BuildFailedException($"[HB_Cheat] Release build ({reason}) contains cheat assembly '{fileName}'.");
 
                 if (ContainsMarker(file.path))
@@ -122,7 +122,11 @@ namespace HB.Cheat.Editor
 
         private static HashSet<string> CollectDefines(BuildReport report)
         {
-            var target = NamedBuildTarget.FromBuildTargetGroup(report.summary.platformGroup);
+            // Dedicated Server 빌드는 Standalone 그룹이지만 Server 심볼을 쓴다 (에디터 설정이 아니라 이 빌드의 서브타깃으로 판정)
+            var target = report.summary.platformGroup == BuildTargetGroup.Standalone
+                         && report.summary.GetSubtarget<StandaloneBuildSubtarget>() == StandaloneBuildSubtarget.Server
+                ? NamedBuildTarget.Server
+                : NamedBuildTarget.FromBuildTargetGroup(report.summary.platformGroup);
             var defines = CheatDefines.GetDefines(target);
             foreach (var define in CheatDefines.GetActiveProfileDefines())
                 defines.Add(define);
@@ -132,16 +136,36 @@ namespace HB.Cheat.Editor
         private static bool ContainsMarker(string path)
         {
             if (!File.Exists(path)) return false;
+            return ContainsMarker(File.ReadAllBytes(path));
+        }
 
-            byte[] bytes = File.ReadAllBytes(path);
+        /// <summary> HB_Cheat 패키지 어셈블리 파일인지 (HB.Cheat.dll · HB.Cheat.*.dll). HB.CheatSheet.dll 같은 다른 이름은 아니다 </summary>
+        internal static bool IsCheatAssemblyFileName(string fileName) =>
+            string.Equals(fileName, "HB.Cheat.dll", StringComparison.Ordinal)
+            || fileName.StartsWith("HB.Cheat.", StringComparison.Ordinal);
+
+        internal static bool ContainsMarker(byte[] bytes)
+        {
             var marker = s_CheatAssemblyMarker;
             for (int i = 0; i <= bytes.Length - marker.Length; i++)
             {
                 int j = 0;
                 while (j < marker.Length && bytes[i + j] == marker[j]) j++;
-                if (j == marker.Length) return true;
+                if (j == marker.Length && IsWholeName(bytes, i, marker.Length)) return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// 메타데이터 문자열(어셈블리 참조 · 네임스페이스 이름)은 UTF-8 + '\0' 끝으로 저장된다.
+        /// 뒤가 '\0'(어셈블리 HB.Cheat) 또는 '.'(HB.Cheat.* 네임스페이스)일 때만 HB_Cheat 참조로 본다 → "HB.CheatSheet" 같은 다른 이름은 걸리지 않는다.
+        /// 앞쪽은 보지 않는다: 컴파일러가 끝이 같은 문자열을 접어 저장하면(예: "Game.HB.Cheat"의 꼬리를 "HB.Cheat" 참조가 공유) 앞이 '\0'이 아니어서
+        /// 진짜 참조를 놓치기 때문이다 (그래서 "MyHB.Cheat" 같은 이름도 걸린다 — 안전한 쪽). 문자열 상수는 UTF-16이라 처음부터 걸리지 않는다.
+        /// </summary>
+        internal static bool IsWholeName(byte[] bytes, int start, int length)
+        {
+            int end = start + length;
+            return end >= bytes.Length || bytes[end] == 0 || bytes[end] == (byte)'.';
         }
     }
 }

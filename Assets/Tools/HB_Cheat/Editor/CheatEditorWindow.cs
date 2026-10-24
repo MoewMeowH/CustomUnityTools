@@ -52,12 +52,32 @@ namespace HB.Cheat.Editor
             m_ConstrainedCheatAsmdefs = AssetDatabase.FindAssets("t:AssemblyDefinitionAsset", new[] { "Assets" })
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Where(path => !System.IO.Path.GetFileNameWithoutExtension(path).StartsWith("HB.Cheat", System.StringComparison.Ordinal))
-                .Where(path =>
-                {
-                    string text = System.IO.File.ReadAllText(path);
-                    return text.Contains("defineConstraints") && text.Contains($"\"{CheatDefines.CoreDefine}\"");
-                })
+                .Where(path => HasCheatDefineConstraint(System.IO.File.ReadAllText(path)))
                 .ToArray();
+        }
+
+        [System.Serializable]
+        private sealed class AsmdefConstraints
+        {
+            public string[] defineConstraints;
+        }
+
+        /// <summary>
+        /// asmdef JSON의 defineConstraints 배열에 HB_CHEAT가 있는지 (문자열 포함 검사는 versionDefines · references 등에 같은 글자가 있어도 걸렸다).
+        /// "!HB_CHEAT"(심볼이 없을 때만)는 치트 asmdef가 아니다.
+        /// </summary>
+        internal static bool HasCheatDefineConstraint(string asmdefJson)
+        {
+            try
+            {
+                var data = JsonUtility.FromJson<AsmdefConstraints>(asmdefJson);
+                return data?.defineConstraints != null
+                       && System.Array.Exists(data.defineConstraints, c => c != null && c.Trim() == CheatDefines.CoreDefine);
+            }
+            catch (System.ArgumentException)
+            {
+                return false;   // 깨진 asmdef는 판정하지 않는다
+            }
         }
 
         private void OnGUI()
@@ -104,7 +124,8 @@ namespace HB.Cheat.Editor
                 $"{CheatDefines.CoreDefine} (패키지) + {settings.UserDefine} (프로젝트)를 함께 켜고 끕니다.\n" +
                 "릴리즈 빌드에서 켜져 있거나 한쪽만 켜져 있으면 빌드가 실패합니다.", MessageType.None);
 
-            foreach (var target in CheatDefines.Targets)
+            // Standalone · Android · iOS + 현재 활성 플랫폼(그 밖이면, 예: WebGL · Dedicated Server)
+            foreach (var target in CheatDefines.GetTargets())
             {
                 var defines = CheatDefines.GetDefines(target);
                 bool enabled = defines.Contains(CheatDefines.CoreDefine) && defines.Contains(settings.UserDefine);
@@ -144,8 +165,8 @@ namespace HB.Cheat.Editor
         {
             if (m_ConstrainedCheatAsmdefs.Length == 0) return;
 
-            var activeGroup = BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget);
-            var activeTarget = NamedBuildTarget.FromBuildTargetGroup(activeGroup);
+            // 에디터 컴파일이 쓰는 대상 (Dedicated Server면 Server 심볼)
+            var activeTarget = CheatDefines.GetActiveTarget();
             var defines = CheatDefines.GetDefines(activeTarget);
             if (defines.Contains(CheatDefines.CoreDefine) && defines.Contains(settings.UserDefine)) return;
 
@@ -204,8 +225,17 @@ namespace HB.Cheat.Editor
                 m_NewClassName = EditorGUILayout.TextField("Class Name", m_NewClassName);
                 if (GUILayout.Button("Create Cheat File", GUILayout.Width(130)) && !string.IsNullOrWhiteSpace(m_NewClassName))
                 {
-                    string path = CheatFileTemplates.CreateCheatFile(cheatFolder, m_NewClassName.Trim());
-                    EditorGUIUtility.PingObject(AssetDatabase.LoadAssetAtPath<Object>(path));
+                    // 클래스 이름이 C# 식별자가 아니면 만들지 않고 알린다 (같은 이름은 뒤에 번호를 붙여 만든다)
+                    string error = CheatFileTemplates.ValidateClassName(m_NewClassName.Trim());
+                    if (error != null)
+                    {
+                        EditorUtility.DisplayDialog("Create Cheat File", error, "OK");
+                    }
+                    else
+                    {
+                        string path = CheatFileTemplates.CreateCheatFile(cheatFolder, m_NewClassName.Trim());
+                        EditorGUIUtility.PingObject(AssetDatabase.LoadAssetAtPath<Object>(path));
+                    }
                 }
             }
 

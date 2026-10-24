@@ -1,0 +1,34 @@
+{
+    "name": "HB.Cheat.Tests.Cli",
+    "rootNamespace": "HB.Cheat.Tests",
+    "references": [
+        "HB.Cheat",
+        "HB.Cheat.Editor",
+        "HB.Cheat.Editor.Cli",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "HB_CHEAT",
+        "UNITY_INCLUDE_TESTS",
+        "HB_CHEAT_PIPELINE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.pipeline",
+            "expression": "0.0.1",
+            "define": "HB_CHEAT_PIPELINE"
+        }
+    ],
+    "noEngineReferences": false
+}

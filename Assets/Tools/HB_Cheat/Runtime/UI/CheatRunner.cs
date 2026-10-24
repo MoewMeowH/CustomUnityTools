@@ -43,13 +43,16 @@ namespace HB.Cheat.UI
             string key = CheatSystem.Options.ToggleKey;
             if (string.IsNullOrWhiteSpace(key)) return;
 
-#if HB_CHEAT_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM
+#if (HB_CHEAT_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM) || ENABLE_LEGACY_INPUT_MANAGER
+            // m_ToggleKey는 Input System이면 Key, 아니면 KeyCode
             m_HasToggleKey = TryParseToggleKey(key, out m_ToggleKey);
-#elif ENABLE_LEGACY_INPUT_MANAGER
-            m_HasToggleKey = TryParseToggleKey(key, out m_ToggleKey);
-#endif
             if (!m_HasToggleKey)
                 Debug.LogWarning($"[HB_Cheat] Unknown toggle key '{key}'.");
+#else
+            // Active Input Handling이 Input System인데 패키지가 없는 등, 키를 읽을 입력 시스템이 없다 (키 이름 문제가 아님)
+            Debug.LogWarning($"[HB_Cheat] Toggle key '{key}' is ignored: no input backend is available " +
+                             "(install the Input System package or enable the legacy Input Manager in Player Settings > Active Input Handling).");
+#endif
         }
 
         /// <summary>

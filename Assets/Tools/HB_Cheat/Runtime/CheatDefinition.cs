@@ -51,7 +51,9 @@ namespace HB.Cheat
         /// <summary>Local 치트 실행</summary>
         public Func<CheatArgs, CheatResult> LocalInvoker { get; set; }
 
-        /// <summary>Server 치트의 명령 문자열 생성</summary>
+        /// <summary>
+        /// Server 치트의 명령 문자열 생성. 패널 미리보기가 값이 바뀔 때마다 부르므로 문자열만 만들고 부작용이 없어야 한다.
+        /// </summary>
         public Func<CheatArgs, string> ServerCommandBuilder { get; set; }
 
         /// <summary>"Item/Enchant" → ["Item", "Enchant"]</summary>

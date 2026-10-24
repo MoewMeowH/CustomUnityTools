@@ -1,15 +1,23 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
 
 namespace HB.Cheat.Editor
 {
     /// <summary>
     /// 프로젝트(Assets) 쪽 치트 파일·asmdef 생성. 패키지는 읽기 전용이므로 치트 정의는 모두 여기서 만든다.
     /// </summary>
+#if UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER
+    [NoAutoStaticsCleanup]
+#endif
     public static class CheatFileTemplates
     {
         public const string RegistryFileName = "HBCheatRegistry.g.cs";
@@ -26,18 +34,25 @@ namespace HB.Cheat.Editor
 
         /// <summary>
         /// 치트 카테고리 파일 생성. Assembly-CSharp 폴더면 파일 전체를 프로젝트 심볼로 감싼다 (asmdef면 asmdef의 defineConstraints가 막는다).
+        /// 클래스 이름이 C# 식별자가 아니면 ArgumentException. 같은 파일이나 같은 이름의 전역 타입이 있으면 뒤에 번호를 붙인다(ItemCheats2 …).
         /// </summary>
         public static string CreateCheatFile(string folder, string className)
         {
+            string error = ValidateClassName(className);
+            if (error != null) throw new ArgumentException(error);
+
             var settings = CheatSettings.Load();
             Directory.CreateDirectory(folder);
-            string path = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{className}.cs");
-            className = Path.GetFileNameWithoutExtension(path);
+            string requested = className;
+            className = UniqueClassName(folder, requested);
+            string path = $"{folder}/{className}.cs";
 
             bool guard = IsAssemblyCSharp(folder);
-            string category = className.EndsWith("Cheats") && className.Length > "Cheats".Length
-                ? className.Substring(0, className.Length - "Cheats".Length)
-                : className;
+            // 분류는 요청한 이름에서 Cheats를 뗀 값 + 붙은 번호 (ItemCheats → Item, 번호가 붙은 ItemCheats2 → Item2 — id가 겹치지 않게)
+            string number = className.Substring(requested.Length);
+            string category = (requested.EndsWith("Cheats") && requested.Length > "Cheats".Length
+                ? requested.Substring(0, requested.Length - "Cheats".Length)
+                : requested) + number;
             string idPrefix = category.ToLowerInvariant();
 
             var sb = new StringBuilder();
@@ -55,7 +70,7 @@ namespace HB.Cheat.Editor
             sb.AppendLine($"        Debug.Log($\"[{category}] count={{count}}\");");
             sb.AppendLine("    }");
             sb.AppendLine();
-            sb.AppendLine("    // Server: 반환한 문자열을 ICheatServerTransport로 보낸다");
+            sb.AppendLine("    // Server: 반환한 문자열을 ICheatServerTransport로 보낸다. 패널 미리보기가 값이 바뀔 때마다 부르므로 문자열만 만들고 부작용이 없어야 한다");
             sb.AppendLine($"    [Cheat(\"{idPrefix}.add\", \"{category}/Add\", Target = CheatTarget.Server)]");
             sb.AppendLine("    public static string Add(");
             sb.AppendLine($"        [CheatArg(\"Id\"), CheatOptions(typeof({className}SampleProvider))] int id,");
@@ -81,6 +96,90 @@ namespace HB.Cheat.Editor
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
             AssetDatabase.ImportAsset(path);
             return path;
+        }
+
+        private static readonly HashSet<string> s_CSharpKeywords = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const", "continue",
+            "decimal", "default", "delegate", "do", "double", "else", "enum", "event", "explicit", "extern", "false", "finally",
+            "fixed", "float", "for", "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock",
+            "long", "namespace", "new", "null", "object", "operator", "out", "override", "params", "private", "protected",
+            "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc", "static", "string",
+            "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort",
+            "using", "virtual", "void", "volatile", "while"
+        };
+
+        // 생성 템플릿이 쓰는 이름 (전역 클래스로 만들면 using한 타입 · 네임스페이스 · 어트리뷰트를 가려 그 파일이 컴파일되지 않는다)
+        private static readonly HashSet<string> s_TemplateNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "System", "UnityEngine", "HB", "Debug", "List",
+            "Cheat", "CheatArg", "CheatRange", "CheatOptions", "CheatTarget", "CheatCommand", "CheatOption", "CheatOptionContext",
+            "ICheatOptionProvider", "CheatAttribute", "CheatArgAttribute", "CheatRangeAttribute", "CheatOptionsAttribute"
+        };
+
+        /// <summary>
+        /// 클래스 이름으로 쓸 수 없으면 이유, 쓸 수 있으면 null
+        /// (글자 · 숫자 · '_', 숫자로 시작하지 않음, C# 키워드 아님, 생성 템플릿이 쓰는 이름 아님)
+        /// </summary>
+        internal static string ValidateClassName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "Class name is empty.";
+            if (!(char.IsLetter(name[0]) || name[0] == '_')) return $"'{name}' must start with a letter or '_'.";
+            foreach (char c in name)
+            {
+                if (!(char.IsLetterOrDigit(c) || c == '_')) return $"'{name}' can contain only letters, digits and '_'.";
+            }
+            if (s_CSharpKeywords.Contains(name)) return $"'{name}' is a C# keyword.";
+            if (s_TemplateNames.Contains(name)) return $"'{name}' is used by the generated code (System, UnityEngine, HB, Debug, List, Cheat* types) and would hide it.";
+            return null;
+        }
+
+        /// <summary>
+        /// 폴더에 같은 파일이 없고, 이 클래스와 함께 만드는 {이름}SampleProvider까지 같은 이름이 없는 이름.
+        /// 이름은 로드된 전역 타입과 프로젝트의 같은 이름 스크립트 파일(심볼이 꺼져 컴파일되지 않은 치트 파일 · 아직 컴파일 전 파일)로 확인한다.
+        /// GenerateUniqueAssetPath는 "ItemCheats 1"처럼 식별자가 아닌 번호를 붙일 수 있어 직접 번호를 붙인다.
+        /// </summary>
+        internal static string UniqueClassName(string folder, string className)
+        {
+            string candidate = className;
+            for (int i = 2; IsNameTaken(folder, candidate); i++)
+                candidate = className + i;
+            return candidate;
+        }
+
+        private static bool IsNameTaken(string folder, string name)
+        {
+            return File.Exists($"{folder}/{name}.cs")
+                   || GlobalTypeExists(name) || GlobalTypeExists(name + "SampleProvider")
+                   || ScriptFileExists(name) || ScriptFileExists(name + "SampleProvider");
+        }
+
+        private static bool ScriptFileExists(string name)
+        {
+            foreach (string guid in AssetDatabase.FindAssets($"{name} t:MonoScript"))
+            {
+                if (Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(guid)) == name) return true;
+            }
+            return false;
+        }
+
+        private static bool GlobalTypeExists(string name)
+        {
+#if UNITY_6000_4_OR_NEWER
+            var assemblies = UnityEngine.Assemblies.CurrentAssemblies.GetLoadedAssemblies();
+            for (int i = 0; i < assemblies.Count; i++)
+            {
+                if (assemblies[i].GetType(name, false) != null) return true;
+            }
+#else
+#pragma warning disable UAC0005
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (assembly.GetType(name, false) != null) return true;
+            }
+#pragma warning restore UAC0005
+#endif
+            return false;
         }
 
         /// <summary>
