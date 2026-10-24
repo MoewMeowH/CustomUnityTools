@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -51,9 +52,9 @@ namespace HB.TestFrameworkHelper.Editor
                 string path = EditorUtility.OpenFolderPanel("검사할 폴더 선택", Application.dataPath, "");
                 if (!string.IsNullOrEmpty(path))
                 {
-                    if (path.StartsWith(Application.dataPath))
+                    if (TryGetAssetsRelativePath(path, Application.dataPath, out string assetsPath))
                     {
-                        m_SearchFolder = "Assets" + path.Substring(Application.dataPath.Length);
+                        m_SearchFolder = assetsPath;
                     }
                     else
                     {
@@ -70,6 +71,23 @@ namespace HB.TestFrameworkHelper.Editor
             GUI.backgroundColor = Color.white;
 
             EditorGUILayout.EndHorizontal();
+        }
+
+        /// <summary>
+        /// 폴더 패널이 돌려준 절대 경로를 "Assets/..."로 바꾼다. 드라이브 문자 등 대소문자는 다를 수 있고,
+        /// "AssetsOld"처럼 이름만 이어진 폴더는 Assets 안이 아니다.
+        /// </summary>
+        private static bool TryGetAssetsRelativePath(string fullPath, string dataPath, out string assetsPath)
+        {
+            assetsPath = null;
+            fullPath = fullPath.Replace('\\', '/');
+            dataPath = dataPath.Replace('\\', '/');
+
+            if (!fullPath.StartsWith(dataPath, StringComparison.OrdinalIgnoreCase)) return false;
+            if (fullPath.Length > dataPath.Length && fullPath[dataPath.Length] != '/') return false;
+
+            assetsPath = "Assets" + fullPath.Substring(dataPath.Length);
+            return true;
         }
 
         private void ExecuteScan()
@@ -97,7 +115,7 @@ namespace HB.TestFrameworkHelper.Editor
 
             if (m_ScanCanceled)
             {
-                EditorGUILayout.HelpBox("검사를 취소했습니다. 아래 결과는 취소 전까지 검사한 프리팹만 포함합니다.", MessageType.Warning);
+                EditorGUILayout.HelpBox("검사를 취소했습니다. 아래 결과는 취소 전까지 검사한 프리팹만 포함합니다. 중첩 · 변형 프리팹이 원본에서 물려받은 문제는 원본을 검사하기 전에 취소했으면 빠질 수 있습니다.", MessageType.Warning);
             }
 
             if (m_Issues.Count == 0)
@@ -143,7 +161,9 @@ namespace HB.TestFrameworkHelper.Editor
                 GUILayout.Label(typeLabel, EditorStyles.boldLabel, GUILayout.Width(120));
                 GUI.color = Color.white;
 
-                GUILayout.Label($"{issue.ComponentName} > {issue.FieldName}", EditorStyles.boldLabel);
+                // Missing 스크립트는 필드가 없다
+                string member = string.IsNullOrEmpty(issue.FieldName) ? issue.ComponentName : $"{issue.ComponentName} > {issue.FieldName}";
+                GUILayout.Label(member, EditorStyles.boldLabel);
 
                 GUILayout.FlexibleSpace();
 

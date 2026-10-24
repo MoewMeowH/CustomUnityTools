@@ -9,7 +9,7 @@ namespace HB.TestFrameworkHelper.Editor
     /// <summary>
     /// Unity Test Framework (UTF) EditMode 테스트 러너 연동
     /// Window > General > Test Runner 또는 Jenkins CI/CD에서 자동 실행됩니다.
-    /// 에러(빈 슬롯 · Missing 스크립트)만 실패로 보고하고, 경고(배열 · List의 빈 원소)는 실패시키지 않습니다.
+    /// 에러(빈 슬롯 · Missing 참조 · Missing 스크립트)만 실패로 보고하고, 경고(배열 · List의 빈 원소)는 실패시키지 않습니다.
     /// 경고도 결과 메시지(실패 · 통과 모두)에 함께 적어 Test Runner 결과 화면에서 보이게 합니다.
     /// </summary>
     public class SlotValidationTests
@@ -54,11 +54,10 @@ namespace HB.TestFrameworkHelper.Editor
 
         private static void AppendIssues(StringBuilder sb, List<SlotValidationIssue> issues)
         {
+            // [심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)
             foreach (var issue in issues)
             {
-                sb.AppendLine($"  - [{issue.IssueType}] {issue.AssetPath} > {issue.ComponentName}.{issue.FieldName}");
-                if (!string.IsNullOrEmpty(issue.Description))
-                    sb.AppendLine($"    ↳ 설명: {issue.Description}");
+                sb.AppendLine($"  - {issue}");
             }
         }
     }
