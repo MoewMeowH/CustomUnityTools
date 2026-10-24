@@ -18,9 +18,12 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String
 2. `Tools > HB > E2String Manager`를 엽니다.
 3. **1. 어트리뷰트 스크립트 상태**에서 생성 폴더를 정하고 **E2StringAttribute 스크립트 생성**을 누릅니다.
    - 어트리뷰트(`E2StringAttribute`)와 옵션(`E2StringOptions`)은 패키지에 들어 있지 않습니다. 서버와 공유하는 폴더 등 원하는 `Assets` 하위 위치에 직접 생성합니다.
-   - **글로벌 + EString.Script 호환**(기본): 글로벌 네임스페이스와 `EString.Script` 양쪽에 어트리뷰트를 만듭니다. `using` 없이 바로 쓸 수 있습니다.
-   - 체크를 해제하면 지정한 네임스페이스에만 만듭니다. 비워두면 글로벌에만 만듭니다.
+   - 생성 폴더 기본값은 `Assets/Scripts/E2String`입니다. 경로를 직접 입력하거나 **폴더 선택...**으로 고르며, `Assets` 밖이면 생성하지 않습니다. 마지막으로 쓴 폴더는 프로젝트별로 기억합니다 (`EditorPrefs`, 키에 `PlayerSettings.productGUID` 포함).
+   - 같은 이름의 파일이 이미 있으면 덮어쓸지 묻습니다.
+   - **글로벌 + EString.Script 호환**(기본): 글로벌 네임스페이스와 `EString.Script` 양쪽에 어트리뷰트를 만듭니다. `using` 없이 바로 쓸 수 있습니다. `E2StringOptions`는 글로벌에 하나만 만들어 두 어트리뷰트가 같은 옵션 타입을 씁니다.
+   - 체크를 해제하면 지정한 네임스페이스에만 만듭니다 (`E2StringOptions`도 그 네임스페이스 안). 비워두면 글로벌에만 만듭니다. 네임스페이스 이름이 식별자 규칙에 맞지 않거나 C# 키워드를 포함하면 생성하지 않습니다.
    - 폴더가 어떤 asmdef에도 속하지 않으면 `HB.E2String.Attributes.asmdef`를 함께 만듭니다. Assembly-CSharp는 자동으로 참조하고, asmdef 어셈블리에서는 references에 `HB.E2String.Attributes`를 추가하면 됩니다. 폴더 아래 다른 스크립트가 있으면 그 스크립트까지 새 어셈블리로 옮겨지므로 asmdef를 만들지 않습니다. asmdef에서도 쓰려면 전용 빈 폴더에 만드세요.
+   - 이름이 `HB.E2String.Attributes`인 asmdef가 프로젝트에 이미 있어도 만들지 않습니다. 이때 어트리뷰트는 Assembly-CSharp에 들어갑니다.
    - 폴더가 이미 asmdef에 속하면 그 어셈블리에 들어갑니다. 어트리뷰트를 쓰는 asmdef가 그 어셈블리를 참조해야 합니다.
    - `.asmdef`는 Unity 전용 파일이라 서버와 `.cs`를 공유해도 영향이 없습니다.
 4. Enum에 `[E2String]`을 붙이면 컴파일 시 `{Enum}Extensions` 클래스가 생성됩니다.
@@ -120,10 +123,18 @@ Enum이 `internal`이면 클래스도 `internal`로 생성됩니다.
 
 ## 에디터 매니저 윈도우 (`Tools > HB > E2String Manager`)
 
+- **Scan / Refresh** (툴바): 어트리뷰트 검사와 Enum 스캔을 다시 합니다. 자동 스캔은 창을 처음 열 때만 하며, 결과는 도메인 리로드 뒤에도 유지됩니다.
 - **어트리뷰트 스크립트 상태**: 프로젝트에 `E2StringAttribute` 정의가 있는지 확인하고, 없으면 원하는 위치에 생성합니다.
+  - 찾는 순서: 파일 이름이 `E2StringAttribute`인 스크립트(패키지 포함) → 없으면 `Assets` 아래 모든 `.cs`(경로에 `/Editor/`가 있는 파일 제외). 주석·문자열을 뺀 코드에 `class E2StringAttribute` 선언이 있어야 합니다.
+  - 있으면 위치와 어셈블리 이름을 보여줍니다. Assembly-CSharp면 asmdef에서 쓸 수 없다고 경고하고, asmdef 어셈블리면 references에 넣을 이름을 안내합니다.
+  - **스크립트 파일 열기** · **프로젝트 위치 표시**: 어트리뷰트 파일을 열거나 Project 창에서 Ping합니다.
+  - **다시 생성 (덮어쓰기)** (접기): 같은 자리에 새 내용으로 다시 만듭니다. 매니저가 만든 파일이 아니면 안내만 보이고 덮어쓰지 않습니다.
 - **E2String 적용 Enum 목록**: `[E2String]`이 붙은 Enum과 멤버, 선언 위치를 보여줍니다.
-  - **호출 복사**: 해당 Enum의 옵션에 맞는 호출 예시 코드를 클립보드에 복사합니다.
-- **가이드**: 생성되는 확장 메서드 요약을 보여줍니다.
+  - **검색**: 타입 이름 · 네임스페이스 · 파일 경로로 거릅니다 (대소문자 무시).
+  - 항목마다 타입 이름(중첩이면 `Outer.MyEnum`) · 네임스페이스(없으면 `Global`) · `파일:줄` · 멤버 목록(80자까지)을 보여줍니다.
+  - **스크립트 열기**: Enum 선언 줄로 엽니다. **위치 표시**: Project 창에서 Ping합니다.
+  - **호출 복사**: 해당 Enum의 옵션에 맞는 호출 예시 코드를 클립보드에 복사합니다. `IntConversion`이면 int 변환 · `IsDefinedFast`(`[Flags]`면 `IsValidFlagsFast`도), `Collections`면 `Values`가 들어갑니다.
+- **Guide & Cheatsheet** (툴바 토글): 생성되는 확장 메서드 요약을 보여줍니다.
 
 ## 성능 (Unity 7 IL2CPP · Windows x64 · 100개 멤버 Enum · 호출 1회 기준)
 
@@ -145,3 +156,4 @@ Enum이 `internal`이면 클래스도 `internal`로 생성됩니다.
 - 서로 다른 네임스페이스의 같은 이름 Enum을 한 파일에서 둘 다 `using`하면 `To{Enum}Fast` 확장 호출이 모호해집니다 (생성기가 알 수 없어 경고하지 않음). 정적 호출로 쓰세요.
 - 매니저의 Enum 목록·호출 복사는 소스 텍스트를 스캔해 옵션을 판단합니다. `(E2StringOptions)6`처럼 숫자로 지정한 옵션은 인식하지 않습니다 (코드 생성에는 영향 없음).
 - 매니저의 Enum 목록은 `Assets` 아래만 스캔하며, 생성기가 거절한 Enum(`E2S001`·`E2S002`)도 보일 수 있습니다. 실제 생성 여부는 콘솔 경고로 확인하세요.
+- 스캔은 주석 · 문자열 · 전처리 지시문 줄만 지우고 정규식으로 찾습니다. `#if`로 꺼진 구간의 Enum도 목록에 보일 수 있습니다. `'.'`으로 시작하거나 `~`로 끝나는 폴더와 파일 이름이 `E2StringAttribute.cs`인 파일은 스캔하지 않습니다.
