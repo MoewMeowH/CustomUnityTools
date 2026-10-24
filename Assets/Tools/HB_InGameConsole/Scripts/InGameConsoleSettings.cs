@@ -25,14 +25,14 @@ namespace InGameConsoleSystem
 
         private static InGameConsoleSettings s_Instance;
 
-#if !(UNITY_AUTOSTATICS_CLEANUP_ANALYSIS_ENABLED || UNITY_6000_5_OR_NEWER)
 #if UNITY_EDITOR
+        // 모든 Unity 버전에서 플레이 진입마다 다시 읽는다 (도메인 리로드를 꺼도 · 6.5+ NoAutoStaticsCleanup이어도 같은 수명).
+        // 에디트 모드에서 설정 에셋을 새로 만들거나 바꾼 것이 다음 플레이에 반영되게
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStaticsOnDomainReload()
+        private static void ResetStaticsOnPlayStart()
         {
             s_Instance = null;
         }
-#endif
 #endif
 
         [Header("Initialization")]

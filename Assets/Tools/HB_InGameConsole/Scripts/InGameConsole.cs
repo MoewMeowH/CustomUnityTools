@@ -104,32 +104,46 @@ public static partial class InGameConsole
 
         var settings = InGameConsoleSettings.Instance;
         var go = new GameObject("[InGameConsole]");
+        // 비활성으로 만들어 Awake를 미룬다 → 프로젝트 설정을 넣은 뒤 켠다 (씬에 직접 놓은 콘솔은 인스펙터 값을 그대로 씀)
+        go.SetActive(false);
 
-        // 테마를 먼저 채운 PanelSettings를 연결해야 "No Theme Style Sheet" 경고가 나지 않는다
-        var panelSettings = ResolvePanelSettings(settings);
-        var visualTree = ResolveVisualTree(settings);
+        try
+        {
+            // 테마를 먼저 채운 PanelSettings를 연결해야 "No Theme Style Sheet" 경고가 나지 않는다
+            var panelSettings = ResolvePanelSettings(settings);
+            var visualTree = ResolveVisualTree(settings);
 
 #if UNITY_6000_5_OR_NEWER
-        // Unity 6.5+ 권장 PanelRenderer 컴포넌트 생성 (UIDocument 대체)
-        var panelRenderer = go.AddComponent<PanelRenderer>();
-        panelRenderer.sortingOrder = 9999;
-        panelRenderer.panelSettings = panelSettings;
-        panelRenderer.visualTreeAsset = visualTree;
+            // Unity 6.5+ 권장 PanelRenderer 컴포넌트 생성 (UIDocument 대체)
+            var panelRenderer = go.AddComponent<PanelRenderer>();
+            panelRenderer.sortingOrder = 9999;
+            panelRenderer.panelSettings = panelSettings;
+            panelRenderer.visualTreeAsset = visualTree;
 #else
-        var uiDoc = go.AddComponent<UIDocument>();
-        uiDoc.sortingOrder = 9999;
-        uiDoc.panelSettings = panelSettings;
-        uiDoc.visualTreeAsset = visualTree;
+            var uiDoc = go.AddComponent<UIDocument>();
+            uiDoc.sortingOrder = 9999;
+            uiDoc.panelSettings = panelSettings;
+            uiDoc.visualTreeAsset = visualTree;
 #endif
 
-        s_UIInstance = go.AddComponent<HB_InGameConsoleUI>();
+            s_UIInstance = go.AddComponent<HB_InGameConsoleUI>();
+            s_UIInstance.ApplyProjectSettings(settings);
 
-        bool shouldDontDestroy = settings == null || settings.PersistAcrossScenes;
-        if (shouldDontDestroy)
+            bool shouldDontDestroy = settings == null || settings.PersistAcrossScenes;
+            if (shouldDontDestroy)
+            {
+                Object.DontDestroyOnLoad(go);
+            }
+        }
+        catch
         {
-            Object.DontDestroyOnLoad(go);
+            // 붙이는 중에 실패하면 비활성 GameObject가 남지 않게 지운다 (다음 호출이 다시 만든다)
+            s_UIInstance = null;
+            Object.Destroy(go);
+            throw;
         }
 
+        go.SetActive(true);
         return s_UIInstance;
 #else
         return null;

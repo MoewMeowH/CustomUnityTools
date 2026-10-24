@@ -56,7 +56,7 @@ namespace InGameConsoleSystem.Editor
         }
 
         [Serializable]
-        private class WatchTriggerContainer
+        internal class WatchTriggerContainer
         {
             public List<WatchTrigger> triggers = new List<WatchTrigger>();
         }
@@ -86,6 +86,9 @@ namespace InGameConsoleSystem.Editor
         private Vector2 detailScroll;
         private Vector2 watchScroll;
         private Vector2 tagBarScroll;
+        private readonly List<string> tagBarTags = new List<string>();
+        private bool isTagBarDirty = true;
+        private bool tagBarHasUntagged;
         private float detailPanelHeight = 160f;
         private bool isResizingDetail = false;
 
@@ -105,8 +108,8 @@ namespace InGameConsoleSystem.Editor
 
         // Watch Triggers
         private int watchSubTab = 0; // 0: Watch Values, 1: Condition Triggers
-        private readonly List<WatchTrigger> watchTriggers = new List<WatchTrigger>();
-        private const string PrefsTriggersKey = "HLog_WatchTriggers_Data";
+        // 트리거 목록과 검사는 HLogWatchTriggers(창과 무관하게 에디터에서 항상 동작)가 갖는다. 창은 편집 · 표시만
+        private static List<WatchTrigger> watchTriggers => HLogWatchTriggers.Triggers;
 
         private static readonly Regex PatternCompileError = new Regex(@"([a-zA-Z0-9_\-\.\/\\:]+\.cs)\s*\(([0-9]+)(?:,\s*[0-9]+)?\)", RegexOptions.Compiled);
         private static readonly Regex PatternAt = new Regex(@"\(at (.+):(\d+)\)", RegexOptions.Compiled);
@@ -115,19 +118,30 @@ namespace InGameConsoleSystem.Editor
 
         #region Scripting Define Symbols Helper
 
-        public static bool IsScriptingDefineSymbolDefined(string symbol)
+        /// <summary>
+        /// 심볼을 바꿀 대상: 자동 추가와 같은 Standalone · Android · iOS (<see cref="HLogDefineSetup.Targets"/>),
+        /// 그리고 지금 활성 플랫폼이 그 밖(WebGL · Dedicated Server 등)이면 그 플랫폼도 (에디터 컴파일은 활성 플랫폼 심볼을 쓴다)
+        /// </summary>
+        private static List<UnityEditor.Build.NamedBuildTarget> GetSymbolTargets()
+        {
+            var targets = new List<UnityEditor.Build.NamedBuildTarget>(HLogDefineSetup.Targets);
+            var activeGroup = BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget);
+            // Dedicated Server는 Standalone 그룹이지만 Server 심볼을 쓴다 (HLogReleaseBuildCheck와 같은 판정)
+            var active = activeGroup == BuildTargetGroup.Standalone
+                         && EditorUserBuildSettings.standaloneBuildSubtarget == StandaloneBuildSubtarget.Server
+                ? UnityEditor.Build.NamedBuildTarget.Server
+                : UnityEditor.Build.NamedBuildTarget.FromBuildTargetGroup(activeGroup);
+            if (!targets.Contains(active)) targets.Add(active);
+            return targets;
+        }
+
+        /// <summary> 활성 Build Profile의 Scripting Defines에 심볼이 있는지 (여기 있으면 플랫폼 심볼을 빼도 에디터는 켜진 채로 컴파일된다) </summary>
+        internal static bool IsSymbolInActiveBuildProfile(string symbol)
         {
             try
             {
-                var buildTargetGroup = EditorUserBuildSettings.selectedBuildTargetGroup;
-#if UNITY_2023_1_OR_NEWER
-                var namedBuildTarget = UnityEditor.Build.NamedBuildTarget.FromBuildTargetGroup(buildTargetGroup);
-                string defines = PlayerSettings.GetScriptingDefineSymbols(namedBuildTarget);
-#else
-                string defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(buildTargetGroup);
-#endif
-                var list = new HashSet<string>(defines.Split(';', StringSplitOptions.RemoveEmptyEntries));
-                return list.Contains(symbol);
+                var profile = UnityEditor.Build.Profile.BuildProfile.GetActiveBuildProfile();
+                return profile != null && profile.scriptingDefines != null && Array.IndexOf(profile.scriptingDefines, symbol) >= 0;
             }
             catch
             {
@@ -135,32 +149,82 @@ namespace InGameConsoleSystem.Editor
             }
         }
 
+        /// <summary> 대상 플랫폼 모두에 심볼이 있으면 true </summary>
+        public static bool IsScriptingDefineSymbolDefined(string symbol)
+        {
+            CountSymbolTargets(symbol, out int defined, out int total);
+            return total > 0 && defined == total;
+        }
+
+        /// <summary> 대상 플랫폼 중 심볼이 있는 수 / 전체 수 (일부만 켜진 상태를 툴바에 보이기 위해) </summary>
+        internal static void CountSymbolTargets(string symbol, out int defined, out int total)
+        {
+            defined = 0;
+            total = 0;
+            try
+            {
+                foreach (var target in GetSymbolTargets())
+                {
+                    total++;
+                    PlayerSettings.GetScriptingDefineSymbols(target, out string[] defines);
+                    if (Array.IndexOf(defines, symbol) >= 0) defined++;
+                }
+            }
+            catch
+            {
+                defined = 0;
+            }
+        }
+
+        /// <summary> 대상 플랫폼 모두에 심볼을 넣거나 뺀다 (다른 심볼 순서는 그대로) </summary>
         public static void SetScriptingDefineSymbol(string symbol, bool enable)
         {
             try
             {
-                var buildTargetGroup = EditorUserBuildSettings.selectedBuildTargetGroup;
-#if UNITY_2023_1_OR_NEWER
-                var namedBuildTarget = UnityEditor.Build.NamedBuildTarget.FromBuildTargetGroup(buildTargetGroup);
-                string defines = PlayerSettings.GetScriptingDefineSymbols(namedBuildTarget);
-#else
-                string defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(buildTargetGroup);
-#endif
-                var list = new HashSet<string>(defines.Split(';', StringSplitOptions.RemoveEmptyEntries));
-                if (enable) list.Add(symbol);
-                else list.Remove(symbol);
-
-                string newDefines = string.Join(";", list);
-#if UNITY_2023_1_OR_NEWER
-                PlayerSettings.SetScriptingDefineSymbols(namedBuildTarget, newDefines);
-#else
-                PlayerSettings.SetScriptingDefineSymbolsForGroup(buildTargetGroup, newDefines);
-#endif
+                foreach (var target in GetSymbolTargets())
+                {
+                    PlayerSettings.GetScriptingDefineSymbols(target, out string[] defines);
+                    var list = new List<string>(defines);
+                    bool changed = enable ? !list.Contains(symbol) : list.RemoveAll(s => s == symbol) > 0;
+                    if (enable && changed) list.Add(symbol);
+                    if (changed) PlayerSettings.SetScriptingDefineSymbols(target, list.ToArray());
+                }
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[HLog] Failed to update Scripting Define Symbols: {ex.Message}");
             }
+        }
+
+        // 툴바 USE_HLOG 버튼 상태 캐시
+        private bool isSymbolStateDirty = true;
+        private bool isSymbolDefined;
+        private bool isSymbolPartial;
+        private GUIContent symbolContent;
+
+        private void RefreshSymbolState(string symbol)
+        {
+            CountSymbolTargets(symbol, out int definedCount, out int targetCount);
+            bool inProfile = IsSymbolInActiveBuildProfile(symbol);
+            isSymbolDefined = targetCount > 0 && definedCount == targetCount;
+            isSymbolPartial = definedCount > 0 && !isSymbolDefined;
+
+            string label = isSymbolDefined ? $"{symbol}: ON" : isSymbolPartial ? $"{symbol}: PART" : $"{symbol}: OFF";
+            string tooltip = isSymbolPartial
+                ? $"{definedCount}/{targetCount} 플랫폼에만 있습니다 (Standalone · Android · iOS + 현재 플랫폼). 누르면 모두 켭니다."
+                : "Standalone · Android · iOS + 현재 플랫폼에 한꺼번에 넣고 뺍니다.";
+            if (inProfile)
+            {
+                label += "*";
+                tooltip += "\n* 활성 Build Profile의 Scripting Defines에도 있습니다. 이 버튼은 그 값을 바꾸지 않으므로, 끄려면 Build Profile에서도 빼세요.";
+            }
+            symbolContent = new GUIContent(label, tooltip);
+        }
+
+        private void OnFocus()
+        {
+            // 다른 곳(Player Settings · Build Profile)에서 바꾼 심볼을 반영
+            isSymbolStateDirty = true;
         }
 
         #endregion
@@ -178,7 +242,12 @@ namespace InGameConsoleSystem.Editor
         {
             HLogCore.Initialize();
             HLogCore.DiscoverAllChannels();
-            LoadWatchTriggers();
+            HLogWatchTriggers.Changed += Repaint;
+            // 트리거 저장이 프로젝트별로 바뀌기 전(PC 공용)에 만든 트리거를 창에서 보이는 상태로 한 번 가져온다
+            int imported = HLogWatchTriggers.ImportLegacyOnce();
+            if (imported > 0)
+                Debug.Log($"[HLog] Imported {imported} Condition Trigger(s) saved before triggers became per-project. Review them in HLog Console > Watch > Condition Triggers.");
+            isSymbolStateDirty = true;
 
             HLogCore.OnLogAdded += OnLogAdded;
             HLogCore.OnLogsCleared += OnLogsCleared;
@@ -194,6 +263,7 @@ namespace InGameConsoleSystem.Editor
 
         private void OnDisable()
         {
+            HLogWatchTriggers.Changed -= Repaint;
             SaveWatchTriggers();
 
             HLogCore.OnLogAdded -= OnLogAdded;
@@ -212,54 +282,12 @@ namespace InGameConsoleSystem.Editor
             {
                 isDirty = true;
                 isWatchesDirty = true;
-                Repaint();
-            }
-
-            if (state == PlayModeStateChange.EnteredPlayMode)
-            {
-                for (int i = 0; i < watchTriggers.Count; i++)
-                {
-                    watchTriggers[i].hasTriggered = false;
-                }
-                SaveWatchTriggers();
+                isTagBarDirty = true;
                 Repaint();
             }
         }
 
-        private void LoadWatchTriggers()
-        {
-            watchTriggers.Clear();
-            string json = EditorPrefs.GetString(PrefsTriggersKey, string.Empty);
-            if (!string.IsNullOrEmpty(json))
-            {
-                try
-                {
-                    var container = JsonUtility.FromJson<WatchTriggerContainer>(json);
-                    if (container != null && container.triggers != null)
-                    {
-                        watchTriggers.AddRange(container.triggers);
-                    }
-                }
-                catch
-                {
-                    // ignored
-                }
-            }
-        }
-
-        private void SaveWatchTriggers()
-        {
-            try
-            {
-                var container = new WatchTriggerContainer { triggers = watchTriggers };
-                string json = JsonUtility.ToJson(container);
-                EditorPrefs.SetString(PrefsTriggersKey, json);
-            }
-            catch
-            {
-                // ignored
-            }
-        }
+        private static void SaveWatchTriggers() => HLogWatchTriggers.Save();
 
         private void OnLogAdded(HLogCore.LogEntry entry)
         {
@@ -277,6 +305,7 @@ namespace InGameConsoleSystem.Editor
         private void OnLogsCleared()
         {
             isWatchesDirty = true;
+            isTagBarDirty = true;
             isStickToBottom = true;
             isScrollToBottomPending = true;
             selectedEntry = null;
@@ -298,7 +327,6 @@ namespace InGameConsoleSystem.Editor
         private void OnWatchUpdated(string key, string value)
         {
             isWatchesDirty = true;
-            CheckWatchTriggers(key, value);
 
             if (currentTab == ConsoleTab.Watch)
             {
@@ -306,182 +334,9 @@ namespace InGameConsoleSystem.Editor
             }
         }
 
-        private void CheckWatchTriggers(string key, string value)
-        {
-            for (int i = 0; i < watchTriggers.Count; i++)
-            {
-                var tr = watchTriggers[i];
-                if (!tr.enabled) continue;
-                if (tr.triggerOnce && tr.hasTriggered) continue;
-                bool keyMatches = string.Equals(tr.watchKey, key, StringComparison.OrdinalIgnoreCase)
-                                  || key.EndsWith("/" + tr.watchKey, StringComparison.OrdinalIgnoreCase)
-                                  || tr.watchKey.EndsWith("/" + key, StringComparison.OrdinalIgnoreCase);
-                if (!keyMatches) continue;
-
-                if (EvaluateTrigger(value, tr.op, tr.targetValue))
-                {
-                    tr.hasTriggered = true;
-                    string opStr = GetOpSymbol(tr.op);
-                    string conditionText = (tr.op == TriggerOp.IsNull || tr.op == TriggerOp.IsNotNull)
-                        ? $"{key} ({value}) {opStr}"
-                        : $"{key} ({value}) {opStr} '{tr.targetValue}'";
-
-                    string reportPath = null;
-                    if (tr.exportReport)
-                    {
-                        reportPath = ExportWatchSnapshotReport(conditionText, key, value);
-                    }
-
-                    string logMsg = tr.exportReport && !string.IsNullOrEmpty(reportPath)
-                        ? $"[Watch Trigger] {conditionText} 조건 만족!\nSaved Report: {reportPath}"
-                        : $"[Watch Trigger] {conditionText} 조건 만족!";
-
-                    Debug.LogError(logMsg);
-
-                    if (tr.pauseEditor)
-                    {
-                        Debug.Break();
-                    }
-
-                    SaveWatchTriggers();
-                    Repaint();
-                }
-            }
-        }
-
-        private static string ExportWatchSnapshotReport(string conditionText, string triggerKey, string triggerVal)
-        {
-            try
-            {
-                string projectRoot = Path.GetDirectoryName(Application.dataPath);
-                string reportsDir = Path.Combine(projectRoot, "Reports");
-                if (!Directory.Exists(reportsDir))
-                {
-                    Directory.CreateDirectory(reportsDir);
-                }
-
-                string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string safeKey = Regex.Replace(triggerKey, @"[^\w]", "_");
-                if (safeKey.Length > 20) safeKey = safeKey.Substring(0, 20);
-                string fileName = $"WatchReport_{safeKey}_{timeStamp}.txt";
-                string fullPath = Path.Combine(reportsDir, fileName);
-
-                var sb = new StringBuilder();
-                sb.AppendLine("================================================================================");
-                sb.AppendLine(" HLOG WATCH TRIGGER SNAPSHOT REPORT");
-                sb.AppendLine("================================================================================");
-                sb.AppendLine($"Timestamp   : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-                sb.AppendLine($"Trigger Key : {triggerKey}");
-                sb.AppendLine($"Cur Value   : {triggerVal}");
-                sb.AppendLine($"Condition   : {conditionText}");
-                sb.AppendLine($"Unity Ver   : {Application.unityVersion}");
-                sb.AppendLine($"Frame Count : {Time.frameCount}");
-                sb.AppendLine($"Game Time   : {Time.time:F2}s (Realtime: {Time.realtimeSinceStartup:F2}s)");
-                sb.AppendLine();
-
-                sb.AppendLine("--------------------------------------------------------------------------------");
-                sb.AppendLine(" ALL WATCH VALUES SNAPSHOT");
-                sb.AppendLine("--------------------------------------------------------------------------------");
-                var watches = HLogCore.Watches;
-                if (watches.Count == 0)
-                {
-                    sb.AppendLine("  (No Watch variables registered)");
-                }
-                else
-                {
-                    foreach (var kvp in watches)
-                    {
-                        string mark = string.Equals(kvp.Key, triggerKey, StringComparison.OrdinalIgnoreCase) ? ">> " : "   ";
-                        sb.AppendLine($"{mark}{kvp.Key,-30} : {kvp.Value.Value} (at {kvp.Value.Timestamp:HH:mm:ss})");
-                    }
-                }
-                sb.AppendLine();
-
-                sb.AppendLine("--------------------------------------------------------------------------------");
-                sb.AppendLine(" RECENT LOGS (LAST 20 ENTRIES)");
-                sb.AppendLine("--------------------------------------------------------------------------------");
-                var history = HLogCore.History;
-                int startIdx = Math.Max(0, history.Count - 20);
-                for (int i = startIdx; i < history.Count; i++)
-                {
-                    var entry = history[i];
-                    string tagStr = string.IsNullOrEmpty(entry.Tag) ? "" : $"[{entry.Tag}] ";
-                    sb.AppendLine($"[{entry.TimeString}] [{entry.LogType}] {tagStr}{entry.Message}");
-                }
-                sb.AppendLine("================================================================================");
-
-                File.WriteAllText(fullPath, sb.ToString(), Encoding.UTF8);
-                return fullPath;
-            }
-            catch (Exception ex)
-            {
-                return $"Failed to save report: {ex.Message}";
-            }
-        }
-
-        private static string GetOpSymbol(TriggerOp op)
-        {
-            switch (op)
-            {
-                case TriggerOp.GreaterThan: return ">";
-                case TriggerOp.LessThan: return "<";
-                case TriggerOp.Equals: return "==";
-                case TriggerOp.NotEquals: return "!=";
-                case TriggerOp.Contains: return "contains";
-                case TriggerOp.IsNull: return "is null";
-                case TriggerOp.IsNotNull: return "is not null";
-                default: return "=";
-            }
-        }
-
-        private static bool EvaluateTrigger(string curVal, TriggerOp op, string targetVal)
-        {
-            bool isCurNull = string.IsNullOrEmpty(curVal) ||
-                             string.Equals(curVal, "null", StringComparison.OrdinalIgnoreCase) ||
-                             string.Equals(curVal, "none", StringComparison.OrdinalIgnoreCase);
-
-            if (op == TriggerOp.IsNull) return isCurNull;
-            if (op == TriggerOp.IsNotNull) return !isCurNull;
-
-            if (curVal == null) return false;
-
-            // Target이 "null"을 검사하는 경우 (예: == "null", != "null")
-            bool isTargetNull = string.IsNullOrEmpty(targetVal) ||
-                                string.Equals(targetVal, "null", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(targetVal, "none", StringComparison.OrdinalIgnoreCase);
-
-            if (isTargetNull)
-            {
-                if (op == TriggerOp.Equals) return isCurNull;
-                if (op == TriggerOp.NotEquals) return !isCurNull;
-            }
-
-            // 1. 숫자 비교 시도
-            if (double.TryParse(curVal, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double numCur) &&
-                double.TryParse(targetVal, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double numTarget))
-            {
-                switch (op)
-                {
-                    case TriggerOp.GreaterThan: return numCur > numTarget;
-                    case TriggerOp.LessThan: return numCur < numTarget;
-                    case TriggerOp.Equals: return Math.Abs(numCur - numTarget) < 0.0001;
-                    case TriggerOp.NotEquals: return Math.Abs(numCur - numTarget) >= 0.0001;
-                    case TriggerOp.Contains: return curVal.IndexOf(targetVal, StringComparison.OrdinalIgnoreCase) >= 0;
-                }
-            }
-
-            // 2. 문자열 비교 폴백
-            switch (op)
-            {
-                case TriggerOp.Equals: return string.Equals(curVal, targetVal, StringComparison.OrdinalIgnoreCase);
-                case TriggerOp.NotEquals: return !string.Equals(curVal, targetVal, StringComparison.OrdinalIgnoreCase);
-                case TriggerOp.Contains: return curVal.IndexOf(targetVal, StringComparison.OrdinalIgnoreCase) >= 0;
-                default: return false;
-            }
-        }
-
         private void OnTagDiscovered(string tag)
         {
+            isTagBarDirty = true;
             Repaint();
         }
 
@@ -517,6 +372,16 @@ namespace InGameConsoleSystem.Editor
 
         private void UpdateFilteredLogs()
         {
+            // 따라가기를 멈춘 채 보고 있으면, 기록이 1000줄을 넘어 위쪽 줄이 지워질 때 보던 줄이 위로 밀린다
+            // → 보던 맨 위 줄을 기준으로 잡아 두었다가 목록을 다시 만든 뒤 스크롤을 그만큼 보정한다
+            HLogCore.LogEntry scrollAnchor = null;
+            int scrollAnchorIndex = -1;
+            if (!isStickToBottom && filteredLogs.Count > 0)
+            {
+                scrollAnchorIndex = Mathf.Clamp(Mathf.FloorToInt(logScroll.y / LogRowHeight), 0, filteredLogs.Count - 1);
+                scrollAnchor = filteredLogs[scrollAnchorIndex];
+            }
+
             filteredLogs.Clear();
             var history = HLogCore.History;
 
@@ -558,6 +423,16 @@ namespace InGameConsoleSystem.Editor
                 }
 
                 filteredLogs.Add(entry);
+            }
+
+            if (scrollAnchor != null)
+            {
+                // 기준 줄이 지워졌거나 필터로 가려졌으면 보정하지 않는다 (그 줄은 실제로 목록에서 빠짐)
+                int newIndex = filteredLogs.IndexOf(scrollAnchor);
+                if (newIndex >= 0 && newIndex != scrollAnchorIndex)
+                {
+                    logScroll.y = Mathf.Max(0f, logScroll.y + (newIndex - scrollAnchorIndex) * LogRowHeight);
+                }
             }
 
             // 필터로 가려지거나 기록에서 밀려난 줄은 선택 · 기준에서 뺀다 (보이지 않는 줄이 복사되지 않도록).
@@ -633,6 +508,11 @@ namespace InGameConsoleSystem.Editor
         {
             // 줄을 누르면 검색창 등에서 포커스를 빼서 Ctrl/Cmd+C가 줄 복사로 가게 한다
             GUIUtility.keyboardControl = 0;
+
+            // 줄을 고르면 맨 아래 따라가기를 멈춘다 (로그가 빠르게 들어와도 고른 줄이 화면에서 밀려나지 않게).
+            // 다시 맨 아래로 스크롤하거나 Clear하면 이어서 따라간다
+            isStickToBottom = false;
+            isScrollToBottomPending = false;
 
             if (range && selectionAnchor != null)
             {
@@ -734,11 +614,18 @@ namespace InGameConsoleSystem.Editor
 
             // Scripting Define Symbol Toggle
             string condSymbol = LogChannelGeneratorSettings.ConditionalSymbol;
-            bool isSymbolDefined = IsScriptingDefineSymbolDefined(condSymbol);
-            GUI.color = isSymbolDefined ? new Color(0.35f, 0.8f, 1f) : new Color(0.7f, 0.7f, 0.7f);
-            if (GUILayout.Button(isSymbolDefined ? $"{condSymbol}: ON" : $"{condSymbol}: OFF", EditorStyles.toolbarButton, GUILayout.Width(105)))
+            // 대상(Standalone · Android · iOS + 활성 플랫폼) 모두 = ON, 하나도 없음 = OFF, 일부 = PART (누르면 모두 켬).
+            // PlayerSettings 조회는 네이티브 호출 · 배열 할당이라 OnGUI마다 하지 않고, 창이 켜질 때 · 포커스 · 토글 뒤에만 다시 센다
+            if (isSymbolStateDirty || symbolContent == null)
+            {
+                isSymbolStateDirty = false;
+                RefreshSymbolState(condSymbol);
+            }
+            GUI.color = isSymbolDefined ? new Color(0.35f, 0.8f, 1f) : isSymbolPartial ? new Color(0.95f, 0.8f, 0.35f) : new Color(0.7f, 0.7f, 0.7f);
+            if (GUILayout.Button(symbolContent, EditorStyles.toolbarButton, GUILayout.Width(105)))
             {
                 SetScriptingDefineSymbol(condSymbol, !isSymbolDefined);
+                isSymbolStateDirty = true;
             }
             GUI.color = Color.white;
 
@@ -803,16 +690,21 @@ namespace InGameConsoleSystem.Editor
             }
             GUI.color = Color.white;
 
-            var knownTags = HLogCore.KnownTags;
+            // 태그 목록은 태그가 바뀔 때만 다시 만든다 (OnGUI마다 코어 목록을 복사하지 않도록)
             bool hasUntaggedLogs = HLogCore.HasUntaggedLogs;
-
-            var tagsToDisplay = new List<string>(knownTags);
-            if (hasUntaggedLogs && !tagsToDisplay.Contains("[Untagged]"))
+            if (isTagBarDirty || hasUntaggedLogs != tagBarHasUntagged)
             {
-                tagsToDisplay.Add("[Untagged]");
+                isTagBarDirty = false;
+                tagBarHasUntagged = hasUntaggedLogs;
+                tagBarTags.Clear();
+                tagBarTags.AddRange(HLogCore.KnownTags);
+                if (hasUntaggedLogs && !tagBarTags.Contains("[Untagged]"))
+                {
+                    tagBarTags.Add("[Untagged]");
+                }
             }
 
-            foreach (var tag in tagsToDisplay)
+            foreach (var tag in tagBarTags)
             {
                 bool isSubscribed = subscribedTags.Contains(tag);
                 bool isDisabled = disabledTags.Contains(tag);
@@ -908,21 +800,22 @@ namespace InGameConsoleSystem.Editor
                                      eventType == EventType.KeyDown;
             float prevScrollY = logScroll.y;
 
-            logScroll = EditorGUILayout.BeginScrollView(logScroll, GUILayout.Height(Mathf.Max(listHeight, 80f)));
+            float viewHeight = Mathf.Max(listHeight, 80f);
+            logScroll = EditorGUILayout.BeginScrollView(logScroll, GUILayout.Height(viewHeight));
 
-            for (int i = 0; i < filteredLogs.Count; i++)
+            // 전체 높이만 한 번에 잡고 보이는 행만 그린다 (최대 1000행을 이벤트마다 그리지 않도록)
+            Rect contentRect = GUILayoutUtility.GetRect(0f, filteredLogs.Count * LogRowHeight, GUILayout.ExpandWidth(true));
+            int firstVisible = Mathf.Max(0, Mathf.FloorToInt((logScroll.y - contentRect.y) / LogRowHeight));
+            int lastVisible = Mathf.Min(filteredLogs.Count - 1, Mathf.CeilToInt((logScroll.y - contentRect.y + viewHeight) / LogRowHeight));
+            if (eventType == EventType.Layout) lastVisible = -1;   // 레이아웃 이벤트는 그릴 것이 없다
+
+            var rowStyle = LogRowStyle;
+            for (int i = firstVisible; i <= lastVisible; i++)
             {
                 var entry = filteredLogs[i];
                 bool isSelected = selectedEntries.Contains(entry);
 
-                var rowStyle = new GUIStyle(EditorStyles.label)
-                {
-                    fixedHeight = 22,
-                    fontSize = 11,
-                    alignment = TextAnchor.MiddleLeft
-                };
-
-                var bgRect = EditorGUILayout.GetControlRect(false, 22);
+                var bgRect = new Rect(contentRect.x, contentRect.y + i * LogRowHeight, contentRect.width, LogRowHeight);
 
                 // Alternating / Selected Background
                 if (isSelected)
@@ -975,16 +868,16 @@ namespace InGameConsoleSystem.Editor
                     x += 70;
                 }
 
-                // 4. Message Text
+                // 4. Message Text (보이는 행만 한 줄로 바꾼다)
                 GUI.color = GetLogColor(entry.LogType);
-                string singleLineMsg = entry.Message.Replace('\n', ' ');
+                string singleLineMsg = entry.Message.IndexOf('\n') >= 0 ? entry.Message.Replace('\n', ' ') : entry.Message;
                 GUI.Label(new Rect(x, y, bgRect.width - x + bgRect.x, 18), singleLineMsg, rowStyle);
                 GUI.color = Color.white;
             }
 
             if (eventType == EventType.Repaint)
             {
-                logContentHeight = filteredLogs.Count > 0 ? GUILayoutUtility.GetLastRect().yMax : 0f;
+                logContentHeight = contentRect.yMax;
 
                 if (autoScroll && isScrollToBottomPending)
                 {
@@ -1006,6 +899,17 @@ namespace InGameConsoleSystem.Editor
                 isStickToBottom = IsLogScrollAtBottom();
             }
         }
+
+        private const float LogRowHeight = 22f;
+        private GUIStyle logRowStyle;
+
+        // EditorStyles는 OnGUI 안에서만 쓸 수 있어 처음 그릴 때 만든다 (행마다 new GUIStyle 하지 않도록)
+        private GUIStyle LogRowStyle => logRowStyle ??= new GUIStyle(EditorStyles.label)
+        {
+            fixedHeight = LogRowHeight,
+            fontSize = 11,
+            alignment = TextAnchor.MiddleLeft
+        };
 
         private bool IsLogScrollAtBottom()
         {
@@ -1412,7 +1316,7 @@ namespace InGameConsoleSystem.Editor
 
             if (map.Count == 0)
             {
-                EditorGUILayout.HelpBox("No variables currently being watched.\nCall HLog.Common.Watch(\"Key\", value) at runtime.", MessageType.Info);
+                EditorGUILayout.HelpBox("No variables currently being watched.\nCall HLog.Common.Watch(\"Key\", () => value, this) once (e.g. in Start).", MessageType.Info);
             }
 
             int index = 0;

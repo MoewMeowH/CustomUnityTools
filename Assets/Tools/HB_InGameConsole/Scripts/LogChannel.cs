@@ -28,7 +28,8 @@ public class LogChannel
     /// </summary>
     public LogChannel(string tag, bool enabled = true, LogType filterLevel = LogType.Log)
     {
-        Tag = tag;
+        // RegisterTag · 태그 바와 같은 이름이 되도록 앞뒤 공백을 자른다 ("Foo "와 "Foo"가 따로 보이지 않게)
+        Tag = tag?.Trim();
         _defaultEnabled = enabled;
         _defaultFilterLevel = filterLevel;
 #if USE_HLOG
@@ -80,7 +81,7 @@ public class LogChannel
     {
 #if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
-        _logger.Log(LogType.Log, Tag, message, context);
+        LogTagged(LogType.Log, message, context);
 #endif
     }
 
@@ -90,7 +91,7 @@ public class LogChannel
     {
 #if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
-        _logger.Log(LogType.Warning, Tag, message, context);
+        LogTagged(LogType.Warning, message, context);
 #endif
     }
 
@@ -100,7 +101,7 @@ public class LogChannel
     {
 #if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
-        _logger.Log(LogType.Error, Tag, message, context);
+        LogTagged(LogType.Error, message, context);
 #endif
     }
 
@@ -110,7 +111,7 @@ public class LogChannel
     {
 #if USE_HLOG
         if (!HLogCore.IsLogEnabled || !Enabled) return;
-        _logger.Log(LogType.Error, Tag, message, context);
+        LogTagged(LogType.Error, message, context);
 #endif
     }
 
@@ -152,26 +153,32 @@ public class LogChannel
             HLogCore.PopChannelTag(previous);
         }
     }
-#endif
 
-    [Conditional("USE_HLOG")]
+    /// <summary>
+    /// 출력하는 동안 채널 태그를 코어에 알린다. Logger는 "태그: 메시지" 문자열로 내보내므로,
+    /// 코어가 문자열에서 태그를 다시 해석하지 않게 한다 (한글 · 공백 · 기호가 든 태그도 그대로).
+    /// </summary>
     [HideInCallstack]
-    public void Watch(string key, object value)
+    private void LogTagged(LogType type, object message, UnityEngine.Object context)
     {
-#if USE_HLOG
-        HLogCore.Watch($"{Tag}/{key}", value);
-#endif
+        string previous = HLogCore.PushChannelTag(Tag);
+        try
+        {
+            _logger.Log(type, Tag, message, context);
+        }
+        finally
+        {
+            HLogCore.PopChannelTag(previous);
+        }
     }
 
-    [Conditional("USE_HLOG")]
-    [HideInCallstack]
-    public void Watch(string key, Func<object> getter, UnityEngine.Object owner = null)
-    {
-#if USE_HLOG
-        HLogCore.Watch($"{Tag}/{key}", getter, owner);
+    /// <summary> 꺼진 채널(또는 HLog 전체 꺼짐)은 로그뿐 아니라 일시정지 · 리포트도 하지 않는다 </summary>
+    internal bool IsActive => HLogCore.IsLogEnabled && Enabled;
 #endif
-    }
 
+    /// <summary>
+    /// 게터 Watch를 등록합니다 (키는 "채널태그/키"). 메인 스레드 전용. 예: HLog.Common.Watch("Player/Hp", () => m_Hp, this);
+    /// </summary>
     [Conditional("USE_HLOG")]
     [HideInCallstack]
     public void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null)
@@ -224,9 +231,9 @@ public class LogChannel
     public void BreakIf(bool condition, object message, UnityEngine.Object context = null)
     {
 #if USE_HLOG && UNITY_EDITOR
-        if (condition)
+        if (condition && IsActive)
         {
-            _logger.Log(LogType.Error, Tag, $"[BreakIf Hit] {message}", context);
+            LogTagged(LogType.Error, $"[BreakIf Hit] {message}", context);
             UnityEngine.Debug.Break();
         }
 #endif
@@ -240,9 +247,9 @@ public class LogChannel
     public void Assert(bool condition, object message, UnityEngine.Object context = null)
     {
 #if USE_HLOG && UNITY_EDITOR
-        if (!condition)
+        if (!condition && IsActive)
         {
-            _logger.Log(LogType.Assert, Tag, $"[Assertion Failed] {message}", context);
+            LogTagged(LogType.Assert, $"[Assertion Failed] {message}", context);
             UnityEngine.Debug.Break();
         }
 #endif
@@ -256,10 +263,10 @@ public class LogChannel
     public void ReportIf(bool condition, string reason, params (string Key, object Value)[] extraVariables)
     {
 #if USE_HLOG && UNITY_EDITOR
-        if (condition)
+        if (condition && IsActive)
         {
             string filePath = ExportReportFile(reason, extraVariables);
-            _logger.Log(LogType.Error, Tag, $"[Report Generated & Paused] {reason}\nSaved Report: {filePath}");
+            LogTagged(LogType.Error, $"[Report Generated & Paused] {reason}\nSaved Report: {filePath}", null);
             UnityEngine.Debug.Break();
         }
 #endif
