@@ -269,23 +269,13 @@ unity command cheat_stop   # Play 종료
 ```json
 {"ok":true,"playMode":"entering",
  "runInBackgroundOverride":{"active":true,"original":false,"reason":null,
-                            "pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}},
- "playUnfocusedOverride":{"active":false,"original":null,"reason":"disabled"}}
+                            "pipeline":{"config":"none","enableInBuilds":null,"autoStart":null}}}
 ```
 
 - `active`가 false면 `reason`: `disabled`(설정 꺼짐) / `already_true`(원래 true) / `pipeline_driver` / `pipeline_config_unreadable`(파일은 있는데 읽지 못함). `original`은 읽지 않았으면 null.
 - `pipeline.config`: `none`(파일 없음) / `disabled` / `enabled` / `unreadable`.
 - `cheat_stop` 응답은 `{"ok":true,"playMode":"exiting"}`입니다. 복원은 에디트 모드에 들어간 뒤라 응답 시점에는 아직 켜져 있을 수 있습니다.
 - 켜고 되돌릴 때 Console에 `[HB_Cheat] runInBackground ...` 한 줄씩 남깁니다.
-
-#### Play 동안만 Play Unfocused (기본 꺼짐)
-
-Game 뷰가 기본값(**Play Focused**)이면 Play에 들어가는 순간 Unity 창이 맨 앞으로 나와, 다른 창에서 일하던 사람의 포커스를 가져갈 수 있습니다(환경에 따라 다름 — Windows가 막는 경우도 있음). `Tools > HB > Cheat` 설정의 **Play Unfocused During Cli Play**를 켜면 `cheat_play`로 시작한 Play 동안만 메인 Game 뷰를 **Play Unfocused**로 바꾸고, 에디트 모드로 돌아오면 원래 값으로 되돌립니다.
-
-- 원래 값이 Play Focused일 때만 바꿉니다. Play Maximized · Play Unfocused로 둔 경우는 그대로 둡니다(`reason: "not_focused"`).
-- Unity 공개 API(`PlayModeWindow.SetPlayModeFocused`)는 Focused ↔ Maximized만 고를 수 있어 **내부 API를 리플렉션으로** 씁니다. 찾지 못하면 아무것도 하지 않습니다(`reason: "api_unavailable"`). Game 뷰가 없으면 `no_play_mode_view`.
-- 되돌리는 경로는 runInBackground와 같습니다. Play 중에 사람이 드롭다운을 바꿨으면 그 값을 둡니다.
-- 이 값은 창 배치 파일(`UserSettings/Layouts`, 사용자별)에 저장됩니다. Play 중에 에디터를 닫으면 Unity가 Play 진입 때 상태로 저장해 Play Unfocused가 남으므로, `Library/HB_Cheat/PlayUnfocused.restore`(이 PC 전용, 정상 종료면 지워짐)에 원래 값을 적어 두고 **다음 실행 때 되돌립니다**.
 
 ### raw (자동화 경로는 기본 꺼짐)
 
