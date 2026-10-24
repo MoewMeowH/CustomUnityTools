@@ -29,8 +29,8 @@ AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴�
 
 | 도구명 | 버전 | UPM Git URL | 설명 | 문서 링크 |
 | :--- | :---: | :--- | :--- | :---: |
-| **HB_InGameConsole** | 1.0.1 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_InGameConsole` | UI Toolkit 기반 런타임 인게임 콘솔 및 고성능 `HLog` 로깅/Watch/Report 툴킷. 다중 채널 필터링, 실시간 람다 Watch, 조건부 Pause 및 스냅샷 리포트 지원. | [상세 문서](Assets/Tools/HB_InGameConsole/README.md) |
-| **HB_Cheat** | 1.0.3 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Cheat` | UI Toolkit 기반 개발·QA용 치트 패널(모바일 우선). 어트리뷰트로 치트 정의, 서버 치트 문자열 조합·전송, 릴리즈 빌드에서 엄격히 제외, Unity CLI 자동화(`cheat_*` 명령, JSON 응답). InGameConsole이 있으면 콘솔 탭으로 들어감. | [상세 문서](Assets/Tools/HB_Cheat/README.md) |
+| **HB_InGameConsole** | 1.0.0 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_InGameConsole` | UI Toolkit 기반 런타임 인게임 콘솔 및 고성능 `HLog` 로깅/Watch/Report 툴킷. 다중 채널 필터링, 실시간 람다 Watch, 조건부 Pause 및 스냅샷 리포트 지원. | [상세 문서](Assets/Tools/HB_InGameConsole/README.md) |
+| **HB_Cheat** | 1.0.0 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Cheat` | UI Toolkit 기반 개발·QA용 치트 패널(모바일 우선). 어트리뷰트로 치트 정의, 서버 치트 문자열 조합·전송, 릴리즈 빌드에서 엄격히 제외, Unity CLI 자동화(`cheat_*` 명령, JSON 응답). InGameConsole이 있으면 콘솔 탭으로 들어감. | [상세 문서](Assets/Tools/HB_Cheat/README.md) |
 | **HB_E2String** | 1.0.0 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String` | Roslyn Source Generator 기반 Enum to String 변환 제로 할당(Zero-Allocation) 최적화 및 관리 에디터 윈도우. | [상세 문서](Assets/Tools/HB_E2String/README.md) |
 | **HB_Build** | 1.0.0 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build` | 멀티 플랫폼 커스텀 빌드 매니저 및 Jenkins CI/CD 자동화 파이프라인(Groovy Jenkinsfile) 생성기. | [상세 문서](Assets/Tools/HB_Build/README.md) |
 | **HB_TestFrameworkHelper** | 1.0.0 | `https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrameworkHelper` | 프리팹 인스펙터 슬롯 누락(`[NeedSlotNullCheck]`) 및 Missing Script를 컴파일/테스트/빌드 타임에 검증하는 QA 헬퍼. | [상세 문서](Assets/Tools/HB_TestFrameworkHelper/README.md) |
