@@ -245,10 +245,15 @@ namespace HB.TestFrameworkHelper.Editor
             }
         }
 
-        /// <summary>값은 비었는데 instanceID가 남아 있으면 삭제된 에셋을 가리키는 참조(Missing)다. 빈 칸은 0이다.</summary>
+        /// <summary>값은 비었는데 ID가 남아 있으면 삭제된 에셋을 가리키는 참조(Missing)다. 빈 칸은 0(None)이다.</summary>
         private static bool IsMissingReference(SerializedProperty prop)
         {
+            // 6000.3에는 objectReferenceEntityIdValue가 없고, Unity 7에서는 instanceID 쪽이 컴파일 에러(CS0619)다.
+#if UNITY_7000_0_OR_NEWER
+            return prop.objectReferenceValue == null && prop.objectReferenceEntityIdValue != EntityId.None;
+#else
             return prop.objectReferenceValue == null && prop.objectReferenceInstanceIDValue != 0;
+#endif
         }
 
         /// <summary>obj가 다른 프리팹(중첩 · 변형의 원본)에서 왔고 그 원본이 이번 스캔 대상인지. 아니면 source는 null.</summary>
