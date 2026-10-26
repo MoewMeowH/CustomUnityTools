@@ -4,6 +4,9 @@
     "references": [
         "HB.TestFrameworkHelper.Testing",
         "HB.TestFrameworkHelper.Testing.Editor",
+        "HB.TestFrameworkHelper.Runtime",
+        "HB.TestFrameworkHelper.Editor",
+        "HB.TestFrameworkHelper.Testing.Tests.Fixtures",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

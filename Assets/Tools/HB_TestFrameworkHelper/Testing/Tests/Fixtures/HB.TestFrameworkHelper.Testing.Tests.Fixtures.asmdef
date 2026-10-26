@@ -1,0 +1,26 @@
+{
+    "name": "HB.TestFrameworkHelper.Testing.Tests.Fixtures",
+    "rootNamespace": "HB.TestFrameworkHelper.Tests",
+    "references": [
+        "HB.TestFrameworkHelper.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "HB_TFH_HAS_TEST_FRAMEWORK",
+        "HB_TFH_SELF_TESTS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "HB_TFH_HAS_TEST_FRAMEWORK"
+        }
+    ],
+    "noEngineReferences": false
+}

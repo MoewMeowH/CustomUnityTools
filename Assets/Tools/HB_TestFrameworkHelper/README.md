@@ -1,6 +1,6 @@
 # HB_TestFrameworkHelper
 
-유니티 프로젝트의 프리팹 인스펙터 슬롯 누락(`[NeedSlotNullCheck]`) 및 Missing Script를 코딩 타임, 테스트 타임, 빌드 타임에 검증하는 에디터 도구입니다.
+유니티 프로젝트의 프리팹 인스펙터 슬롯 누락(`[NeedSlotNullCheck]`) 및 Missing Script를 코딩 타임, 테스트 타임, 빌드 타임에 검증하는 에디터 도구입니다. 씬 · ScriptableObject · 머티리얼 · 일반 Missing 참조까지 넓힌 에셋 건강 검사와 테스트 작성 도우미도 들어 있습니다.
 
 ---
 
@@ -60,21 +60,22 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
      | `SlotValidationIssue` | `AssetPath` · `PrefabAsset` · `GameObjectPath` · `ComponentName` · `FieldName` · `Description` · `IssueType` · `Severity` |
      | `EValidationIssueType` / `EValidationSeverity` | 위 표의 종류 / `Error` · `Warning` |
 4. **에디터 검증 윈도우 (`Tools > HB > Test Framework Helper`)**:
-   - 지정 폴더 내 전체 프리팹을 검사하고 문제가 있는 프리팹을 에디터에서 바로 Ping하여 확인할 수 있습니다. 검사 중 진행 표시에서 취소할 수 있습니다.
-   - **검사 폴더**(기본 `Assets`)를 입력하거나 **폴더 선택**으로 고릅니다 (`Assets` 안만, 경로 대소문자는 구분하지 않음). 프로젝트에 없는 폴더면 알림만 띄우고 검사하지 않습니다.
-   - **전체 검사 실행** 후 에러 · 경고 개수와 항목마다 종류 · `컴포넌트 > 필드` · 프리팹 경로(GameObject 경로) · 설명을 보여줍니다. 경고 항목은 노란색입니다.
-   - **에셋 열기 (Ping)**: 해당 프리팹 에셋을 Project 창에서 Ping하고 선택합니다.
-   - 취소하면 취소 전까지 검사한 프리팹만 결과에 있다고 경고합니다. 원본을 검사하기 전에 취소했으면 중첩 · 변형에서 물려받은 문제도 빠질 수 있습니다.
+   - 검사할 항목을 체크하고 **검사 실행**을 누릅니다 (처음 열면 Project Settings에서 켜진 검사가 체크돼 있음). 검사 폴더 · 제외 폴더 · 씬 대상은 **Project Settings 열기**로 바꿉니다. 검사 중 진행 표시에서 취소할 수 있습니다.
+   - 결과는 검사별로 묶어(에러 · 경고 개수) 항목마다 종류 · `컴포넌트 > 필드` · 경로(GameObject 경로 · 서브에셋) · 설명을 보여줍니다. 경고 항목은 노란색, 저장하지 않은 씬의 결과에는 `[저장 안 됨]`이 붙습니다.
+   - **에셋 열기 (Ping)**: 프리팹 · ScriptableObject · 머티리얼 · 씬 에셋을 Project 창에서 Ping하고 선택합니다.
+   - 검사를 끝까지 하지 못했으면(취소 · 로드 실패 · 없는 폴더/씬 · PlayMode) 실패 목록을 경고로 보여 주고, 문제가 0개여도 "문제 없음"이라고 하지 않습니다.
 5. **Unity Test Framework & 빌드 파이프라인 연동**:
-   - `SlotValidationTests`를 통해 EditMode Test Runner 및 CI 환경에서 자동 검증을 수행합니다. 에러만 실패로 보고하고 경고는 로그로 남깁니다.
-     - 테스트 `Validate_AllPrefabs_NoNullInspectorSlots_And_NoMissingScripts` 하나가 `Assets` 전체 프리팹을 검사합니다.
+   - `SlotValidationTests` · `AssetHealthTests`를 통해 EditMode Test Runner 및 CI 환경에서 자동 검증을 수행합니다. 에러 또는 **검사를 끝까지 못 한 경우**만 실패로 보고하고 경고는 로그로 남깁니다.
+     - 테스트 `Validate_AllPrefabs_NoNullInspectorSlots_And_NoMissingScripts`가 프리팹 검사(`PrefabSlots`)를 맡습니다. 폴더 범위는 Project Settings를 따릅니다 (설정 파일이 없으면 `Assets`).
+     - `AssetHealthTests.Validate_AssetHealth(검사 ID)`가 나머지 검사(씬 · ScriptableObject · 머티리얼 · 일반 Missing 참조)를 검사마다 한 줄로 보여 줍니다. Project Settings에서 꺼진 검사는 Ignore로 표시합니다.
      - 경고는 `Debug.LogWarning`으로 남기고, 테스트 결과 메시지(실패 · 통과 모두)에도 목록을 적어 Test Runner 결과 화면에서 보입니다. 항목은 `[심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)` 형식입니다.
-     - 테스트는 별도 어셈블리(`HB.TestFrameworkHelper.Tests.Editor`)에 있으며 `com.unity.test-framework`가 설치된 경우에만 컴파일됩니다 (`versionDefines` → `HB_TFH_HAS_TEST_FRAMEWORK`). Test Framework가 없는 프로젝트에서도 나머지 기능은 그대로 동작합니다.
-   - `PreBuildStep_ValidateInspectorSlots`(`IPreBuildStep`)를 통해 플레이어 빌드 전 사전 검사를 수행하며, `LIVE` 빌드 시 에러가 발견되면 빌드를 중단합니다 (경고는 로그만). `com.hb.custombuild`가 설치된 경우에만 활성화됩니다.
+     - 테스트는 별도 어셈블리(`HB.TestFrameworkHelper.Tests.Editor`)에 있으며 `com.unity.test-framework`가 설치된 경우에만 컴파일됩니다 (`versionDefines` → `HB_TFH_HAS_TEST_FRAMEWORK`). 설치한 프로젝트의 Test Runner에 보이려면 `Packages/manifest.json`의 `"testables"`에 `com.hb.testframeworkhelper`를 넣습니다. Test Framework가 없는 프로젝트에서도 나머지 기능은 그대로 동작합니다.
+   - `PreBuildStep_ValidateInspectorSlots`(`IPreBuildStep`)를 통해 플레이어 빌드 전 사전 검사를 수행하며, `LIVE` 빌드 시 켜진 검사의 에러가 있거나 검사를 끝까지 못 했으면 빌드를 중단합니다 (경고는 로그만). `com.hb.custombuild`가 설치된 경우에만 활성화됩니다.
      - HB_Build(`com.hb.custombuild`) 연동 스텝입니다. 별도 어셈블리 `HB.TestFrameworkHelper.BuildIntegration.Editor`에 있고, 패키지가 있을 때만 `HB_CUSTOM_BUILD_ENABLED`가 정의되어 컴파일됩니다.
-     - `ExecutionOrder`는 1(가장 먼저)이고, `Assets` 전체 프리팹을 검사합니다. 첫 줄에 `[Inspector Validation] 필수 슬롯/스크립트 문제 N개 (에러 E · 경고 W)`, 이어서 문제마다 `[심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)`를 빌드 경고 로그로 남깁니다.
-     - 에러가 있으면 첫 줄을 HB_Build 경고(`context.AddWarning` → `BuildOutput/HB_BUILD_WARNINGS.txt`, Jenkins UNSTABLE)로도 남깁니다. 경고(빈 원소)만 있으면 로그만 남깁니다.
+     - `ExecutionOrder`는 6(HB_Build의 SceneDefine 씬 필터 5 뒤)입니다. Project Settings에서 켜진 검사를 돌리고, 씬은 설정의 씬 대상 대신 **실제 빌드 씬 목록**(`BuildContext.Scenes` — 명령줄 · 프로필 · SceneDefine 필터 뒤)을 검사합니다. 첫 줄에 `[Inspector Validation] 문제 N개 (에러 E · 경고 W)`, 이어서 문제마다 `[심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)`를 빌드 경고 로그로 남깁니다.
+     - 에러가 있거나 검사를 끝까지 못 했으면 요약을 HB_Build 경고(`context.AddWarning` → `BuildOutput/HB_BUILD_WARNINGS.txt`, Jenkins UNSTABLE)로도 남깁니다. 경고만 있으면 로그만 남깁니다.
      - `StepId`는 `HB.TestFrameworkHelper.Editor.PreBuildStep_ValidateInspectorSlots`로 고정되어 있어, 빌드 프로필의 비활성 스텝 목록에 넣어 끌 수 있고 클래스 이름이 바뀌어도 설정이 유지됩니다.
+6. **에셋 건강 검사 (`AssetHealthEngine`)**: 프리팹 밖으로 넓힌 검사입니다. 아래 절을 보세요.
 
 ## 사용 예시
 
@@ -98,6 +99,63 @@ public class MyPopupUI : MonoBehaviour
     [NeedSlotNullCheck(warnNullElements: false)] // 빈 칸이 있어도 되는 목록
     [SerializeField] private List<Transform> m_OptionalSockets;
 }
+```
+
+---
+
+## 에셋 건강 검사 (Asset Health)
+
+프리팹 슬롯 검사를 씬 · ScriptableObject · 머티리얼 · 일반 Missing 참조로 넓힌 검사입니다. 창 · Test Runner · HB_Build 빌드 전 스텝에서 돌고, 에셋 저장 · 임포트 때 자동으로 돌지는 않습니다.
+
+### 검사 종류
+
+| 검사 ID (`AssetCheckIds`) | 대상 | 에러 | 경고 |
+|---|---|---|---|
+| `PrefabSlots` (기본 켬) | 프리팹 | `[NeedSlotNullCheck]` 빈 슬롯 · Missing 참조 · Missing 스크립트 | 배열 · List 빈 원소 |
+| `Scenes` | 씬 | `[NeedSlotNullCheck]` 빈 슬롯 · Missing 참조 · Missing 스크립트 | 배열 · List 빈 원소 |
+| `ScriptableObjects` | `.asset`의 ScriptableObject (서브에셋 포함) | `[NeedSlotNullCheck]` 빈 슬롯 · Missing 참조 | 배열 · List 빈 원소 |
+| `Materials` | `.mat` · `.prefab` · `.asset` 안의 머티리얼 (서브에셋 포함) | 셰이더 없음 · 에러 셰이더(`Hidden/InternalErrorShader`) | 셰이더 컴파일 에러 · 현재 셰이더의 텍스처 칸 Missing |
+| `MissingReferences` | 프리팹 · ScriptableObject · 씬의 모든 컴포넌트(내장 포함) | — | 어트리뷰트 없는 칸의 Missing 참조 |
+
+* 서브에셋은 Unity가 직접 저장하는 파일(`.prefab` · `.asset` · `.mat`)만 봅니다. 모델(FBX) 등 임포터가 만든 에셋은 고칠 수 없어 제외합니다.
+* 머티리얼은 지금 셰이더에 있는 텍스처 속성만 봅니다 (셰이더를 바꾸기 전에 남은 칸은 무시). 셰이더가 없으면 텍스처는 보지 않습니다. 셰이더 컴파일 에러(`ShaderUtil.ShaderHasError`)는 플랫폼 · 그래픽스 API에 따라 달라질 수 있어 경고로만 보고합니다.
+* 일반 Missing 검사는 문자열 · 기본형 원소 배열(데이터 테이블 · 타일 · 커브 키 등)의 안으로 들어가지 않습니다 (참조가 없으므로).
+* 검사하지 않는 것: 씬 단위 설정(RenderSettings의 스카이박스 · 라이팅 데이터 등 컴포넌트가 아닌 것), 스크립트가 Missing인 ScriptableObject 파일(Unity가 타입을 몰라 검색에 걸리지 않음 — 6000.3 실측).
+* 같은 칸을 두 번 보고하지 않습니다: 슬롯 검사가 켜져 있으면 `[NeedSlotNullCheck]` 칸은 슬롯 검사(에러)만, 꺼져 있으면 `MissingReferences`가 경고로 보고합니다. 씬에 놓인 프리팹이 원본의 문제를 그대로 물려받았으면, 원본 프리팹이 같은 검사에서 같은 심각도 이상으로 실제로 보고한 경우에만 씬에서 건너뜁니다 (프리팹 슬롯 검사가 꺼져 원본이 일반 Missing 경고로만 보고한 칸은 씬의 슬롯 에러로 보고). `[SerializeReference]` 칸은 검사하지 않습니다.
+* Missing 스크립트 중복은 기존 프리팹 규칙처럼 개수로 뺍니다. 씬에서는 원본 체인(변형 · 중첩)이 보고한 개수의 합을 뺍니다 (원본의 Missing을 지우고 다른 Missing을 더하면 상쇄되어 보이지 않는 한계가 같음).
+
+### 설정 (`Project Settings > HB > Test Framework Helper`)
+
+`ProjectSettings/HBTestFrameworkHelperSettings.asset`에 저장되어 git으로 팀이 같이 씁니다. 파일이 없으면 기본값 = `PrefabSlots`만 켬 · 검사 폴더 `Assets` · 씬 대상 Build Settings (지금까지와 같은 동작).
+
+* **검사 폴더 · 제외 폴더**: 프리팹 · ScriptableObject · 머티리얼을 찾는 범위. 검사 폴더가 비면 대상이 없습니다 (Assets 전체로 넓히지 않음). 중첩 · 변형 프리팹의 원본 판정은 제외까지 적용한 최종 대상으로 합니다.
+* **씬 대상** (여럿을 함께 켤 수 있고, 같은 씬은 한 번만): Build Settings에서 켜진 씬 · 지정 폴더의 씬 · 직접 고른 씬. 직접 고른 씬은 제외 폴더보다 우선합니다. 빌드 씬 목록을 빌드 코드로 채운다면 폴더나 직접 고르기를 함께 켜세요 (HB_Build 빌드 전 검사는 실제 빌드 씬을 따로 보며, 그 목록에는 제외 폴더를 적용하지 않습니다).
+
+### 씬 검사 규칙
+
+* 이미 열린 씬은 **열린 상태 그대로**(저장하지 않은 변경 포함) 검사하고, 닫거나 다시 불러오지 않습니다. 그 결과에는 `IsUnsavedScene`과 설명의 `[저장 안 된 변경 포함]`이 붙습니다.
+* 닫혀 있던 씬은 추가 모드로 열어 검사한 뒤 닫습니다 (검사기가 연 씬만). 활성 씬은 원래대로 돌려놓습니다. 씬을 열면 그 씬의 `[ExecuteAlways]` · `OnValidate` 스크립트가 돈다는 점에 주의하세요.
+* Hierarchy에 있지만 로드하지 않은 씬, PlayMode(또는 전환 중)의 씬 검사는 하지 않고 "끝까지 못 함"으로 남깁니다.
+
+### 검사를 끝까지 못 했을 때
+
+설정 오류(알 수 없는 검사 ID) · 없는 폴더/씬 · 로드 실패 · 씬을 열거나 닫지 못함 · 취소는 `AssetHealthScanResult.Failures`에 남고 `IsComplete`가 false입니다. Test Runner 테스트는 실패, HB_Build는 `LIVE`면 빌드 차단 · 아니면 경고, 창은 경고를 보여 줍니다.
+
+### 스크립트 API (`HB.TestFrameworkHelper.Editor`)
+
+| 멤버 | 설명 |
+|---|---|
+| `AssetHealthEngine.Scan(AssetHealthScanOptions options, bool showProgress = false)` | 검사 실행. 메인 스레드 전용, 실행 중 다시 부르면 `InvalidOperationException`. `options`가 null이면 `ArgumentNullException` |
+| `AssetHealthSettings.CreateScanOptions()` | 프로젝트 설정으로 만든 옵션 (복사본) |
+| `AssetHealthScanOptions` | `SearchFolders` · `ExcludeFolders` · `EnabledChecks` · `SceneSources`(`ESceneTargetSources` 플래그) · `SceneFolders` · `ExplicitScenePaths` · `OverrideScenePaths`(null이 아니면 씬 대상은 이 목록만) |
+| `AssetHealthScanResult` | `Issues` · `Failures` · `Canceled` · `IsComplete` · `ScannedTargetCount` · `ErrorCount` · `WarningCount` |
+| `SlotValidationIssue` (추가 필드) | `CheckId` · `Asset`(Ping 대상: 프리팹 · SO · 머티리얼 · 씬 에셋) · `SubAssetName` · `IsUnsavedScene`. `EValidationIssueType`에 `MissingShader` · `ErrorShader` · `ShaderCompileError` 추가 (기존 값 · `ToString()` 형식은 그대로) |
+
+```csharp
+var options = AssetHealthSettings.CreateScanOptions();
+options.EnabledChecks = new List<string> { AssetCheckIds.PrefabSlots, AssetCheckIds.Materials };
+var result = AssetHealthEngine.Scan(options);
+if (!result.IsComplete || result.ErrorCount > 0) { /* CI 실패 처리 */ }
 ```
 
 ---
