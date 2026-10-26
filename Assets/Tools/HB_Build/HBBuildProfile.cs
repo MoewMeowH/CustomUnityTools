@@ -70,6 +70,9 @@ namespace HB.CustomBuild.Editor
         [Tooltip("플랫폼/모드별 전처리기 심볼(Scripting Define Symbols) 설정 에셋")]
         [SerializeField] public ProjectDefine ProjectDefineAsset;
 
+        [Tooltip("iOS 전용: 빌드 뒤 Xcode 프로젝트에 적용할 설정 에셋 (Info.plist · Capabilities · Build Settings 등)")]
+        [SerializeField] public HBXcodeSettings XcodeSettingsAsset;
+
         [Serializable]
         public struct CustomStringEntry
         {
@@ -135,6 +138,10 @@ namespace HB.CustomBuild.Editor
 
             if (ProjectDefineAsset != null)
                 context.SetCustomData("ProjectDefine", ProjectDefineAsset);
+
+            // 깨진 참조(Missing)도 넘겨서 스텝이 실패시키게 한다 (== null이면 건너뛰어 기본 경로의 다른 에셋이 쓰일 수 있음)
+            if (!ReferenceEquals(XcodeSettingsAsset, null))
+                context.SetCustomData(BuildStep_XcodeSettings.CUSTOM_DATA_KEY, XcodeSettingsAsset);
 
             if (TargetPlatform == ProjectBuild.ESelfBuildPlatform.iOS && !string.IsNullOrWhiteSpace(ProvisionUUID))
             {

@@ -57,6 +57,7 @@ namespace HB.CustomBuild.Editor
         public const string USER_PROFILES_DIR = "Assets/Editor/HBBuild/Profiles";
         public const string USER_DEFINE_CONTAINER_PATH = "Assets/Editor/HBBuild/DefineContainer.asset";
         public const string USER_SCENE_DEFINE_PATH = "Assets/Editor/HBBuild/SceneDefine.asset";
+        public const string USER_XCODE_SETTINGS_PATH = "Assets/Editor/HBBuild/XcodeSettings.asset";
         public const string NONE_SCENE_LIST = "NONE";
 
         private static List<string> s_Args = new List<string>();

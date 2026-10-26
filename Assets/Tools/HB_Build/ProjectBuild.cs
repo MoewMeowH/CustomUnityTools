@@ -62,6 +62,7 @@ namespace HB.CustomBuild.Editor
         // 선택적 설정 에셋 (미할당 시 자동 건너뜀)
         [SerializeField] private SceneDefine m_SceneDefine;
         [SerializeField] private ProjectDefine m_ProjectDefine;
+        [SerializeField] private HBXcodeSettings m_XcodeSettings;
 
         // CLI 생성 옵션 상태
         private ECliCommandMode m_CliMode = ECliCommandMode.ProfileOnly;
@@ -141,6 +142,9 @@ namespace HB.CustomBuild.Editor
 
             if (m_ProjectDefine == null)
                 m_ProjectDefine = ProjectDefine.LoadIfExists();
+
+            if (m_XcodeSettings == null)
+                m_XcodeSettings = HBXcodeSettings.LoadIfExists();
 
             BuildStepRegistry.ReloadSteps();
         }
@@ -348,6 +352,7 @@ namespace HB.CustomBuild.Editor
 
             m_SceneDefine = profile.SceneDefineAsset;
             m_ProjectDefine = profile.ProjectDefineAsset;
+            m_XcodeSettings = profile.XcodeSettingsAsset;
             m_DisabledStepIds = profile.DisabledStepIds != null ? profile.DisabledStepIds.ToList() : new List<string>();
 
             Repaint();
@@ -407,6 +412,7 @@ namespace HB.CustomBuild.Editor
             profile.Scenes = m_ScenePath.ToList();
             profile.SceneDefineAsset = m_SceneDefine;
             profile.ProjectDefineAsset = m_ProjectDefine;
+            profile.XcodeSettingsAsset = m_XcodeSettings;
             profile.DisabledStepIds = m_DisabledStepIds.ToList();
         }
 
@@ -452,6 +458,21 @@ namespace HB.CustomBuild.Editor
             }
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.LabelField(m_ProjectDefine == null ? "  ↳ 미생성/미할당 시: 기존 PlayerSettings 심볼 유지 (건너뛰기)" : "  ↳ 할당됨: 플랫폼/모드별 전처리기 심볼 자동 주입", EditorStyles.miniLabel);
+
+            EditorGUILayout.Space(4);
+
+            // 3. Xcode 설정 에셋 슬롯 (iOS 전용)
+            EditorGUILayout.BeginHorizontal();
+            m_XcodeSettings = (HBXcodeSettings)EditorGUILayout.ObjectField("Xcode Settings (iOS)", m_XcodeSettings, typeof(HBXcodeSettings), false);
+            if (m_XcodeSettings == null)
+            {
+                if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
+                {
+                    m_XcodeSettings = CreateOptionalAsset(HBXcodeSettings.CreateAssetInUserFolder);
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.LabelField(m_XcodeSettings == null ? "  ↳ 미할당 시: 기본 위치 → 프로젝트에서 찾아 적용, 없으면 건너뜀 (끄려면 스텝 체크 해제)" : "  ↳ 할당됨: iOS 빌드 뒤 Info.plist · Capabilities · Build Settings 등 적용", EditorStyles.miniLabel);
 
             EditorGUILayout.EndVertical();
         }
@@ -503,6 +524,8 @@ namespace HB.CustomBuild.Editor
 
             if (m_SceneDefine != null) ctx.SetCustomData("SceneDefine", m_SceneDefine);
             if (m_ProjectDefine != null) ctx.SetCustomData("ProjectDefine", m_ProjectDefine);
+            // 깨진 참조(Missing)도 넘겨서 스텝이 실패시키게 한다
+            if (!ReferenceEquals(m_XcodeSettings, null)) ctx.SetCustomData(BuildStep_XcodeSettings.CUSTOM_DATA_KEY, m_XcodeSettings);
             if (m_Platform == ESelfBuildPlatform.iOS && !string.IsNullOrWhiteSpace(m_ProvisionUUID))
                 ctx.SetCustomData("ProvisionUUID", m_ProvisionUUID.Trim());
 
