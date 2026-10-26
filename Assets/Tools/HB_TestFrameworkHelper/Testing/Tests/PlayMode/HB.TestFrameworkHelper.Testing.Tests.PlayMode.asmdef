@@ -1,0 +1,29 @@
+{
+    "name": "HB.TestFrameworkHelper.Testing.Tests.PlayMode",
+    "rootNamespace": "HB.TestFrameworkHelper.Tests",
+    "references": [
+        "HB.TestFrameworkHelper.Testing",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "HB_TFH_HAS_TEST_FRAMEWORK",
+        "HB_TFH_SELF_TESTS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "HB_TFH_HAS_TEST_FRAMEWORK"
+        }
+    ],
+    "noEngineReferences": false
+}

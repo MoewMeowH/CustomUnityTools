@@ -99,3 +99,108 @@ public class MyPopupUI : MonoBehaviour
     [SerializeField] private List<Transform> m_OptionalSockets;
 }
 ```
+
+---
+
+## 테스트 작성 도우미 (Testing)
+
+테스트에서 반복되는 준비 · 정리 코드를 줄이는 유틸입니다. `com.unity.test-framework`가 있고 테스트가 컴파일될 때(`UNITY_INCLUDE_TESTS`)만 컴파일되며, 일반 플레이어 빌드에는 들어가지 않습니다 (테스트용 플레이어 빌드에는 들어감).
+
+### 참조 설정
+
+자동 참조가 아니므로 쓰는 쪽 테스트 asmdef의 `references`에 직접 넣습니다.
+
+| 어셈블리 | 내용 | 쓰는 곳 |
+|---|---|---|
+| `HB.TestFrameworkHelper.Testing` | `TestScope` · `HBTestFixture` · `HBAssert` · `HBWait` | EditMode · PlayMode 테스트 |
+| `HB.TestFrameworkHelper.Testing.Editor` | `TempDirectory` · `TempAssetFolder` · `TempScene` | EditMode(에디터 전용) 테스트 |
+
+EditMode 테스트 asmdef (에디터 전용):
+
+```json
+"references": [
+    "HB.TestFrameworkHelper.Testing",
+    "HB.TestFrameworkHelper.Testing.Editor",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+],
+"includePlatforms": [ "Editor" ],
+"overrideReferences": true,
+"precompiledReferences": [ "nunit.framework.dll" ],
+"defineConstraints": [ "UNITY_INCLUDE_TESTS" ]
+```
+
+PlayMode 테스트 asmdef (테스트용 플레이어에서도 돌므로 에디터 어셈블리를 넣지 않음):
+
+```json
+"references": [
+    "HB.TestFrameworkHelper.Testing",
+    "UnityEngine.TestRunner"
+],
+"includePlatforms": [],
+"overrideReferences": true,
+"precompiledReferences": [ "nunit.framework.dll" ],
+"defineConstraints": [ "UNITY_INCLUDE_TESTS" ]
+```
+
+> **`testables` 필수:** 이 유틸 어셈블리는 Unity가 테스트 어셈블리로 다루므로, git URL 등으로 설치한 프로젝트는 `Packages/manifest.json`에 `"testables": ["com.hb.testframeworkhelper"]`를 넣어야 컴파일됩니다 (없으면 쓰는 쪽 테스트가 `HB` 네임스페이스를 찾지 못함). 이렇게 해도 이 패키지 자체 테스트(`Testing/Tests`)는 보이지 않습니다 — 그 테스트는 Scripting Define Symbol `HB_TFH_SELF_TESTS`가 있을 때만 컴파일됩니다 (패키지를 고치는 사람용). 기존 슬롯 검사 테스트(`SlotValidationTests`)는 `testables`만으로 보입니다.
+
+### 사용 예시
+
+```csharp
+using HB.TestFrameworkHelper;
+using HB.TestFrameworkHelper.Editor;
+using NUnit.Framework;
+using UnityEngine;
+
+public class MyPopupTests : HBTestFixture   // 테스트마다 Scope를 만들고 끝나면 정리
+{
+    [Test]
+    public void Close_HidesPopup()
+    {
+        GameObject go = Scope.NewGameObject("Popup", typeof(MyPopupUI));
+        var config = Scope.NewInstance<MyPopupConfig>();
+        Scope.Preserve(() => GameSettings.Speed, v => GameSettings.Speed = v);
+        GameSettings.Speed = 2f;
+
+        TempAssetFolder folder = Scope.NewTempAssetFolder();   // Assets/__HBTestTemp/<guid>
+        // ... 테스트 ...
+    }   // 끝나면 등록 역순으로 정리: 폴더 → Speed 복원 → config → go
+}
+```
+
+다른 베이스를 이미 상속했다면 `TestScope`를 직접 씁니다.
+
+```csharp
+private TestScope m_Scope;
+[SetUp] public void SetUp() => m_Scope = new TestScope();
+[TearDown] public void TearDown() => m_Scope.Dispose();
+```
+
+### API
+
+| 멤버 | 설명 |
+|---|---|
+| `TestScope.NewGameObject(name, params Type[])` · `NewInstance<T>()` | 만들고 소유. 끝나면 지움 |
+| `TestScope.Track(obj)` | 넘긴 객체만 소유 (Component면 그 Component만). 에셋(디스크에 저장된 객체)은 에디터에서 거절, Transform도 거절 (GameObject를 Track) |
+| `TestScope.Preserve(getter, setter)` | 지금 값을 기억했다가 되돌림 — **얕은 복원**: 같은 객체의 내부 변경은 되돌리지 않음 |
+| `TestScope.Defer(action)` · `Own(disposable)` | 임의 정리 동작 · `IDisposable` 등록 |
+| `HBTestFixture` | `Scope` 자동 생성 · 정리. 파생 클래스의 `[UnitySetUp]` · `[SetUp]` · `[TearDown]` · `[UnityTearDown]` 어디서든 Scope를 쓸 수 있음. PlayMode는 정리 뒤 한 프레임 기다려 Destroy가 끝난 다음 테스트로 넘어감 |
+| `HBAssert.NoGCAlloc(action, warmup = 1)` | GC 할당이 없는지. warmup회 먼저 부른 뒤 1회 측정 (총 warmup + 1회 호출) |
+| `HBAssert.AnyContains` · `NoneContains(values, text)` | 문자열 목록 검사. 입력은 한 번만 열거, 실패하면 전체 목록 출력 |
+| `HBWait.Until(predicate, timeoutSec, what)` · `Frames(n)` | `[UnityTest]`에서 `yield return`. 시간은 실제 시간(timeScale 무관), 넘으면 실패 |
+| `scope.NewTempDirectory()` · `TempDirectory` | OS 임시 폴더. 읽기 전용 파일 · 폴더도 지움, 링크는 따라가지 않음 |
+| `scope.NewTempAssetFolder()` · `TempAssetFolder` | `Assets/__HBTestTemp/<guid>`. 마지막이 지워지면 빈 루트도 지움 |
+| `scope.NewTempScene(setup)` · `TempScene` | 새 씬을 열고 끝나면 원래 구성으로 (EditMode 전용) |
+
+### 정리 규칙 · 제한
+
+* **정리 순서:** 모든 항목을 한 스택에 넣고 등록 역순으로 정리합니다. 하나가 실패해도 나머지를 끝까지 정리한 뒤 예외를 던집니다. `Dispose`를 두 번 불러도 안전하고, 그 뒤 등록하면 `ObjectDisposedException`.
+* **PlayMode:** `Destroy`는 프레임 끝에 실행됩니다. `TestScope.Dispose()` 직후 같은 프레임에는 객체가 아직 있습니다 (`HBTestFixture`는 한 프레임 기다림). 파괴 전에 비활성화하지 않습니다.
+* **`using` 블록:** 본문에서 예외가 나고 정리에서도 예외가 나면 C# 규칙대로 정리 예외가 본문 예외를 가립니다.
+* **에셋이 된 객체:** `NewInstance`로 만든 객체를 `AssetDatabase.CreateAsset` 등으로 에셋으로 만들면 Dispose에서 지우지 않습니다 (에셋은 `TempAssetFolder` 같은 파일 쪽이 정리). 다른 Component가 `[RequireComponent]`로 의존하는 Component를 Track하면 Unity가 지우지 않고 에러 로그를 남기므로 GameObject를 Track하세요.
+* **`TempAssetFolder`:** 테스트가 중단돼 남은 폴더는 다음에 처음 만들 때 지웁니다 — 이 패키지 표식 파일(`.hb_tfh_owner`)이 있는 폴더만 (지운 경로는 경고 로그). 폴더 안에 링크(심볼릭 링크 · 정션)가 있으면 따라 들어가지 않도록 지우지 않습니다 (남은 폴더는 경고, 사용 중 폴더의 Dispose는 예외). 도메인 리로드(스크립트 · asmdef 생성 등)를 넘는 사용은 지원하지 않습니다. `Assets/__HBTestTemp/`를 프로젝트 `.gitignore`에 넣어 두는 것을 권장합니다.
+* **`TempDirectory`:** OS 임시 폴더는 다른 사용자와 공유될 수 있습니다(Linux `/tmp` 등) — 비밀 값이 든 파일은 넣지 마세요. 하드 링크로 넣은 읽기 전용 파일은 지울 때 푼 읽기 전용이 원본에도 남습니다.
+* **`TempScene`:** 저장하지 않은 변경이 있는 씬이나 Prefab Mode 프리팹이 열려 있으면 아무것도 바꾸지 않고 테스트를 Inconclusive로 끝냅니다 (변경을 저장하지도 버리지도 않음). 저장된 적 없는 씬은 되돌릴 수 없어, 저장 씬만 되돌리고 저장 씬이 없었으면 새 빈 씬을 엽니다. 테스트가 임시 씬에 한 변경은 버립니다.
+* **`NoGCAlloc`:** Unity Test Framework의 `AllocatingGCMemory`(메인 스레드 · 프로파일러 기록 기반)를 씁니다. 에디터에서는 에디터 기준 값입니다.
+* 메인 스레드 전용입니다. 같은 프로젝트를 여러 에디터 프로세스가 동시에 쓰는 경우는 다루지 않습니다 (Unity가 프로젝트를 잠금).

@@ -1,0 +1,31 @@
+{
+    "name": "HB.TestFrameworkHelper.Testing.Editor",
+    "rootNamespace": "HB.TestFrameworkHelper.Editor",
+    "references": [
+        "HB.TestFrameworkHelper.Testing",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "HB_TFH_HAS_TEST_FRAMEWORK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "HB_TFH_HAS_TEST_FRAMEWORK"
+        }
+    ],
+    "noEngineReferences": false
+}
