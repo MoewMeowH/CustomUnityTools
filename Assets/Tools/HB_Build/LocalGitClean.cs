@@ -20,7 +20,9 @@ namespace HB.CustomBuild.Editor
     {
         // 바뀌면 스크립트 컴파일(도메인 리로드)이 일어나 빌드 호출이 끊기는 파일
         private static readonly string[] s_ScriptExtensions = { ".cs", ".asmdef", ".asmref", ".dll", ".rsp" };
-        private static readonly string[] s_ScriptFiles = { "Packages/manifest.json", "Packages/packages-lock.json", "ProjectSettings/ProjectSettings.asset", "package.json" };
+        private static readonly string[] s_ScriptFiles = { "Packages/manifest.json", "Packages/packages-lock.json", "package.json" };
+        // 프로젝트 설정은 에디터가 메모리에 들고 있어 디스크만 되돌리면 빌드가 메모리 값으로 될 수 있다 → 빌드를 멈추고 다시 누르게 한다
+        private const string PROJECT_SETTINGS_DIR = "ProjectSettings/";
         // gitignore 패턴에서 뜻이 있는 글자 (산출물 폴더 이름에 있으면 제외 패턴을 정확히 만들 수 없음)
         private static readonly char[] s_PatternChars = { '"', '[', ']', '*', '?', '!', '#', '\\' };
         private const int CONSOLE_LIST_LIMIT = 500;
@@ -35,9 +37,11 @@ namespace HB.CustomBuild.Editor
         public int UntrackedCount { get; private set; }
         public int Count => m_Labeled.Count;
 
+        /// <summary> 정리 뒤 바로 빌드하면 안 되는 변경 (스크립트 컴파일 · 패키지 해석 · 프로젝트 설정 다시 읽기가 필요) </summary>
         public bool ChangesScripts => m_AffectedFiles.Any(p =>
             s_ScriptExtensions.Any(ext => p.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
-            || s_ScriptFiles.Any(f => p.Replace('\\', '/').EndsWith(f, StringComparison.OrdinalIgnoreCase)));
+            || s_ScriptFiles.Any(f => p.Replace('\\', '/').EndsWith(f, StringComparison.OrdinalIgnoreCase))
+            || p.Replace('\\', '/').StartsWith(PROJECT_SETTINGS_DIR, StringComparison.OrdinalIgnoreCase));
 
         private LocalGitClean(string projectRoot, string excludeArgs)
         {
@@ -52,11 +56,18 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
-        /// 지울 것을 미리 구한다. 저장 안 한 에셋은 먼저 저장해 목록에 나오게 한다.
-        /// 저장 안 한 씬 · 프리팹 편집, git을 쓸 수 없음, 산출물 폴더를 지킬 수 없음이면 null과 이유를 돌려준다.
+        /// 지울 것을 미리 구한다. 읽기만 하고 아무것도 저장하지 않는다.
+        /// Play 모드 · 컴파일 중, 저장 안 한 씬 · 프리팹 편집 · 에셋, git을 쓸 수 없음, 산출물 폴더를 지킬 수 없음이면 null과 이유를 돌려준다.
         /// </summary>
         public static LocalGitClean Prepare(IEnumerable<string> keepDirs, out string error)
         {
+            // Play 모드에서는 플레이어 빌드가 안 되므로 되돌릴 수 없는 정리만 끝나게 된다
+            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+            {
+                error = "Play 모드이거나 스크립트를 컴파일하는 중입니다.\nPlay 모드를 끝내고 컴파일이 끝난 뒤 다시 빌드하세요.";
+                return null;
+            }
+
             // 에디터 메모리와 디스크가 어긋나면 빌드 결과가 불확실해진다
             for (int i = 0; i < SceneManager.sceneCount; i++)
             {
@@ -73,8 +84,17 @@ namespace HB.CustomBuild.Editor
                 error = $"저장하지 않은 프리팹 편집이 있습니다: {prefabStage.assetPath}\n저장하거나 되돌린 뒤 다시 빌드하세요.";
                 return null;
             }
-            // 인스펙터에서 바꾸고 저장하지 않은 에셋(ScriptableObject · 머티리얼 등)을 디스크에 써서 정리 목록에 나오게 한다
-            AssetDatabase.SaveAssets();
+            // 인스펙터에서 바꾸고 저장하지 않은 에셋(ScriptableObject · 머티리얼 · 프로젝트 설정 등)도 씬처럼 거부한다.
+            // 자동으로 저장하면 취소 · 거부돼도 저장이 남고, 정리 범위 밖(프로젝트 밖 패키지 · 무시 파일)이면 되돌려지지도 않는다
+            var unsaved = FindUnsavedAssets();
+            if (unsaved.Count > 0)
+            {
+                const int shown = 10;
+                error = $"저장하지 않은 에셋이 {unsaved.Count}개 있습니다. 저장하거나 되돌린 뒤 다시 빌드하세요.\n  "
+                        + string.Join("\n  ", unsaved.Take(shown))
+                        + (unsaved.Count > shown ? $"\n  ... 외 {unsaved.Count - shown}개" : string.Empty);
+                return null;
+            }
 
             string projectRoot = BuildHelper.ResolveProjectRelativePath(".");
             string projectPrefix = BuildRevision.WithSeparator(projectRoot);
@@ -119,6 +139,8 @@ namespace HB.CustomBuild.Editor
                 error = $"git status 실패: {gitError}";
                 return null;
             }
+            // 줄바꿈만 바뀌었으면 컴파일이 일어나지 않으므로 스크립트 변경으로 보지 않을 후보 (Unity가 줄바꿈만 바꿔 자주 다시 저장함)
+            var eolOnlyCandidates = new List<(string RepoPath, string ProjectPath)>();
             string[] fields = status.Split('\0');
             for (int i = 0; i < fields.Length; i++)
             {
@@ -127,6 +149,11 @@ namespace HB.CustomBuild.Editor
                 char x = entry[0];
                 string path = entry.Substring(3);
                 clean.AddAffected(StripPrefix(path, prefix));
+                // 프로젝트 설정은 Unity가 줄바꿈만 바꿔 자주 다시 저장하므로, 줄바꿈만 다르면 멈출 이유가 없다
+                // (스크립트 · 패키지 파일은 바이트가 바뀌면 컴파일되므로 해당 없음)
+                string projectPath = StripPrefix(path, prefix);
+                if ((x == 'M' || entry[1] == 'M') && projectPath.StartsWith(PROJECT_SETTINGS_DIR, StringComparison.OrdinalIgnoreCase))
+                    eolOnlyCandidates.Add((path, projectPath));
                 if (x == 'R' || x == 'C')
                 {
                     // 새 경로는 HEAD에 없으므로 지워지고, 원래 경로는 되살아난다
@@ -151,6 +178,19 @@ namespace HB.CustomBuild.Editor
                 else
                 {
                     clean.Add("[수정] " + path, modified: true);
+                }
+            }
+
+            if (eolOnlyCandidates.Count > 0)
+            {
+                // 줄바꿈 차이를 무시하고도 바뀐 파일만 남는다 (경로는 저장소 루트 기준). 실패하면 스크립트 변경으로 둔다 (안전한 쪽)
+                string pathspec = string.Join(" ", eolOnlyCandidates.Select(c => $"\"{c.ProjectPath}\""));
+                string realChanges = GitRunner.Run(projectRoot, $"diff --ignore-cr-at-eol --name-only HEAD -- {pathspec}", out _);
+                if (realChanges != null)
+                {
+                    var changed = new HashSet<string>(realChanges.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0), StringComparer.OrdinalIgnoreCase);
+                    foreach (var candidate in eolOnlyCandidates.Where(c => !changed.Contains(c.RepoPath)))
+                        clean.m_AffectedFiles.Remove(candidate.ProjectPath);
                 }
             }
 
@@ -193,6 +233,45 @@ namespace HB.CustomBuild.Editor
 
             error = null;
             return clean;
+        }
+
+        /// <summary> 메모리에서 바뀌고 디스크에 저장되지 않은 에셋 경로 (로드된 영구 객체 중 dirty이고 정리 범위 안인 것) </summary>
+        internal static List<string> FindUnsavedAssets()
+        {
+            string projectPrefix = BuildRevision.WithSeparator(BuildHelper.ResolveProjectRelativePath("."));
+            var paths = new SortedSet<string>(StringComparer.Ordinal);
+            var checkedPaths = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var obj in UnityEngine.Resources.FindObjectsOfTypeAll<UnityEngine.Object>())
+            {
+                if (obj == null || !EditorUtility.IsPersistent(obj) || !EditorUtility.IsDirty(obj)) continue;
+                string path = AssetDatabase.GetAssetPath(obj);
+                if (checkedPaths.Add(path) && IsInCleanScope(path, projectPrefix))
+                    paths.Add(path);
+            }
+            return paths.ToList();
+        }
+
+        /// <summary> 에셋 경로의 실제 파일이 프로젝트 폴더 안(정리가 되돌리는 범위)인지 </summary>
+        /// <remarks>
+        /// 레지스트리 · 내장 · git 패키지(Library/PackageCache)는 읽기 전용이고 정리 대상도 아니다.
+        /// URP처럼 셰이더를 컴파일하는 패키지는 열자마자 셰이더가 dirty로 잡히므로, 넣으면 정리가 항상 거부된다.
+        /// 프로젝트 밖 로컬(file:) 패키지도 정리가 건드리지 않으므로 빼낸다
+        /// </remarks>
+        internal static bool IsInCleanScope(string assetPath, string projectPrefix)
+        {
+            // 내장 리소스 · Library 안 객체는 사용자가 저장하는 대상이 아니다
+            if (assetPath.StartsWith("Assets/", StringComparison.Ordinal) || assetPath.StartsWith("ProjectSettings/", StringComparison.Ordinal))
+                return true;
+            if (!assetPath.StartsWith("Packages/", StringComparison.Ordinal))
+                return false;
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(assetPath);
+            if (package == null)
+                return true;  // 패키지를 못 찾으면 프로젝트 안으로 본다 (안전한 쪽: 거부)
+            if (package.source != UnityEditor.PackageManager.PackageSource.Embedded
+                && package.source != UnityEditor.PackageManager.PackageSource.Local)
+                return false;
+            return string.IsNullOrEmpty(package.resolvedPath)
+                   || BuildRevision.WithSeparator(package.resolvedPath).StartsWith(projectPrefix, StringComparison.OrdinalIgnoreCase);
         }
 
         private void Add(string labeled, bool modified)

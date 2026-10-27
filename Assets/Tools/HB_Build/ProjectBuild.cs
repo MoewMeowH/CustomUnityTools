@@ -1318,7 +1318,7 @@ namespace HB.CustomBuild.Editor
             EditorGUILayout.HelpBox(
                 "빌드 전에 Unity 프로젝트 폴더의 커밋하지 않은 수정 · 스테이징과 추적하지 않는 파일을 지웁니다. 되돌릴 수 없습니다.\n" +
                 "남는 것: Library 등 .gitignore 대상, 빌드 산출물 폴더, 프로젝트 밖 파일.\n" +
-                "저장하지 않은 에셋은 먼저 저장된 뒤 정리 목록에 나옵니다 (저장 안 한 씬이 있으면 정리하지 않음).\n" +
+                "Play 모드이거나 저장하지 않은 씬 · 에셋이 있으면 정리하지 않습니다 (먼저 저장하거나 되돌리세요).\n" +
                 "정리 직전에 지울 목록을 한 번 더 보여 줍니다. 스크립트가 바뀌면 정리만 하고, 컴파일이 끝난 뒤 빌드를 다시 눌러야 합니다.",
                 MessageType.Error);
             m_LocalGitCleanConfirmed = EditorGUILayout.ToggleLeft("위 파일들이 지워지는 것을 확인했습니다", m_LocalGitCleanConfirmed);
@@ -1440,6 +1440,19 @@ namespace HB.CustomBuild.Editor
             return true;
         }
 
+        /// <summary> 이번 빌드가 쓰는 설정 에셋 (프로필이면 프로필의 참조, 아니면 창의 참조). 정리로 지워졌는지 보려고 정리 전에 기록한다 </summary>
+        private List<(string Label, UnityEngine.Object Asset)> GetReferencedSettingAssets()
+        {
+            var list = new List<(string Label, UnityEngine.Object Asset)>();
+            UnityEngine.Object scene = m_SelectedProfile != null ? m_SelectedProfile.SceneDefineAsset : m_SceneDefine;
+            UnityEngine.Object define = m_SelectedProfile != null ? m_SelectedProfile.ProjectDefineAsset : m_ProjectDefine;
+            UnityEngine.Object xcode = m_SelectedProfile != null ? m_SelectedProfile.XcodeSettingsAsset : m_XcodeSettings;
+            if (scene != null) list.Add(("SceneDefine", scene));
+            if (define != null) list.Add(("ProjectDefine", define));
+            if (xcode != null) list.Add(("XcodeSettings", xcode));
+            return list;
+        }
+
         /// <summary> LIVE + Development는 라이브 환경 확인용으로 허용하되, 실수로 켠 것이 아닌지 한 번 묻는다 </summary>
         private static bool ConfirmLiveDevBuild(BuildContext context)
         {
@@ -1463,7 +1476,9 @@ namespace HB.CustomBuild.Editor
                 int choice = EditorUtility.DisplayDialogComplex(
                     "저장되지 않은 변경",
                     $"'{m_SelectedProfile.name}' 프로필에 저장되지 않은 변경이 있습니다.\n\n" +
-                    "프로필 빌드는 저장된 프로필 값으로 실행됩니다. 창의 변경을 반영하려면 먼저 저장하세요.",
+                    "프로필 빌드는 저장된 프로필 값으로 실행됩니다. 창의 변경을 반영하려면 먼저 저장하세요." +
+                    // 정리는 커밋 상태로 되돌리므로, 커밋하지 않은 저장은 정리 목록에 나와 되돌아간다
+                    (m_LocalGitClean ? "\n\n'빌드 전 git 작업 폴더 정리'가 켜져 있어, 저장해도 커밋하지 않았다면 정리로 되돌아갑니다 (커밋 전 새 프로필은 삭제됨)." : string.Empty),
                     "저장 후 빌드", "취소", "저장된 값으로 빌드");
 
                 if (choice == 1) return;
@@ -1489,6 +1504,7 @@ namespace HB.CustomBuild.Editor
                     }
                     bool usedProfile = m_SelectedProfile != null;
                     bool wasLiveDev = context.IsLiveDevBuild;
+                    var referenced = GetReferencedSettingAssets();
                     if (!CleanWorkingFolderBeforeBuild(context))
                         return;
 
@@ -1499,6 +1515,17 @@ namespace HB.CustomBuild.Editor
                             "선택한 프로필이 커밋되지 않은 파일이라 정리로 지워졌습니다.\n프로필을 다시 고른 뒤 빌드하세요.", "확인");
                         return;
                     }
+                    // 참조하던 SceneDefine · ProjectDefine · XcodeSettings가 커밋 전이라 지워졌으면 그 스텝이 조용히 빠지므로 멈춘다
+                    var removed = referenced.Where(r => r.Asset == null).Select(r => r.Label).ToList();
+                    if (removed.Count > 0)
+                    {
+                        EditorUtility.DisplayDialog("빌드하지 않음",
+                            $"참조하던 설정 에셋이 커밋되지 않은 파일이라 정리로 지워졌습니다: {string.Join(", ", removed)}\n에셋을 커밋하거나 다시 지정한 뒤 빌드하세요.", "확인");
+                        return;
+                    }
+                    // 창에 남은 값을 정리된 프로필 값으로 맞춘다 (정리로 되돌아간 저장이 다음 빌드에서 되살아나지 않게)
+                    if (m_SelectedProfile != null)
+                        LoadFromProfile(m_SelectedProfile);
                     // 정리로 프로필 · 설정 에셋이 디스크에서 바뀌었을 수 있으므로 다시 만들고, 새로 LIVE + Development가 됐으면 다시 묻는다
                     context = m_SelectedProfile != null ? m_SelectedProfile.ToBuildContext() : CreateContextFromWindow();
                     if (!wasLiveDev && !ConfirmLiveDevBuild(context))
