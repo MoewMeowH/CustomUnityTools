@@ -156,7 +156,10 @@ namespace HB.CustomBuild.Editor
                 if (!s_Args[i].StartsWith("-")) continue;
                 if (s_Args[i].TrimStart('-').Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
-                    return s_Args[i + 1].Trim('\"', '\'');
+                    // Unity는 빈 인자("")를 버리므로 값 자리에 다음 인자 이름이 올 수 있다 → 값이 없는 것으로 본다
+                    // (예: -buildVersion "" -versionCode "" 가 -buildVersion -versionCode 로 들어옴)
+                    string value = s_Args[i + 1];
+                    return value.StartsWith("-") ? string.Empty : value.Trim('\"', '\'');
                 }
             }
 
