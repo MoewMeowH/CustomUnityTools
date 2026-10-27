@@ -194,7 +194,7 @@ Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
   - 빌드 산출물을 지킬 수 없으면 정리하지 않습니다: 출력 경로가 프로젝트 루트 · `Assets` · `Packages` · `ProjectSettings`를 덮을 때, 출력 폴더 이름에 git 패턴 글자(`[ ] * ? ! # "` 등)가 있을 때, 산출물이 정리 목록에 섞였을 때. 출력 폴더를 `.gitignore`에 넣어 두면 가장 안전합니다.
   - 스크립트 · asmdef · DLL · `package.json` · `Packages/manifest.json` · `ProjectSettings.asset`이 바뀌면(새 미추적 폴더 안의 파일 포함) 컴파일이 필요해 **정리만 하고 빌드는 하지 않습니다.** 컴파일이 끝나면 빌드를 다시 누르세요.
   - 프로필 "저장 후 빌드"를 골랐는데 그 프로필 파일이 커밋 전이면 정리 목록에 나옵니다 (정리하면 저장한 값이 되돌아감). 선택한 프로필이 커밋되지 않은 파일이라 정리로 지워지면 빌드하지 않습니다. 정리 뒤 값으로 새로 LIVE + Development가 되면 다시 묻습니다.
-  - git 명령은 영어 출력으로 실행하고(번역된 메시지를 잘못 읽지 않게), 에디터를 띄운 셸의 `GIT_DIR` · `GIT_WORK_TREE` 등은 무시합니다. 정리 명령은 오래 걸려도 중간에 끊지 않습니다 (10분이 넘으면 끊지 않고 실패만 알림 — 끝난 뒤 `git status`와 `.git/index.lock`을 확인).
+  - git 명령은 영어 출력으로 실행하고(번역된 메시지를 잘못 읽지 않게), 에디터를 띄운 셸의 `GIT_DIR` · `GIT_WORK_TREE` 등은 무시합니다. macOS에서는 Hub로 띄운 에디터의 PATH가 짧으므로 `/opt/homebrew/bin` · `/usr/local/bin`을 PATH 뒤에 붙여 실행합니다 (Homebrew `git-lfs`를 찾도록, git 자체는 원래 고르던 것). 이 처리는 산출물 이름의 커밋 확인에도 적용됩니다. 정리 명령은 오래 걸려도 중간에 끊지 않습니다 (10분이 넘으면 끊지 않고 실패만 알림 — 끝난 뒤 `git status`와 `.git/index.lock`을 확인).
   - CLI · Jenkins 배치 빌드에는 없습니다 (Jenkins 로컬 폴더 모드는 자체 갱신 단계가 있음).
 - **출력 경로**: 기본값은 프로젝트 기준 `BuildOutput/<Target>`입니다. Windows 빌드는 `<출력경로>/<이름>/<이름>.exe`처럼 버전별 하위 폴더에 생성되고, ZIP은 `<출력경로>/<이름>.zip`으로 생성됩니다. 같은 이름의 폴더나 ZIP이 이미 있으면 덮어쓰지 않고 `<이름> (2)`, `<이름> (3)` 폴더(와 ZIP)로 분리합니다. ZIP에는 `*_DoNotShip`, `*_ButDontShipItWithYourGame` 폴더가 포함되지 않습니다.
   - 창의 폴더 선택으로 프로젝트 안 폴더를 고르면 상대 경로로 저장합니다. 절대 경로는 다른 PC · Jenkins에서도 그대로 쓰이므로 창이 경고합니다.
@@ -227,6 +227,7 @@ Unity.exe -batchmode -quit -projectPath "<ProjectPath>" \
     - `git clean -fd`는 `-x` 없이 실행하므로 `Library/` 등 무시된 파일은 남습니다 (재임포트 없음). `-fdx`는 `Library/`까지 지웁니다.
     - 갱신 뒤 `git status`가 비어 있지 않으면(줄바꿈 변환 · LFS 문제 · 브랜치를 바꿔 사라진 서브모듈 폴더 등) 실패합니다. 검사를 느슨하게 하지 말고 저장소를 정리하세요 (`.gitattributes` · 재정규화, 남은 서브모듈 폴더는 직접 삭제).
     - 에이전트 요구: `git` · `git-lfs`, Jenkins 서비스 계정에서 쓸 수 있는 git 인증. 모든 단계가 그 폴더(`dir(...)`) 안에서 실행되고, Jenkins가 폴더 옆에 `<폴더>@tmp`(배치 실행용 임시 폴더)를 만듭니다.
+    - **macOS 빌드 PC** (확인 전, 추정 포함): 노드가 둘 이상(예: Windows + Mac mini)이면 **에이전트 라벨을 꼭** 넣으세요. launchd로 띄운 Jenkins는 PATH가 짧아 Homebrew의 `git-lfs`(`/opt/homebrew/bin`)를 못 찾으므로 노드 환경 변수 PATH에 추가하세요 (없으면 첫 단계 `git lfs version`에서 실패). 프로젝트 `.gitignore`에 `.DS_Store`를 넣고, 한글 파일 이름이 있으면 `git config core.precomposeunicode true`를 확인하세요 (아니면 갱신 뒤 상태 검사에서 실패할 수 있음).
     - **권한 주의**: 이 job의 빌드 권한이 있으면 origin의 아무 브랜치 · 커밋을 빌드할 수 있고, Unity 배치 빌드는 그 코드의 에디터 스크립트를 빌드 PC의 서비스 계정으로 실행합니다. 빌드 권한은 그 브랜치에 push할 수 있는 사람과 같은 범위로 두세요.
 
   | 파라미터 | 순수 프로필 | 전체 풀기 | 프로필+오버라이드 |

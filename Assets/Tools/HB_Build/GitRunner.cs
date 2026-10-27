@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -19,6 +21,10 @@ namespace HB.CustomBuild.Editor
 
         // 이 변수들이 있으면 git이 프로젝트가 아닌 다른 저장소 · 인덱스를 본다 (에디터를 띄운 셸에서 상속될 수 있음)
         private static readonly string[] s_RepoOverrideVariables = { "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR" };
+
+        // macOS에서 Hub · Finder · launchd로 띄운 프로세스는 PATH가 짧아(/usr/bin 등) Homebrew의 git-lfs를 못 찾는다
+        // (git이 LFS 파일을 읽고 쓸 때 PATH에서 git-lfs를 부름). 뒤에 붙여 원래 고르던 git은 그대로 쓴다
+        private static readonly string[] s_MacExtraPaths = { "/opt/homebrew/bin", "/usr/local/bin" };
 
         public static string Run(string workingDirectory, string arguments)
         {
@@ -49,6 +55,8 @@ namespace HB.CustomBuild.Editor
                 psi.EnvironmentVariables["LANGUAGE"] = "C";
                 foreach (string name in s_RepoOverrideVariables)
                     psi.EnvironmentVariables.Remove(name);
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                    psi.EnvironmentVariables["PATH"] = AppendMissingPaths(psi.EnvironmentVariables["PATH"], s_MacExtraPaths);
 
                 using (var process = Process.Start(psi))
                 {
@@ -90,6 +98,18 @@ namespace HB.CustomBuild.Editor
                 error = ex.Message;
                 return null;
             }
+        }
+
+        /// <summary> PATH(':' 구분)에 없는 폴더만 뒤에 붙인다 </summary>
+        internal static string AppendMissingPaths(string path, string[] extra)
+        {
+            var parts = (path ?? string.Empty).Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            foreach (string dir in extra)
+            {
+                if (!parts.Contains(dir))
+                    parts.Add(dir);
+            }
+            return string.Join(":", parts);
         }
     }
 }
