@@ -77,6 +77,10 @@ namespace HB.CustomBuild.Editor
         private string m_JenkinsProjectDir = string.Empty;   // 빌드 PC의 경로 (Jenkinsfile에 상수로 들어감)
         private string m_JenkinsBranch = string.Empty;       // Jenkins BRANCH 기본값 (비우면 현재 브랜치)
         private string m_JenkinsAgentLabel = string.Empty;   // 비우면 agent any
+
+        // 로컬 빌드 전 git 작업 폴더 정리. 프로필에 저장하지 않고(다른 사람 · PC로 옮겨 가지 않게) 정리를 한 번 하면 둘 다 끈다
+        private bool m_LocalGitClean;
+        private bool m_LocalGitCleanConfirmed;
         private bool m_ShowCliSection = true;
 
         private Vector2 m_ScrollPosition;
@@ -1299,9 +1303,33 @@ namespace HB.CustomBuild.Editor
 
         #endregion
 
+        private void DrawLocalGitCleanOption()
+        {
+            bool enabled = EditorGUILayout.ToggleLeft(
+                new GUIContent("빌드 전 git 작업 폴더 정리 (로컬 빌드만)", "Unity 프로젝트 폴더를 현재 커밋 상태로 되돌린 뒤 빌드합니다. 산출물 이름에 -dirty가 붙지 않습니다."),
+                m_LocalGitClean);
+            if (enabled != m_LocalGitClean)
+            {
+                m_LocalGitClean = enabled;
+                m_LocalGitCleanConfirmed = false;
+            }
+            if (!m_LocalGitClean) return;
+
+            EditorGUILayout.HelpBox(
+                "빌드 전에 Unity 프로젝트 폴더의 커밋하지 않은 수정 · 스테이징과 추적하지 않는 파일을 지웁니다. 되돌릴 수 없습니다.\n" +
+                "남는 것: Library 등 .gitignore 대상, 빌드 산출물 폴더, 프로젝트 밖 파일.\n" +
+                "저장하지 않은 에셋은 먼저 저장된 뒤 정리 목록에 나옵니다 (저장 안 한 씬이 있으면 정리하지 않음).\n" +
+                "정리 직전에 지울 목록을 한 번 더 보여 줍니다. 스크립트가 바뀌면 정리만 하고, 컴파일이 끝난 뒤 빌드를 다시 눌러야 합니다.",
+                MessageType.Error);
+            m_LocalGitCleanConfirmed = EditorGUILayout.ToggleLeft("위 파일들이 지워지는 것을 확인했습니다", m_LocalGitCleanConfirmed);
+        }
+
         private void DrawActionButtons()
         {
             Color prevBackground = GUI.backgroundColor;
+
+            DrawLocalGitCleanOption();
+            EditorGUILayout.Space(4);
 
             GUI.backgroundColor = new Color(0.35f, 0.85f, 0.45f);
             bool build = GUILayout.Button("Local Player Build 실행", GUILayout.Height(38));
@@ -1350,6 +1378,78 @@ namespace HB.CustomBuild.Editor
             return profile != null ? profile.GetResolvedBuildTarget() : GetBuildTarget(m_Platform);
         }
 
+        /// <summary>
+        /// 로컬 빌드 전 git 작업 폴더 정리. 지울 목록을 Console과 대화상자로 보이고 확인을 받은 뒤 정리한다.
+        /// 스크립트 · 패키지 · 프로젝트 설정이 바뀌면 컴파일(도메인 리로드)이 빌드 호출을 끊으므로 빌드하지 않고 false.
+        /// </summary>
+        private bool CleanWorkingFolderBeforeBuild(BuildContext context)
+        {
+            var keepDirs = new List<string> { BuildHelper.ResolveProjectRelativePath("BuildOutput") };
+            if (!string.IsNullOrWhiteSpace(context.OutputPath))
+                keepDirs.Add(BuildHelper.ResolveProjectRelativePath(context.OutputPath));
+
+            var clean = LocalGitClean.Prepare(keepDirs, out string error);
+            if (clean == null)
+            {
+                EditorUtility.DisplayDialog("git 작업 폴더 정리 불가", error + "\n\n빌드하지 않았습니다.", "확인");
+                return false;
+            }
+
+            if (clean.Count == 0)
+            {
+                BuildHelper.Log("[LocalClean] Nothing to clean. The project folder already matches the current commit.");
+                m_LocalGitClean = m_LocalGitCleanConfirmed = false;
+                return true;
+            }
+
+            BuildHelper.LogWarning("[LocalClean] Files to discard before the build:\n" + clean.DescribeForConsole());
+            if (!EditorUtility.DisplayDialog("git 작업 폴더 정리",
+                    clean.Describe(20) + "\n\n이 파일들을 지우고 현재 커밋 상태로 빌드합니다. 되돌릴 수 없습니다.",
+                    "정리 후 빌드", "취소"))
+            {
+                return false;
+            }
+
+            // 대화상자가 떠 있는 동안 파일이 바뀌었으면 확인한 목록과 다르므로 실행하지 않는다
+            var recheck = LocalGitClean.Prepare(keepDirs, out error);
+            if (!clean.SameAs(recheck))
+            {
+                EditorUtility.DisplayDialog("git 작업 폴더 정리 중단",
+                    (recheck == null ? error + "\n\n" : "확인하는 동안 지울 목록이 바뀌었습니다.\n\n") + "정리 · 빌드를 하지 않았습니다. 빌드를 다시 눌러 새 목록을 확인하세요.", "확인");
+                return false;
+            }
+
+            bool changesScripts = clean.ChangesScripts;
+            bool cleaned = clean.Run(out error);
+            m_LocalGitClean = m_LocalGitCleanConfirmed = false;
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+
+            if (!cleaned)
+            {
+                EditorUtility.DisplayDialog("git 작업 폴더 정리 실패", error + "\n\n빌드하지 않았습니다. Console의 목록과 git 상태를 확인하세요.", "확인");
+                return false;
+            }
+            BuildHelper.Log($"[LocalClean] Cleaned {clean.Count} item(s).");
+
+            if (changesScripts || EditorApplication.isCompiling)
+            {
+                EditorUtility.DisplayDialog("정리 완료 · 빌드하지 않음",
+                    "스크립트 · 패키지 · 프로젝트 설정이 바뀌어 컴파일이 필요합니다.\n컴파일이 끝나면 빌드를 다시 누르세요.", "확인");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary> LIVE + Development는 라이브 환경 확인용으로 허용하되, 실수로 켠 것이 아닌지 한 번 묻는다 </summary>
+        private static bool ConfirmLiveDevBuild(BuildContext context)
+        {
+            return !context.IsLiveDevBuild || EditorUtility.DisplayDialog(
+                "LIVE + Development Build",
+                "LIVE 빌드인데 Development Build가 켜져 있습니다" + (context.IsDeepProfile ? " (Deep Profiling 포함)" : string.Empty) + ".\n\n" +
+                "라이브 환경 프로파일링 · 로그 확인용이 아니라면 끄고 빌드하세요. 산출물 이름에 _DEVBUILD가 붙습니다.",
+                "그대로 빌드", "취소");
+        }
+
         private void ExecuteLocalBuild()
         {
             // delayCall 시점에 창이 닫혔을 수 있다
@@ -1374,14 +1474,35 @@ namespace HB.CustomBuild.Editor
             {
                 var context = m_SelectedProfile != null ? m_SelectedProfile.ToBuildContext() : CreateContextFromWindow();
 
-                // LIVE + Development는 라이브 환경 확인용으로 허용하되, 실수로 켠 것이 아닌지 한 번 묻는다
-                if (context.IsLiveDevBuild && !EditorUtility.DisplayDialog(
-                        "LIVE + Development Build",
-                        "LIVE 빌드인데 Development Build가 켜져 있습니다" + (context.IsDeepProfile ? " (Deep Profiling 포함)" : string.Empty) + ".\n\n" +
-                        "라이브 환경 프로파일링 · 로그 확인용이 아니라면 끄고 빌드하세요. 산출물 이름에 _DEVBUILD가 붙습니다.",
-                        "그대로 빌드", "취소"))
-                {
+                if (!ConfirmLiveDevBuild(context))
                     return;
+
+                // 되돌릴 수 없는 정리는 다른 확인을 모두 지난 뒤에 한다
+                if (m_LocalGitClean)
+                {
+                    if (!m_LocalGitCleanConfirmed)
+                    {
+                        EditorUtility.DisplayDialog("git 작업 폴더 정리",
+                            "'빌드 전 git 작업 폴더 정리'가 켜져 있지만 확인 체크박스가 꺼져 있습니다.\n\n" +
+                            "정리하려면 경고 아래의 확인 체크박스를 켜고, 정리하지 않으려면 정리 옵션을 끄세요.", "확인");
+                        return;
+                    }
+                    bool usedProfile = m_SelectedProfile != null;
+                    bool wasLiveDev = context.IsLiveDevBuild;
+                    if (!CleanWorkingFolderBeforeBuild(context))
+                        return;
+
+                    // 커밋 전 프로필이었으면 정리로 지워진다. 창 값으로 조용히 빌드하지 않는다
+                    if (usedProfile && m_SelectedProfile == null)
+                    {
+                        EditorUtility.DisplayDialog("빌드하지 않음",
+                            "선택한 프로필이 커밋되지 않은 파일이라 정리로 지워졌습니다.\n프로필을 다시 고른 뒤 빌드하세요.", "확인");
+                        return;
+                    }
+                    // 정리로 프로필 · 설정 에셋이 디스크에서 바뀌었을 수 있으므로 다시 만들고, 새로 LIVE + Development가 됐으면 다시 묻는다
+                    context = m_SelectedProfile != null ? m_SelectedProfile.ToBuildContext() : CreateContextFromWindow();
+                    if (!wasLiveDev && !ConfirmLiveDevBuild(context))
+                        return;
                 }
 
                 if (m_SelectedProfile != null)

@@ -46,13 +46,28 @@ namespace HB.CustomBuild.Editor
                 context.IsDeepProfile = false;
             }
 
+            // 빌드 산출물(기본 BuildOutput/ 과 이번 출력 경로)과 빌드 로그 파일은 소스 변경으로 보지 않는다
+            var outputDirs = GetOutputDirsToExclude(context);
+            string outputPathAtStart = context.OutputPath;
+            var logFiles = GetLogFilePaths().ToList();
+
+            // 산출물 이름의 소스 칸 (빌드가 파일을 바꾸기 전에 본다). 이름만 다시 계산한다 (호출부가 넣은 다른 옵션은 그대로)
+            context.SourceRevision = BuildRevision.Detect(outputDirs, logFiles, out string revisionWarning);
+            if (revisionWarning != null)
+                context.AddWarning(revisionWarning);
+            context.JenkinsBuildNumber = BuildRevision.DetectJenkinsBuildNumber();
+            context.PlayerOptions.locationPathName = context.GetLocationPathName();
+
             var changeReport = BuildChangeReport.Capture();
             var snapshot = BuildSettingsSnapshot.Capture(context.TargetGroup);
             bool pipelineSucceeded = false;
             var sw = Stopwatch.StartNew();
+            string jenkinsLabel = context.JenkinsBuildNumber != null ? $" | Jenkins #{context.JenkinsBuildNumber}" : string.Empty;
             Log($"==========================================================================");
-            Log($"🚀 [Build Pipeline Started] Target: {context.Target} | Mode: {context.BuildType} | Version: {context.Version} ({context.VersionCode})");
+            Log($"🚀 [Build Pipeline Started] Target: {context.Target} | Mode: {context.BuildType} | Version: {context.Version} ({context.VersionCode}) | Revision: {context.SourceRevision}{jenkinsLabel}");
             Log($"==========================================================================");
+            if (context.SourceRevision.EndsWith(BuildRevision.DIRTY_SUFFIX))
+                LogWarning("[Revision] The project folder has uncommitted changes. The build name is marked -dirty (the commit hash alone does not reproduce this build).");
 
             if (context.IsLiveDevBuild)
                 WarnLiveDevBuild(context, "started");
@@ -132,11 +147,9 @@ namespace HB.CustomBuild.Editor
                 }
                 finally
                 {
-                    // 빌드 산출물(기본 BuildOutput/ 과 이번 출력 경로)과 빌드 로그 파일은 목록에서 뺀다
-                    var outputDirs = new List<string> { ResolveProjectRelativePath("BuildOutput") };
-                    if (!string.IsNullOrWhiteSpace(context.OutputPath))
-                        outputDirs.Add(ResolveProjectRelativePath(context.OutputPath));
-                    changeReport?.LogChangesDuringBuild(outputDirs, GetLogFilePaths());
+                    // 빌드 산출물 · 빌드 로그 파일은 목록에서 뺀다 (사전 스텝이 출력 경로를 바꿨으면 그 경로도)
+                    var endOutputDirs = context.OutputPath == outputPathAtStart ? outputDirs : outputDirs.Union(GetOutputDirsToExclude(context)).ToList();
+                    changeReport?.LogChangesDuringBuild(endOutputDirs, logFiles);
                     WriteWarningsFile(context);
                 }
             }
@@ -384,6 +397,9 @@ namespace HB.CustomBuild.Editor
         {
             CheckNamePart("productName", Application.productName);
             CheckNamePart("version", context.Version);
+            // 버전 코드도 산출물 이름에 들어간다 (PC는 비어 있으면 이름에서 빠짐)
+            if (!string.IsNullOrEmpty(context.VersionCode))
+                CheckNamePart("versionCode", context.VersionCode);
 
             static void CheckNamePart(string label, string value)
             {
@@ -394,6 +410,22 @@ namespace HB.CustomBuild.Editor
                 if (invalid != default(char) || value.Contains(".."))
                     throw ThrowError($"Build {label} '{value}' contains characters not allowed in file names.");
             }
+        }
+
+        /// <summary>
+        /// 소스 변경으로 보지 않을 빌드 산출물 폴더 (BuildOutput/ · 출력 경로).
+        /// 출력 경로가 프로젝트 루트 · Assets 등 소스를 덮으면 빼고 경고한다 (그대로 두면 -dirty · 바뀐 파일 보고가 꺼짐).
+        /// </summary>
+        private static List<string> GetOutputDirsToExclude(BuildContext context)
+        {
+            var dirs = new List<string> { ResolveProjectRelativePath("BuildOutput") };
+            if (!string.IsNullOrWhiteSpace(context.OutputPath))
+                dirs.Add(ResolveProjectRelativePath(context.OutputPath));
+
+            var safe = BuildRevision.FilterOutputDirs(dirs, out var covering);
+            foreach (string dir in covering)
+                LogWarning($"[Revision] Output path '{dir}' covers project source. It is not excluded from change checks.");
+            return safe;
         }
 
         /// <summary> 이번 Unity 실행이 쓰는 로그 파일 (-logFile 인자, Application.consoleLogPath) </summary>

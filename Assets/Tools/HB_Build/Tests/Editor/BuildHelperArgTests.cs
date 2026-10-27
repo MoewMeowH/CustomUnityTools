@@ -8,25 +8,26 @@ namespace HB.CustomBuild.Tests
     /// <summary> 명령줄 인자 읽기 (Unity가 빈 인자 ""를 버리는 경우 포함) </summary>
     public class BuildHelperArgTests
     {
-        private static readonly FieldInfo s_ArgsField = typeof(BuildHelper).GetField("s_Args", BindingFlags.NonPublic | BindingFlags.Static);
+        // 인스턴스 필드 (Unity 7은 정적 필드에 AutoStaticsCleanup 표시를 요구함)
+        private readonly FieldInfo m_ArgsField = typeof(BuildHelper).GetField("s_Args", BindingFlags.NonPublic | BindingFlags.Static);
         private object m_SavedArgs;
 
         [SetUp]
         public void SetUp()
         {
-            Assert.IsNotNull(s_ArgsField, "BuildHelper.s_Args not found (renamed?)");
-            m_SavedArgs = s_ArgsField.GetValue(null);
+            Assert.IsNotNull(m_ArgsField, "BuildHelper.s_Args not found (renamed?)");
+            m_SavedArgs = m_ArgsField.GetValue(null);
         }
 
         [TearDown]
         public void TearDown()
         {
-            s_ArgsField.SetValue(null, m_SavedArgs);
+            m_ArgsField.SetValue(null, m_SavedArgs);
         }
 
-        private static void SetArgs(params string[] args)
+        private void SetArgs(params string[] args)
         {
-            s_ArgsField.SetValue(null, new List<string>(args));
+            m_ArgsField.SetValue(null, new List<string>(args));
         }
 
         [Test]

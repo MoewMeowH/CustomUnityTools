@@ -24,6 +24,10 @@ namespace HB.CustomBuild.Editor
         public bool IsAab { get; set; }
         public bool ZipPackage { get; set; }
         public string OutputPath { get; set; }
+        /// <summary> 산출물 이름의 소스 칸: 커밋 짧은 해시(커밋 안 한 변경이 있으면 -dirty, git이 없으면 nogit). 빌드 시작 때 채운다 </summary>
+        public string SourceRevision { get; set; }
+        /// <summary> Jenkins 빌드면 BUILD_NUMBER(없으면 빈 문자열), 아니면 null. 빌드 시작 때 채운다 </summary>
+        public string JenkinsBuildNumber { get; set; }
         public List<string> Scenes { get; set; } = new List<string>();
         public BuildPlayerOptions PlayerOptions;
         public BuildReport Report { get; set; }
@@ -52,12 +56,13 @@ namespace HB.CustomBuild.Editor
         /// <summary>
         /// 빌드 결과물 경로를 계산합니다.
         /// Windows는 버전별 하위 폴더에 실행 파일과 데이터 폴더를 모으고, Android는 단일 파일, iOS는 Xcode 프로젝트 폴더입니다.
-        /// LIVE + Development 빌드는 이름에 _DEVBUILD가 붙습니다.
+        /// 이름 규칙은 BuildHelper.ComposeArtifactName (LIVE + Development는 _DEVBUILD, 커밋 해시, Jenkins 표시).
         /// </summary>
         public string GetLocationPathName()
         {
             string outDir = BuildHelper.ResolveProjectRelativePath(OutputPath);
-            string baseName = $"{Application.productName}_v{Version}_{BuildType}" + (IsLiveDevBuild ? "_DEVBUILD" : string.Empty);
+            string baseName = BuildHelper.ComposeArtifactName(Application.productName, Version, VersionCode, BuildType,
+                IsLiveDevBuild, SourceRevision, JenkinsBuildNumber);
             return Target switch
             {
                 BuildTarget.Android => Path.Combine(outDir, baseName + (IsAab ? ".aab" : ".apk")),

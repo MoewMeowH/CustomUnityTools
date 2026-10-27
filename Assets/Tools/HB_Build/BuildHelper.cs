@@ -167,6 +167,26 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
+        /// 산출물 이름 (확장자 없음): {제품명}_v{버전}[_{버전코드}]_{빌드타입}[_DEVBUILD][_{소스}][_Jenkins{번호}].
+        /// 버전 코드 · 소스가 비면 그 칸을 뺀다. jenkinsBuildNumber가 null이면 Jenkins 빌드가 아니다.
+        /// </summary>
+        public static string ComposeArtifactName(string productName, string version, string versionCode, EBuildType buildType,
+            bool isLiveDevBuild, string sourceRevision, string jenkinsBuildNumber)
+        {
+            string name = $"{productName}_v{version}";
+            if (!string.IsNullOrEmpty(versionCode))
+                name += "_" + versionCode;
+            name += "_" + buildType;
+            if (isLiveDevBuild)
+                name += "_DEVBUILD";
+            if (!string.IsNullOrEmpty(sourceRevision))
+                name += "_" + sourceRevision;
+            if (jenkinsBuildNumber != null)
+                name += "_Jenkins" + jenkinsBuildNumber;
+            return name;
+        }
+
+        /// <summary>
         /// 기본 출력 경로 (프로젝트 루트 기준 상대 경로). 절대 경로를 프로필에 저장하지 않도록 상대 경로로 반환합니다.
         /// </summary>
         public static string GetDefaultOutputPath(BuildTarget target)
