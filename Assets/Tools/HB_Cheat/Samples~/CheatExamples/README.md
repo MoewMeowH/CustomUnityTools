@@ -1,6 +1,10 @@
 # Cheat Examples
 
-HB_Cheat 치트를 종류별로 모은 예제입니다. 치트 파일은 모두 `#if DEV_CHEAT`로 감싸 있어서, 치트 심볼이 꺼져 있으면 컴파일되지 않습니다. `ExampleGameData.cs`는 치트가 아니라 가짜 게임 코드라서 감싸지 않습니다. 프로젝트 심볼 이름(`User Define`)을 `DEV_CHEAT`가 아닌 이름으로 바꿨다면 샘플 파일의 `#if DEV_CHEAT`도 같이 바꿔야 합니다.
+HB_Cheat 치트를 종류별로 모은 예제입니다.
+
+- 치트 파일은 모두 `#if DEV_CHEAT`로 감싸 있어서, 치트 심볼이 꺼져 있으면 컴파일되지 않습니다.
+- `ExampleGameData.cs`는 치트가 아니라 가짜 게임 코드라서 감싸지 않습니다.
+- 프로젝트 심볼 이름(`User Define`)을 `DEV_CHEAT`가 아닌 이름으로 바꿨다면 샘플 파일의 `#if DEV_CHEAT`도 같이 바꿔야 합니다.
 
 샘플에는 asmdef가 없으므로 Assembly-CSharp로 컴파일됩니다.
 
@@ -22,13 +26,15 @@ unity command cheat_status --execution <id> --session <session>
 
 | 파일 | 내용 |
 |---|---|
-| `ExampleGameData.cs` | 가짜 게임 코드: 아이템 테이블(`ItemTable`, `Reload`하면 `Version` 증가), 플레이어 값(`ExamplePlayer`), 패킷(`C2P_RequestCheat` / `P2C_ResultCheat`), 0.3초 뒤 응답하는 가짜 네트워크(`ExampleNetwork`). 가짜 서버는 `item_` · `currency_` · `mail_`로 시작하는 명령만 성공(`Success`), 나머지는 `InvalidCommand`로 돌려줍니다. |
+| `ExampleGameData.cs` | 가짜 게임 코드: 아이템 테이블(`ItemTable`, `Reload`하면 `Version` 증가), 플레이어 값(`ExamplePlayer`), 패킷(`C2P_RequestCheat` / `P2C_ResultCheat`), 0.3초 뒤 응답하는 가짜 네트워크(`ExampleNetwork`) (아래 설명) |
 | `ExampleCheatProviders.cs` | 목록 Provider: 테이블 전체(`ItemProvider`), 조건 필터(`EnchantableItemProvider`, 강화 가능한 아이템만), 앞 인자에 따라 바뀌는 목록(`EnchantLevelProvider`, `DependsOn`), 문자열 값 목록(`BuildSceneProvider`, Build Settings의 씬) |
 | `ItemCheats.cs` | 서버 치트: 목록 + 개수(`Step = 10`), `DependsOn`, enum(서버로는 정수 값, `Epic` → 3), 인자 없음, `Order` |
 | `AccountCheats.cs` | 서버 치트: enum + `long`(`Step = 1000`), 공백이 있는 문자열(`"..."`로 감쌈), 기본값이 있는 목록 인자, 3단 경로(`Account/Currency/Add`, `Account/Mail/Send`) |
 | `ActorCheats.cs` | 클라 치트: 반환형 `void` / `string` / `bool` / `CheatResult`, 토글, 텍스트 입력, 인자 없음, enum + 소수 step(`Step = 0.5`), 3단 경로(`Actor/Stat/Set`) |
 | `SystemCheats.cs` | 클라 치트: 배속(소수 step), 씬 이동(문자열 목록), FPS, 테이블 리로드(다음에 고르거나 실행할 때 목록을 새로 읽음), `Order` |
 | `ExampleCheatTransport.cs` | `ICheatServerTransport` 연결과 `ReportServerResult` 응답 처리. `BeforeSceneLoad`에서 등록합니다. `ExampleNetwork.IsConnected`가 false면 전송 실패(`Failed`)가 됩니다. 독립 패널에 프로젝트 `PanelSettings`를 넣는 예는 주석으로 들어 있습니다. |
+
+가짜 서버는 `item_` · `currency_` · `mail_`로 시작하는 명령만 성공(`Success`)으로 돌려주고, 나머지는 `InvalidCommand`로 돌려줍니다.
 
 ## 치트 목록
 

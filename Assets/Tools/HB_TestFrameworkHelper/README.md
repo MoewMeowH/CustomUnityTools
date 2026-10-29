@@ -4,7 +4,7 @@
 
 ---
 
-## 📦 UPM 패키지 설치 (Installation)
+## 설치
 
 ```text
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrameworkHelper
@@ -32,7 +32,10 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
 
      `.editorconfig`에서 `dotnet_diagnostic.<진단 ID>.severity`로 심각도를 바꾸거나 끌 수 있습니다.
 3. **프리팹 스캐너 엔진 (`SlotValidatorEngine`)**:
-   - 지정 폴더에서 `AssetDatabase.FindAssets("t:Prefab")`로 찾은 프리팹을 하나씩 열어 비활성 자식까지 검사합니다. 프리팹 100개마다 쓰지 않는 에셋을 내려 큰 프로젝트에서도 메모리가 계속 늘지 않게 합니다 (결과가 가리키는 프리팹은 남음). 저장하지 않은 수정 중 에셋(dirty)은 내려가지 않지만, 어디서도 참조하지 않는 임시 객체(`HideFlags` 없이 만든 `ScriptableObject` · `Material` 등)는 정리됩니다.
+   - 지정 폴더에서 `AssetDatabase.FindAssets("t:Prefab")`로 찾은 프리팹을 하나씩 열어 비활성 자식까지 검사합니다.
+   - 프리팹 100개마다 쓰지 않는 에셋을 내려 큰 프로젝트에서도 메모리가 계속 늘지 않게 합니다 (결과가 가리키는 프리팹은 남음).
+     - 저장하지 않은 수정 중 에셋(dirty)은 내려가지 않습니다.
+     - 어디서도 참조하지 않는 임시 객체(`HideFlags` 없이 만든 `ScriptableObject` · `Material` 등)는 정리됩니다.
    - 프리팹의 MonoBehaviour 직렬화 필드를 따라가며 검사합니다. 상속된 필드, 중첩 `[Serializable]` 클래스 · 구조체(배열 · List 원소 포함)도 내려갑니다.
    - 직렬화 필드는 public 또는 `[SerializeField]`인 인스턴스 필드입니다. `readonly` · `const` · `[NonSerialized]` · `[SerializeReference]` 필드는 건너뜁니다.
    - 중첩은 10단계까지 내려갑니다. `UnityEngine` · `UnityEditor` · `System` 네임스페이스 타입(`Vector3` 등)은 내려가지 않습니다.
@@ -46,7 +49,10 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
 
    - 빈 배열 · List(원소 0개)는 문제로 보지 않습니다.
    - 빈 칸과 Missing은 직렬화된 instanceID로 구분합니다 (빈 칸은 0).
-   - 중첩 프리팹 · 프리팹 변형이 원본에서 덮어쓰지 않고 물려받은 값은, 원본 프리팹이 이번 검사 대상이면 원본에서만 보고합니다 (같은 문제를 여러 번 세지 않음). 덮어쓴 값, 이 프리팹에서 늘린 배열 · List 원소, 원본이 검사 대상 밖(다른 폴더 · 패키지)인 값은 그 프리팹에서 보고합니다. 원본 값이 있는데 이 프리팹에서만 비거나 Missing이 된 값도 그 프리팹에서 보고합니다. Missing 스크립트도 원본에 있던 개수를 빼고 늘어난 것만 보고합니다.
+   - 중첩 프리팹 · 프리팹 변형이 원본에서 덮어쓰지 않고 물려받은 값은, 원본 프리팹이 이번 검사 대상이면 원본에서만 보고합니다 (같은 문제를 여러 번 세지 않음).
+     - 그 프리팹에서 보고하는 값: 덮어쓴 값, 이 프리팹에서 늘린 배열 · List 원소, 원본이 검사 대상 밖(다른 폴더 · 패키지)인 값
+     - 원본 값이 있는데 이 프리팹에서만 비거나 Missing이 된 값도 그 프리팹에서 보고합니다.
+     - Missing 스크립트도 원본에 있던 개수를 빼고 늘어난 것만 보고합니다.
      - 한계: Missing 스크립트는 개수로만 비교하므로, 원본의 Missing 컴포넌트를 지우고(제거 override) 다른 Missing 컴포넌트를 더하면 상쇄되어 보고되지 않습니다.
      - 원본을 일부러 비워 두고 쓰는 곳마다 채우는 패턴에서는 원본만 에러로 보이고, 채우지 않은 중첩 · 변형 위치는 따로 보고되지 않습니다 (원본을 고치거나 원본 폴더를 빼고 검사하면 보입니다).
      - 원본 프리팹을 불러오지 못하면(깨진 프리팹) 그 원본에서 물려받은 문제도 보고되지 않습니다.
@@ -69,13 +75,17 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
      - 테스트 `Validate_AllPrefabs_NoNullInspectorSlots_And_NoMissingScripts`가 프리팹 검사(`PrefabSlots`)를 맡습니다. 폴더 범위는 Project Settings를 따릅니다 (설정 파일이 없으면 `Assets`).
      - `AssetHealthTests.Validate_AssetHealth(검사 ID)`가 나머지 검사(씬 · ScriptableObject · 머티리얼 · 일반 Missing 참조)를 검사마다 한 줄로 보여 줍니다. Project Settings에서 꺼진 검사는 Ignore로 표시합니다.
      - 경고는 `Debug.LogWarning`으로 남기고, 테스트 결과 메시지(실패 · 통과 모두)에도 목록을 적어 Test Runner 결과 화면에서 보입니다. 항목은 `[심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)` 형식입니다.
-     - 테스트는 별도 어셈블리(`HB.TestFrameworkHelper.Tests.Editor`)에 있으며 `com.unity.test-framework`가 설치된 경우에만 컴파일됩니다 (`versionDefines` → `HB_TFH_HAS_TEST_FRAMEWORK`). 설치한 프로젝트의 Test Runner에 보이려면 `Packages/manifest.json`의 `"testables"`에 `com.hb.testframeworkhelper`를 넣습니다. Test Framework가 없는 프로젝트에서도 나머지 기능은 그대로 동작합니다.
+     - 테스트는 별도 어셈블리(`HB.TestFrameworkHelper.Tests.Editor`)에 있으며 `com.unity.test-framework`가 설치된 경우에만 컴파일됩니다 (`versionDefines` → `HB_TFH_HAS_TEST_FRAMEWORK`).
+     - 설치한 프로젝트의 Test Runner에 보이려면 `Packages/manifest.json`의 `"testables"`에 `com.hb.testframeworkhelper`를 넣습니다.
+     - Test Framework가 없는 프로젝트에서도 나머지 기능은 그대로 동작합니다.
    - `PreBuildStep_ValidateInspectorSlots`(`IPreBuildStep`)를 통해 플레이어 빌드 전 사전 검사를 수행하며, `LIVE` 빌드 시 켜진 검사의 에러가 있거나 검사를 끝까지 못 했으면 빌드를 중단합니다 (경고는 로그만). `com.hb.custombuild`가 설치된 경우에만 활성화됩니다.
      - HB_Build(`com.hb.custombuild`) 연동 스텝입니다. 별도 어셈블리 `HB.TestFrameworkHelper.BuildIntegration.Editor`에 있고, 패키지가 있을 때만 `HB_CUSTOM_BUILD_ENABLED`가 정의되어 컴파일됩니다.
-     - `ExecutionOrder`는 6(HB_Build의 SceneDefine 씬 필터 5 뒤)입니다. Project Settings에서 켜진 검사를 돌리고, 씬은 설정의 씬 대상 대신 **실제 빌드 씬 목록**(`BuildContext.Scenes` — 명령줄 · 프로필 · SceneDefine 필터 뒤)을 검사합니다. 첫 줄에 `[Inspector Validation] 문제 N개 (에러 E · 경고 W)`, 이어서 문제마다 `[심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)`를 빌드 경고 로그로 남깁니다.
+     - `ExecutionOrder`는 6(HB_Build의 SceneDefine 씬 필터 5 뒤)입니다.
+     - Project Settings에서 켜진 검사를 돌립니다. 씬은 설정의 씬 대상 대신 **실제 빌드 씬 목록**(`BuildContext.Scenes` — 명령줄 · 프로필 · SceneDefine 필터 뒤)을 검사합니다.
+     - 첫 줄에 `[Inspector Validation] 문제 N개 (에러 E · 경고 W)`, 이어서 문제마다 `[심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)`를 빌드 경고 로그로 남깁니다.
      - 에러가 있거나 검사를 끝까지 못 했으면 요약을 HB_Build 경고(`context.AddWarning` → `BuildOutput/HB_BUILD_WARNINGS.txt`, Jenkins UNSTABLE)로도 남깁니다. 경고만 있으면 로그만 남깁니다.
      - `StepId`는 `HB.TestFrameworkHelper.Editor.PreBuildStep_ValidateInspectorSlots`로 고정되어 있어, 빌드 프로필의 비활성 스텝 목록에 넣어 끌 수 있고 클래스 이름이 바뀌어도 설정이 유지됩니다.
-6. **에셋 건강 검사 (`AssetHealthEngine`)**: 프리팹 밖으로 넓힌 검사입니다. 아래 절을 보세요.
+6. **에셋 건강 검사 (`AssetHealthEngine`)**: 프리팹 밖으로 넓힌 검사입니다. [에셋 건강 검사](#에셋-건강-검사-asset-health)를 보세요.
 
 ## 사용 예시
 
@@ -120,8 +130,14 @@ public class MyPopupUI : MonoBehaviour
 * 서브에셋은 Unity가 직접 저장하는 파일(`.prefab` · `.asset` · `.mat`)만 봅니다. 모델(FBX) 등 임포터가 만든 에셋은 고칠 수 없어 제외합니다.
 * 머티리얼은 지금 셰이더에 있는 텍스처 속성만 봅니다 (셰이더를 바꾸기 전에 남은 칸은 무시). 셰이더가 없으면 텍스처는 보지 않습니다. 셰이더 컴파일 에러(`ShaderUtil.ShaderHasError`)는 플랫폼 · 그래픽스 API에 따라 달라질 수 있어 경고로만 보고합니다.
 * 일반 Missing 검사는 문자열 · 기본형 원소 배열(데이터 테이블 · 타일 · 커브 키 등)의 안으로 들어가지 않습니다 (참조가 없으므로).
-* 검사하지 않는 것: 씬 단위 설정(RenderSettings의 스카이박스 · 라이팅 데이터 등 컴포넌트가 아닌 것), 스크립트가 Missing인 ScriptableObject 파일(Unity가 타입을 몰라 검색에 걸리지 않음 — 6000.3 실측).
-* 같은 칸을 두 번 보고하지 않습니다: 슬롯 검사가 켜져 있으면 `[NeedSlotNullCheck]` 칸은 슬롯 검사(에러)만, 꺼져 있으면 `MissingReferences`가 경고로 보고합니다. 씬에 놓인 프리팹이 원본의 문제를 그대로 물려받았으면, 원본 프리팹이 같은 검사에서 같은 심각도 이상으로 실제로 보고한 경우에만 씬에서 건너뜁니다 (프리팹 슬롯 검사가 꺼져 원본이 일반 Missing 경고로만 보고한 칸은 씬의 슬롯 에러로 보고). `[SerializeReference]` 칸은 검사하지 않습니다.
+* 검사하지 않는 것
+  * 씬 단위 설정 (RenderSettings의 스카이박스 · 라이팅 데이터 등 컴포넌트가 아닌 것)
+  * 스크립트가 Missing인 ScriptableObject 파일 (Unity가 타입을 몰라 검색에 걸리지 않음 — Unity 6000.3 기준)
+  * `[SerializeReference]` 칸
+* 같은 칸을 두 번 보고하지 않습니다.
+  * 슬롯 검사가 켜져 있으면 `[NeedSlotNullCheck]` 칸은 슬롯 검사(에러)만, 꺼져 있으면 `MissingReferences`가 경고로 보고합니다.
+  * 씬에 놓인 프리팹이 원본의 문제를 그대로 물려받았으면, 원본 프리팹이 같은 검사에서 같은 심각도 이상으로 실제로 보고한 경우에만 씬에서 건너뜁니다.
+  * 프리팹 슬롯 검사가 꺼져 원본이 일반 Missing 경고로만 보고한 칸은 씬의 슬롯 에러로 보고합니다.
 * Missing 스크립트 중복은 기존 프리팹 규칙처럼 개수로 뺍니다. 씬에서는 원본 체인(변형 · 중첩)이 보고한 개수의 합을 뺍니다 (원본의 Missing을 지우고 다른 Missing을 더하면 상쇄되어 보이지 않는 한계가 같음).
 
 ### 설정 (`Project Settings > HB > Test Framework Helper`)
@@ -129,7 +145,10 @@ public class MyPopupUI : MonoBehaviour
 `ProjectSettings/HBTestFrameworkHelperSettings.asset`에 저장되어 git으로 팀이 같이 씁니다. 파일이 없으면 기본값 = `PrefabSlots`만 켬 · 검사 폴더 `Assets` · 씬 대상 Build Settings (지금까지와 같은 동작).
 
 * **검사 폴더 · 제외 폴더**: 프리팹 · ScriptableObject · 머티리얼을 찾는 범위. 검사 폴더가 비면 대상이 없습니다 (Assets 전체로 넓히지 않음). 중첩 · 변형 프리팹의 원본 판정은 제외까지 적용한 최종 대상으로 합니다.
-* **씬 대상** (여럿을 함께 켤 수 있고, 같은 씬은 한 번만): Build Settings에서 켜진 씬 · 지정 폴더의 씬 · 직접 고른 씬. 직접 고른 씬은 제외 폴더보다 우선합니다. 빌드 씬 목록을 빌드 코드로 채운다면 폴더나 직접 고르기를 함께 켜세요 (HB_Build 빌드 전 검사는 실제 빌드 씬을 따로 보며, 그 목록에는 제외 폴더를 적용하지 않습니다).
+* **씬 대상** (여럿을 함께 켤 수 있고, 같은 씬은 한 번만): Build Settings에서 켜진 씬 · 지정 폴더의 씬 · 직접 고른 씬.
+  * 직접 고른 씬은 제외 폴더보다 우선합니다.
+  * 빌드 씬 목록을 빌드 코드로 채운다면 폴더나 직접 고르기를 함께 켜세요.
+  * HB_Build 빌드 전 검사는 실제 빌드 씬을 따로 보며, 그 목록에는 제외 폴더를 적용하지 않습니다.
 
 ### 씬 검사 규칙
 
@@ -201,7 +220,11 @@ PlayMode 테스트 asmdef (테스트용 플레이어에서도 돌므로 에디�
 "defineConstraints": [ "UNITY_INCLUDE_TESTS" ]
 ```
 
-> **`testables` 필수:** 이 유틸 어셈블리는 Unity가 테스트 어셈블리로 다루므로, git URL 등으로 설치한 프로젝트는 `Packages/manifest.json`에 `"testables": ["com.hb.testframeworkhelper"]`를 넣어야 컴파일됩니다 (없으면 쓰는 쪽 테스트가 `HB` 네임스페이스를 찾지 못함). 이렇게 해도 이 패키지 자체 테스트(`Testing/Tests`)는 보이지 않습니다 — 그 테스트는 Scripting Define Symbol `HB_TFH_SELF_TESTS`가 있을 때만 컴파일됩니다 (패키지를 고치는 사람용). 기존 슬롯 검사 테스트(`SlotValidationTests`)는 `testables`만으로 보입니다.
+> **`testables` 필수:** 이 유틸 어셈블리는 Unity가 테스트 어셈블리로 다룹니다.
+> 그래서 git URL 등으로 설치한 프로젝트는 `Packages/manifest.json`에 `"testables": ["com.hb.testframeworkhelper"]`를 넣어야 컴파일됩니다 (없으면 쓰는 쪽 테스트가 `HB` 네임스페이스를 찾지 못함).
+>
+> 이렇게 해도 이 패키지 자체 테스트(`Testing/Tests`)는 보이지 않습니다. 그 테스트는 Scripting Define Symbol `HB_TFH_SELF_TESTS`가 있을 때만 컴파일됩니다 (패키지를 고치는 사람용).
+> 기존 슬롯 검사 테스트(`SlotValidationTests`)는 `testables`만으로 보입니다.
 
 ### 사용 예시
 
@@ -257,8 +280,15 @@ private TestScope m_Scope;
 * **PlayMode:** `Destroy`는 프레임 끝에 실행됩니다. `TestScope.Dispose()` 직후 같은 프레임에는 객체가 아직 있습니다 (`HBTestFixture`는 한 프레임 기다림). 파괴 전에 비활성화하지 않습니다.
 * **`using` 블록:** 본문에서 예외가 나고 정리에서도 예외가 나면 C# 규칙대로 정리 예외가 본문 예외를 가립니다.
 * **에셋이 된 객체:** `NewInstance`로 만든 객체를 `AssetDatabase.CreateAsset` 등으로 에셋으로 만들면 Dispose에서 지우지 않습니다 (에셋은 `TempAssetFolder` 같은 파일 쪽이 정리). 다른 Component가 `[RequireComponent]`로 의존하는 Component를 Track하면 Unity가 지우지 않고 에러 로그를 남기므로 GameObject를 Track하세요.
-* **`TempAssetFolder`:** 테스트가 중단돼 남은 폴더는 다음에 처음 만들 때 지웁니다 — 이 패키지 표식 파일(`.hb_tfh_owner`)이 있는 폴더만 (지운 경로는 경고 로그). 폴더 안에 링크(심볼릭 링크 · 정션)가 있으면 따라 들어가지 않도록 지우지 않습니다 (남은 폴더는 경고, 사용 중 폴더의 Dispose는 예외). 도메인 리로드(스크립트 · asmdef 생성 등)를 넘는 사용은 지원하지 않습니다. `Assets/__HBTestTemp/`를 프로젝트 `.gitignore`에 넣어 두는 것을 권장합니다.
+* **`TempAssetFolder`:**
+  * 테스트가 중단돼 남은 폴더는 다음에 처음 만들 때 지웁니다. 이 패키지 표식 파일(`.hb_tfh_owner`)이 있는 폴더만 지우고, 지운 경로는 경고 로그로 남깁니다.
+  * 폴더 안에 링크(심볼릭 링크 · 정션)가 있으면 따라 들어가지 않도록 지우지 않습니다 (남은 폴더는 경고, 사용 중 폴더의 Dispose는 예외).
+  * 도메인 리로드(스크립트 · asmdef 생성 등)를 넘는 사용은 지원하지 않습니다.
+  * `Assets/__HBTestTemp/`를 프로젝트 `.gitignore`에 넣어 두는 것을 권장합니다.
 * **`TempDirectory`:** OS 임시 폴더는 다른 사용자와 공유될 수 있습니다(Linux `/tmp` 등) — 비밀 값이 든 파일은 넣지 마세요. 하드 링크로 넣은 읽기 전용 파일은 지울 때 푼 읽기 전용이 원본에도 남습니다.
-* **`TempScene`:** 저장하지 않은 변경이 있는 씬이나 Prefab Mode 프리팹이 열려 있으면 아무것도 바꾸지 않고 테스트를 Inconclusive로 끝냅니다 (변경을 저장하지도 버리지도 않음). 저장된 적 없는 씬은 되돌릴 수 없어, 저장 씬만 되돌리고 저장 씬이 없었으면 새 빈 씬을 엽니다. 테스트가 임시 씬에 한 변경은 버립니다.
+* **`TempScene`:**
+  * 저장하지 않은 변경이 있는 씬이나 Prefab Mode 프리팹이 열려 있으면 아무것도 바꾸지 않고 테스트를 Inconclusive로 끝냅니다 (변경을 저장하지도 버리지도 않음).
+  * 저장된 적 없는 씬은 되돌릴 수 없어, 저장 씬만 되돌리고 저장 씬이 없었으면 새 빈 씬을 엽니다.
+  * 테스트가 임시 씬에 한 변경은 버립니다.
 * **`NoGCAlloc`:** Unity Test Framework의 `AllocatingGCMemory`(메인 스레드 · 프로파일러 기록 기반)를 씁니다. 에디터에서는 에디터 기준 값입니다.
 * 메인 스레드 전용입니다. 같은 프로젝트를 여러 에디터 프로세스가 동시에 쓰는 경우는 다루지 않습니다 (Unity가 프로젝트를 잠금).

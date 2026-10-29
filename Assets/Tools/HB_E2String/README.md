@@ -4,7 +4,7 @@
 
 ---
 
-## 📦 UPM 패키지 설치 (Installation)
+## 설치
 
 ```text
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String
@@ -22,7 +22,9 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String
    - 같은 이름의 파일이 이미 있으면 덮어쓸지 묻습니다.
    - **글로벌 + EString.Script 호환**(기본): 글로벌 네임스페이스와 `EString.Script` 양쪽에 어트리뷰트를 만듭니다. `using` 없이 바로 쓸 수 있습니다. `E2StringOptions`는 글로벌에 하나만 만들어 두 어트리뷰트가 같은 옵션 타입을 씁니다.
    - 체크를 해제하면 지정한 네임스페이스에만 만듭니다 (`E2StringOptions`도 그 네임스페이스 안). 비워두면 글로벌에만 만듭니다. 네임스페이스 이름이 식별자 규칙에 맞지 않거나 C# 키워드를 포함하면 생성하지 않습니다.
-   - 폴더가 어떤 asmdef에도 속하지 않으면 `HB.E2String.Attributes.asmdef`를 함께 만듭니다. Assembly-CSharp는 자동으로 참조하고, asmdef 어셈블리에서는 references에 `HB.E2String.Attributes`를 추가하면 됩니다. 폴더 아래 다른 스크립트가 있으면 그 스크립트까지 새 어셈블리로 옮겨지므로 asmdef를 만들지 않습니다. asmdef에서도 쓰려면 전용 빈 폴더에 만드세요.
+   - 폴더가 어떤 asmdef에도 속하지 않으면 `HB.E2String.Attributes.asmdef`를 함께 만듭니다.
+     Assembly-CSharp는 자동으로 참조하고, asmdef 어셈블리에서는 references에 `HB.E2String.Attributes`를 추가하면 됩니다.
+   - 폴더 아래 다른 스크립트가 있으면 그 스크립트까지 새 어셈블리로 옮겨지므로 asmdef를 만들지 않습니다. asmdef에서도 쓰려면 전용 빈 폴더에 만드세요.
    - 이름이 `HB.E2String.Attributes`인 asmdef가 프로젝트에 이미 있어도 만들지 않습니다. 이때 어트리뷰트는 Assembly-CSharp에 들어갑니다.
    - 폴더가 이미 asmdef에 속하면 그 어셈블리에 들어갑니다. 어트리뷰트를 쓰는 asmdef가 그 어셈블리를 참조해야 합니다.
    - `.asmdef`는 Unity 전용 파일이라 서버와 `.cs`를 공유해도 영향이 없습니다.

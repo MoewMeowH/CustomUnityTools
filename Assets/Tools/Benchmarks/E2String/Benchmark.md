@@ -8,7 +8,7 @@
 | Unity | 7000.0.0a8, Windows x64 Standalone, IL2CPP |
 | 측정일 | 2026-10-22 |
 | 패키지 | [HB_E2String](../../HB_E2String/README.md) |
-| 측정 코드 | 작업 프로젝트의 `Assets/Benchmarks/E2String/` (UPM 패키지에는 포함되지 않음, [7절](#7-측정-방법과-실행-코드) 참고) |
+| 측정 코드 | 작업 프로젝트의 `Assets/Benchmarks/E2String/` (UPM 패키지에는 포함되지 않음, [측정 방법과 실행 코드](#7-측정-방법과-실행-코드) 참고) |
 
 > DLL이 교체되면 수치가 달라질 수 있습니다. 재측정 시 위 표를 함께 갱신하세요.
 >
@@ -83,7 +83,9 @@
 
 ### 2-3. `[Flags]` 조합의 첫 호출
 
-`ToStringFast`는 `[Flags]` 조합 문자열을 **조합마다 첫 호출에서 만들어 캐시**합니다. 위 반복 측정에는 이 비용이 보이지 않으므로, 아직 캐시되지 않은 조합 255개를 측정 시작 전에 따로 쟀습니다. 타입 초기화 등 첫 호출 비용이 함께 들어간 1회 측정값입니다 (시간은 Release, 할당은 Development, 실행 2회의 중앙값).
+`ToStringFast`는 `[Flags]` 조합 문자열을 **조합마다 첫 호출에서 만들어 캐시**합니다.
+위 반복 측정에는 이 비용이 보이지 않으므로, 아직 캐시되지 않은 조합 255개를 측정 시작 전에 따로 쟀습니다.
+타입 초기화 등 첫 호출 비용이 함께 들어간 1회 측정값입니다 (시간은 Release, 할당은 Development, 실행 2회의 중앙값).
 
 | | 기존 `ToString()` | E2String `ToStringFast()` |
 |---|---:|---:|
@@ -270,7 +272,10 @@ public static class BenchEnum8Extensions
 
 - **`Low`에서는 쓰지 않는 생성 메서드도 빠지지 않습니다.** `Low`는 사용자 어셈블리를 통째로 남기기 때문입니다 (기준 빌드에도 Enum 50개와 멤버 이름 5,000개가 들어 있음).
 - **`Medium` · `High`에서는 아무도 참조하지 않는 Enum의 생성 코드가 Enum과 함께 전부 빠집니다** (기준과 바이트까지 같음).
-- **생성 코드 자체는 Enum당 약 11 KB이고, 호출하는 코드까지 포함하면 약 14.5 KB입니다** (근사, 스트리핑 단계와 무관). `Low` 미사용(+11.1 KB)이 생성 코드만의 몫이고, `Medium` · `High`의 "사용" 증가량(+764 KB)에서 같은 값을 `ToString()` · `Enum.TryParse<T>()`로 쓰는 변형을 뺀 값(+14.5 KB)에는 호출 코드 모양 차이(약 3.4 KB)가 더 들어 있습니다. 빼는 변형의 증가분(메타데이터 약 137 KB)은 Enum 자체(멤버 이름 · 상수 5,000개)의 몫입니다.
+- **생성 코드 자체는 Enum당 약 11 KB이고, 호출하는 코드까지 포함하면 약 14.5 KB입니다** (근사, 스트리핑 단계와 무관).
+  - `Low` 미사용(+11.1 KB)이 생성 코드만의 몫입니다.
+  - `Medium` · `High`의 "사용" 증가량(+764 KB)에서 같은 값을 `ToString()` · `Enum.TryParse<T>()`로 쓰는 변형을 뺀 값(+14.5 KB)에는 호출 코드 모양 차이(약 3.4 KB)가 더 들어 있습니다.
+  - 빼는 변형의 증가분(메타데이터 약 137 KB)은 Enum 자체(멤버 이름 · 상수 5,000개)의 몫입니다.
 - 옵션 간 차이는 작습니다 (`All`이 기본보다 Enum당 약 0.5 KB). 비용 대부분은 항상 생성되는 문자열 변환입니다.
 - 빌드 시간 차이는 같은 조건의 편차(±10초)보다 작아 구분되지 않습니다 (각 측정의 첫 빌드는 캐시 정리 때문에 더 걸림).
 - `High` 기준선이 `Medium`보다 약 1.2 MB 큽니다. 스트리핑 뒤 BCL에 EventSource(트레이싱) · Reflection.Emit · RegexCompiler가 더 남습니다 (7000.0.0a8, 원인 미확인, 다시 빌드해도 바이트까지 같음). E2String 증가량은 `Medium`과 같습니다.
@@ -287,7 +292,10 @@ public static class BenchEnum8Extensions
 - 생성기 실행 자체는 Enum 50개에 약 25 ms(Enum당 약 0.5 ms)입니다. 나머지 증가분은 생성된 코드(`switch` · 문자열 리터럴)를 컴파일하고 Emit하는 비용입니다.
 - 생성기는 `IIncrementalGenerator`(증분)입니다.
 - 크기는 모든 실행에서 바이트까지 같았습니다. 시간은 라운드 사이 범위가 `[E2String]` 319 ~ 370 ms, `All` 426 ~ 482 ms, 없음 26 ~ 33 ms입니다.
-- 측정 방법: Unity 7000.0.0a8에 들어 있는 Roslyn 5.6(`DotNetSdk/sdk/10.0.303/Roslyn/bincore`)을 별도 프로세스에서 API로 호출 (Unity 밖, warm). 입력은 SizeProbe(`E2StringSizeProbe.cs` + `BenchmarkE2StringAttribute.cs`), 참조는 netstandard 2.1 + `Unity.Scripting`, C# 9 · Release · deterministic. 1회 = 파싱 → Compilation 생성 → 생성기 실행 → Emit. 프로세스마다 예열 10회 뒤 20회 중앙값, 5라운드의 중앙값.
+- 측정 방법
+  - Unity 7000.0.0a8에 들어 있는 Roslyn 5.6(`DotNetSdk/sdk/10.0.303/Roslyn/bincore`)을 별도 프로세스에서 API로 호출했습니다 (Unity 밖, warm).
+  - 입력은 SizeProbe(`E2StringSizeProbe.cs` + `BenchmarkE2StringAttribute.cs`), 참조는 netstandard 2.1 + `Unity.Scripting`, C# 9 · Release · deterministic입니다.
+  - 1회 = 파싱 → Compilation 생성 → 생성기 실행 → Emit. 프로세스마다 예열 10회 뒤 20회 중앙값, 5라운드의 중앙값입니다.
 
 ### 6-3. 인게임 메모리 (추정)
 
