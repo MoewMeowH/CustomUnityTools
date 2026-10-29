@@ -1,0 +1,45 @@
+# 빌드 동작
+
+- **빌드 순서**: 이전 경고 파일 삭제 → 지원 대상 · 활성 플랫폼 확인 → 산출물 이름의 커밋 · Jenkins 확인 → `git status` 기록 → 설정 스냅샷 → 빌드 전 검증 → 사전 스텝 → 출력 이름 · 버전 코드 · 씬 확인 → `BuildPipeline.BuildPlayer` → 사후 스텝 → 설정 복원 → 바뀐 파일 목록 → 경고 파일 작성.
+- **활성 플랫폼**: 로컬(에디터) 빌드는 활성 플랫폼이 다르면 빌드 전에 전환하고, 빌드 뒤 되돌리지 않습니다 (전환 비용이 큼). 배치 모드는 전환하지 않고 실패합니다.
+- **스텝 On/Off**: Build Manager 창의 체크박스 상태는 빌드 프로필 에셋(`DisabledStepIds`)에 저장되어 로컬과 CI에서 동일하게 적용됩니다.
+- **설정 복원**: 기본 스텝이 변경한 PlayerSettings / QualitySettings / EditorUserBuildSettings(버전, 심볼, 로그 설정 등)는 빌드 성공·실패와 관계없이 빌드 전 값으로 복원됩니다. 커스텀 스텝이 다른 설정을 바꾸면 직접 복원해야 합니다.
+  - 복원 대상: `stripEngineCode` · `usePlayerLog` · `bundleVersion` · 스택트레이스(5종) · Scripting Define Symbols · Scripting Backend · Development · Deep Profiling · Autoconnect Profiler. Android는 versionCode · AAB · Android Build Type · Target Architectures, iOS는 buildNumber · 수동 Provisioning Profile 타입 · ID · 자동 서명 여부.
+  - `QualitySettings.skinWeights`는 기본 스텝이 바꾸지 않습니다 (프로젝트 품질 설정을 그대로 씀).
+  - 심볼 · Scripting Backend는 바뀐 경우에만 되돌립니다 (같은 값을 다시 써도 재컴파일될 수 있음). 저장은 PlayerSettings · QualitySettings 에셋만 합니다 (사용자의 저장하지 않은 다른 에셋은 저장하지 않음).
+  - 빌드가 성공했는데 복원이 실패하면 빌드를 실패로 처리합니다. 빌드가 이미 실패했으면 원래 오류를 가리지 않도록 경고만 남깁니다.
+- **전처리기 심볼**: 항목이 있는데 리스트가 비어 있으면 심볼을 모두 제거합니다. DefineContainer 또는 해당 빌드 타입/플랫폼 항목이 없거나 심볼 설정 스텝을 끄면 **LIVE는 실패**하고(커밋된 ProjectSettings의 개발용 심볼이 그대로 들어가는 것 방지), DEV · QA는 기존 심볼을 유지합니다 (항목이 없으면 경고).
+  - DefineContainer는 프로필(또는 창)에 넣은 에셋 → `Assets/Editor/HBBuild/DefineContainer.asset`(있는데 읽지 못하면 실패) → 프로젝트에서 찾은 `ProjectDefine` 에셋 순으로 씁니다. 마지막 단계에서 여러 개가 나오면 **LIVE는 실패**, DEV · QA는 경로 순 첫 번째를 쓰고 경고합니다. `SceneDefine`도 같은 규칙입니다. 창은 기본 경로에 없고 여러 개면 자동으로 연결하지 않습니다 (빌드 때 위 규칙으로 처리).
+  - HB_InGameConsole을 쓰면 LIVE 항목에서 `USE_HLOG`를 빼서 출시 빌드의 HLog를 끕니다 (켜진 채 릴리즈 빌드하면 InGameConsole이 경고).
+- **LIVE + Development Build**: 라이브 환경 프로파일링 · 로그 확인용으로 막지 않습니다. 대신 산출물 이름에 `_DEVBUILD`가 붙고(예: `Game_v1.0.0_42_LIVE_DEVBUILD_a1b2c3d_Jenkins128.apk`), 빌드 시작 · 끝에 경고 블록이 찍히고, 로컬 빌드는 확인 창을 띄우고, Jenkins는 결과가 UNSTABLE이 됩니다.
+- **경고 파일**: 빌드를 막지 않는 경고(LIVE + Development, 심볼 항목 없음, 등록되지 않은 비활성 ID 등)가 있으면 `BuildOutput/HB_BUILD_WARNINGS.txt`에 남깁니다. 생성한 Jenkinsfile은 이 파일이 있으면 내용을 출력하고 UNSTABLE로 표시합니다.
+  - 출력 경로와 관계없이 항상 프로젝트의 `BuildOutput/`에 씁니다. 빌드를 시작할 때 이전 파일을 지우고, 빌드가 실패해도 그때까지의 경고를 씁니다. 로컬 빌드는 완료 창에 경고 수를 보입니다.
+- **빌드가 바꾼 파일**: 빌드 전후 `git status`를 비교해 빌드 중 바뀐 파일(ProjectSettings 재저장 등)을 로그에 출력합니다. 자동으로 되돌리지 않으니 직접 확인하고 되돌리세요 (git이 PATH에 없으면 건너뜀).
+  - 새로 바뀐 파일, 이미 바뀐 상태에서 다시 쓰인 파일(수정 시각), 빌드 중 원래대로 돌아간 파일을 모두 보입니다. `BuildOutput/` · 이번 출력 경로 · 빌드 로그 파일은 뺍니다.
+  - 다시 쓰인 파일은 수정 시각으로 판단하므로 내용이 같게 재저장된 파일도 목록에 나옵니다 (내용 비교는 하지 않음).
+  - 프로젝트가 저장소의 하위 폴더여도 저장소 루트 기준으로 봅니다. git 명령이 15초 안에 끝나지 않으면 건너뜁니다.
+- **직접 빌드 경고**: Unity 기본 빌드(File > Build 등)처럼 HB_Build를 거치지 않은 플레이어 빌드는 콘솔에 경고합니다. HB_Build 스텝(심볼, 검증, 설정 복원)이 실행되지 않으므로 팀 빌드는 Build Manager로 하세요.
+- **산출물 이름**: `{제품명}_v{버전}[_{버전코드}]_{빌드타입}[_DEVBUILD]_{커밋}[_Jenkins{빌드번호}]` — QA 리포트에 적힌 이름만으로 어느 커밋 · 어느 Jenkins 빌드인지 찾을 수 있게 합니다.
+  - 예: Jenkins Android `MyGame_v1.2.0_45_QA_a1b2c3d_Jenkins128.apk`, 로컬 PC `MyGame_v1.2.0_DEV_a1b2c3d-dirty/MyGame_v1.2.0_DEV_a1b2c3d-dirty.exe`.
+  - 버전 코드가 비면(PC) 그 칸을 뺍니다. 버전 코드도 이름에 들어가므로 파일 이름에 못 쓰는 문자 · `/` · `\` · `..`가 있으면 실패합니다.
+  - 커밋: Unity 프로젝트 폴더의 짧은 해시(7자 이상). 프로젝트 폴더에 커밋하지 않은 변경 · 추적하지 않는 파일이 있으면 `-dirty`(해시만으로는 이 빌드를 다시 만들 수 없음, 막지는 않고 경고), `git status`가 실패하면 `-unknown`(경고 파일 → Jenkins UNSTABLE), git이 없거나 저장소가 아니면 `nogit`(이유는 로그에). 빌드 산출물 폴더 · 빌드 로그는 변경으로 보지 않습니다. 단 출력 경로가 프로젝트 루트 · `Assets` · `Packages` · `ProjectSettings`를 덮으면 제외하지 않고 경고합니다.
+  - Jenkins: `BUILD_NUMBER`(숫자)가 있고 `JENKINS_HOME` · `JENKINS_URL` · `BUILD_TAG`(`jenkins-…`) 중 하나가 있으면 Jenkins 빌드로 보고 `_Jenkins{BUILD_NUMBER}`를 붙입니다. 창에서 저장한 `.bat` · `.ps1`로 돌린 배치 빌드나, 개발자 PC 환경 변수에 `JENKINS_URL`만 있는 경우에는 붙지 않습니다.
+  - 빌드 시작 로그에 `Revision: <커밋> | Jenkins #<번호>`가 찍힙니다.
+  - 이 표시는 **추적용이지 진본 보장이 아닙니다** (환경 변수 · 출력 경로로 바꿀 수 있음). 출시 판단은 Jenkins 빌드 기록과 저장소로 하세요.
+- **빌드 전 git 작업 폴더 정리** (Build Manager 창, 로컬 빌드만): 켜면 빌드 전에 Unity 프로젝트 폴더를 현재 커밋 상태로 되돌려 `-dirty` 없는 빌드를 만듭니다.
+  - 지우는 것: 커밋하지 않은 수정 · 스테이징(`git restore --source=HEAD --staged --worktree` — 커밋 전에 스테이징만 한 새 파일은 **삭제**), 추적하지 않는 파일(`git clean -fd`, `-x` 없음). 남는 것: `Library/` 등 `.gitignore` 대상, 빌드 산출물 폴더(`BuildOutput/` · 출력 경로), 프로젝트 밖 파일(저장소가 더 넓어도), 프로젝트 안 서브모듈의 작업 트리(되돌리지 않음 — 서브모듈 변경은 직접 정리). **되돌릴 수 없습니다.**
+  - 확인 세 번: 옵션을 켜면 창에 경고가 뜨고, 그 아래 확인 체크박스를 켜야 하며, 정리 직전에 지울 목록(`[삭제]` · `[수정]` · `[복원]`, 앞 20개, Console에는 500개까지)을 대화상자로 보여 줍니다. 확인한 뒤 목록을 다시 구해 그 사이 바뀌었으면 정리하지 않습니다. 정리를 한 번 하면 두 체크박스는 꺼집니다. 프로필에 저장되지 않습니다.
+  - Play 모드 · 컴파일 중이거나, 저장하지 않은 씬 · 프리팹 편집 · 에셋(ScriptableObject · 머티리얼 · 프로젝트 설정 등, 앞 10개를 보여 줌. 프로젝트 폴더 안 파일만 보며, 레지스트리 · 내장 패키지와 프로젝트 밖 로컬 패키지는 보지 않음)이 있거나, git을 쓸 수 없으면 정리 · 빌드를 하지 않습니다. 자동으로 저장하지 않습니다 — 저장하거나 되돌린 뒤 다시 누르세요 (자동 저장하면 취소해도 저장이 남고, 프로젝트 밖 패키지 · 무시 파일의 변경은 정리로 되돌려지지도 않음).
+  - 빌드 산출물을 지킬 수 없으면 정리하지 않습니다: 출력 경로가 프로젝트 루트 · `Assets` · `Packages` · `ProjectSettings`를 덮을 때, 출력 폴더 이름에 git 패턴 글자(`[ ] * ? ! # "` 등)가 있을 때, 산출물이 정리 목록에 섞였을 때. 출력 폴더를 `.gitignore`에 넣어 두면 가장 안전합니다.
+  - 스크립트 · asmdef · DLL · `package.json` · `Packages/manifest.json` · `ProjectSettings/` 아래 파일(줄바꿈만 바뀐 경우는 제외 — Unity가 자주 줄바꿈만 바꿔 다시 저장함)이 바뀌면(새 미추적 폴더 안의 파일 포함) 컴파일 · 다시 읽기가 필요해 **정리만 하고 빌드는 하지 않습니다.** 컴파일이 끝나면 빌드를 다시 누르세요.
+  - 프로필 "저장 후 빌드"를 고르면: 이미 커밋된 프로필이면 저장한 변경이 정리로 **되돌아가고**, 커밋 전 새 프로필이면 **삭제됩니다** (정리가 켜져 있으면 대화상자에 안내). 선택한 프로필 · 참조하던 SceneDefine · ProjectDefine · XcodeSettings가 정리로 지워지면 빌드하지 않습니다. 정리 뒤에는 창 값을 프로필에서 다시 읽고, 새로 LIVE + Development가 되면 다시 묻습니다.
+  - git 명령은 영어 출력으로 실행하고(번역된 메시지를 잘못 읽지 않게), 에디터를 띄운 셸의 `GIT_DIR` · `GIT_WORK_TREE` 등은 무시합니다. macOS에서는 Hub로 띄운 에디터의 PATH가 짧으므로 `/opt/homebrew/bin` · `/usr/local/bin`을 PATH 뒤에 붙여 실행합니다 (Homebrew `git-lfs`를 찾도록, git 자체는 원래 고르던 것). 이 처리는 산출물 이름의 커밋 확인에도 적용됩니다. 정리 명령은 오래 걸려도 중간에 끊지 않습니다 (10분이 넘으면 끊지 않고 실패만 알림 — 끝난 뒤 `git status`와 `.git/index.lock`을 확인).
+  - CLI · Jenkins 배치 빌드에는 없습니다 (Jenkins 로컬 폴더 모드는 자체 갱신 단계가 있음).
+- **출력 경로**: 기본값은 프로젝트 기준 `BuildOutput/<Target>`입니다. Windows 빌드는 `<출력경로>/<이름>/<이름>.exe`처럼 버전별 하위 폴더에 생성되고, ZIP은 `<출력경로>/<이름>.zip`으로 생성됩니다. 같은 이름의 폴더나 ZIP이 이미 있으면 덮어쓰지 않고 `<이름> (2)`, `<이름> (3)` 폴더(와 ZIP)로 분리합니다. ZIP에는 `*_DoNotShip`, `*_ButDontShipItWithYourGame` 폴더가 포함되지 않습니다.
+  - 창의 폴더 선택으로 프로젝트 안 폴더를 고르면 상대 경로로 저장합니다. 절대 경로는 다른 PC · Jenkins에서도 그대로 쓰이므로 창이 경고합니다.
+- **로컬 빌드**: 프로필 빌드는 저장된 프로필 값으로 실행됩니다. 창에 저장하지 않은 변경이 있으면 빌드 전에 저장 여부를 묻고, 자동 저장하지 않습니다.
+- **프로필 복제**: 창에 저장하지 않은 변경이 있으면 복사본에 적용할지, 버리고 복제할지 묻습니다. 원본 프로필은 바꾸지 않습니다.
+  - 선택지는 "저장 후 빌드" · "저장된 값으로 빌드" · "취소"입니다. 프로필을 고르지 않으면 창의 현재 값으로 빌드합니다.
+  - 빌드는 창 그리기(OnGUI)가 끝난 뒤 실행하고, 끝나면 성공 · 실패 창을 띄웁니다.
+- **선택 설정 에셋 생성**: `DefineContainer.asset` · `SceneDefine.asset`이 이미 있으면 새로 만들지 않고 기존 에셋을 연결합니다. 그 경로에 불러올 수 없는 파일이 있으면 덮어쓰지 않고 오류 창을 띄웁니다.
+- Build Settings에 활성 씬이 없고 프로필에도 씬이 없으면 빌드를 실패시킵니다.
