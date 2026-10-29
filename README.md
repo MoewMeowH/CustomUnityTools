@@ -18,7 +18,7 @@ AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴�
 | [HB_Cheat](Assets/Tools/HB_Cheat/README.md) | `com.hb.cheat` | 1.0.0 | 개발 · QA용 치트 패널과 Unity CLI 자동화 |
 | [HB_E2String](Assets/Tools/HB_E2String/README.md) | `com.hb.e2string` | 1.0.0 | 할당 없는 Enum ↔ 문자열 변환 Source Generator |
 | [HB_Build](Assets/Tools/HB_Build/README.md) | `com.hb.custombuild` | 1.0.0 | 멀티 플랫폼 빌드 매니저와 Jenkinsfile 생성기 |
-| [HB_TestFrameworkHelper](Assets/Tools/HB_TestFrameworkHelper/README.md) | `com.hb.testframeworkhelper` | 1.0.0 | 인스펙터 슬롯 · Missing Script 검증 QA 헬퍼 |
+| [HB_TestFrameworkHelper](Assets/Tools/HB_TestFrameworkHelper/README.md) | `com.hb.testframeworkhelper` | 1.0.0 | 인스펙터 슬롯 · 에셋 건강 검사 QA 헬퍼와 테스트 작성 도우미 |
 | [HB_ScreenRecorder](Assets/Tools/HB_ScreenRecorder/README.md) | `com.hb.screenrecorder` | 1.0.0 | GameView 녹화 · 스크린샷과 진단 데이터 덤프 |
 
 도구 이름을 누르면 상세 문서로 갑니다. 도구마다 할 수 있는 일은 [도구별 기능](#도구별-기능)에 있습니다.
@@ -80,13 +80,18 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRec
 - 멀티 플랫폼 커스텀 빌드 매니저입니다.
   빌드 프로필, 확장 가능한 빌드 스텝, 환경별 심볼, 씬 제외, iOS Xcode 설정 에셋을 다룹니다.
 - Jenkins CI/CD 파이프라인(Groovy Jenkinsfile)을 생성합니다.
+  소스는 job의 SCM으로 받거나, 빌드 PC의 고정 작업 폴더를 git으로 갱신해 받습니다.
 - 빌드 뒤 설정을 복원하고, LIVE 검증 · 경고 파일을 남기고, 빌드 중 바뀐 파일을 보고합니다.
+- 산출물 이름에 커밋 해시와 Jenkins 빌드 번호를 붙여, 이름만으로 어느 빌드인지 찾을 수 있습니다.
+- 로컬 빌드 전에 작업 폴더를 현재 커밋 상태로 되돌리는 옵션이 있습니다 (커밋 안 한 변경 없는 빌드).
 
 ### HB_TestFrameworkHelper
 
 - 프리팹 인스펙터 슬롯 누락(`[NeedSlotNullCheck]`)과 Missing Script를 검증하는 QA 헬퍼입니다.
 - 검증 시점은 컴파일(분석기) · 테스트(Test Runner) · 빌드(HB_Build 빌드 스텝)입니다.
+- 에셋 건강 검사로 씬 · ScriptableObject · 머티리얼 · 일반 Missing 참조까지 넓혀 검사합니다 (Project Settings에서 검사마다 켜고 끔).
 - 에디터 검사 창이 있습니다.
+- 테스트 작성 도우미(`TestScope` · `HBTestFixture` · `HBAssert` · `HBWait` · 임시 폴더 · 임시 씬)로 테스트 준비 · 정리 코드를 줄입니다.
 
 ### HB_ScreenRecorder
 
@@ -104,8 +109,8 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRec
 | HB_Cheat | `com.hb.ingameconsole` | 치트 패널이 인게임 콘솔의 `Cheat` 탭으로 들어감 |
 | HB_Cheat | `com.unity.pipeline` | Unity CLI 명령(`cheat_list` · `cheat_run` · `cheat_play` 등, JSON 응답) |
 | HB_ScreenRecorder | `com.hb.ingameconsole` | 녹화 · 스크린샷 진단 파일에 HLog 기록을 함께 덤프 (리플렉션, 컴파일 참조 없음) |
-| HB_TestFrameworkHelper | `com.hb.custombuild`(HB_Build) | 빌드 시작 전에 프리팹 슬롯 · Missing Script 검사 스텝이 먼저 돎 |
-| HB_TestFrameworkHelper | `com.unity.test-framework` | 전체 프리팹 검사 테스트가 Test Runner에 보임 |
+| HB_TestFrameworkHelper | `com.hb.custombuild`(HB_Build) | 빌드 시작 전에 켜진 검사(프리팹 슬롯 · 에셋 건강 검사)를 실제 빌드 씬으로 도는 스텝이 더해짐 |
+| HB_TestFrameworkHelper | `com.unity.test-framework` | 프리팹 · 에셋 건강 검사 테스트가 Test Runner에 보이고, 테스트 작성 도우미를 쓸 수 있음 (설치한 프로젝트는 `testables` 등록 필요) |
 | HB_InGameConsole | HB_Build | DefineContainer의 LIVE 항목에서 `USE_HLOG`를 빼면 출시 빌드에서 HLog가 꺼짐 (켜진 채 릴리즈 빌드하면 InGameConsole이 경고) |
 
 ---

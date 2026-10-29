@@ -4,7 +4,7 @@
 
 Windows 64bit, Android (APK/AAB), iOS 빌드를 지원합니다.
 
-- 산출물 이름은 `<Product Name>_v<버전>_<빌드 타입>`입니다 (LIVE + Development는 끝에 `_DEVBUILD`).
+- 산출물 이름은 `{제품명}_v{버전}[_{버전코드}]_{빌드타입}[_DEVBUILD]_{커밋}[_Jenkins{빌드번호}]`입니다 ([산출물 이름](build-behavior.md#산출물-이름)).
   - Windows: `<이름>/<이름>.exe`
   - Android: `<이름>.apk` · `<이름>.aab`
   - iOS: `<이름>/` Xcode 프로젝트 폴더
