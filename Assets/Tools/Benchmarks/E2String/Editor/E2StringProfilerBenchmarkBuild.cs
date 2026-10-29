@@ -19,7 +19,7 @@ namespace HB.E2String.Benchmarks.Editor
     public static class E2StringProfilerBenchmarkBuild
     {
         private const string MENU_ROOT = "Tools/HB/E2String Benchmark/";
-        private const string SCENE_PATH = "Assets/Benchmarks/E2String/E2StringBenchmark.unity";
+        private const string SCENE_PATH = "Assets/Tools/Benchmarks/E2String/E2StringBenchmark.unity";
         private const string BUILD_ROOT = "Builds/E2StringBenchmark";
         private const string EXE_NAME = "E2StringBenchmark.exe";
         private const string BENCHMARK_DEFINE = "E2S_BENCHMARK";

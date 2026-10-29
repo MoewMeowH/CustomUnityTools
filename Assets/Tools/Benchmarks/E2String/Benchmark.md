@@ -8,7 +8,7 @@
 | Unity | 7000.0.0a8, Windows x64 Standalone, IL2CPP |
 | 측정일 | 2026-10-22 |
 | 패키지 | [HB_E2String](../../HB_E2String/README.md) |
-| 측정 코드 | 작업 프로젝트의 `Assets/Benchmarks/E2String/` (UPM 패키지에는 포함되지 않음, [측정 방법과 실행 코드](#7-측정-방법과-실행-코드) 참고) |
+| 측정 코드 | 이 보고서와 같은 폴더 (`Assets/Tools/Benchmarks/E2String/`, UPM 패키지에는 포함되지 않음, [측정 방법과 실행 코드](#7-측정-방법과-실행-코드) 참고) |
 
 > DLL이 교체되면 수치가 달라질 수 있습니다. 재측정 시 위 표를 함께 갱신하세요.
 >
@@ -279,7 +279,7 @@ public static class BenchEnum8Extensions
 - 옵션 간 차이는 작습니다 (`All`이 기본보다 Enum당 약 0.5 KB). 비용 대부분은 항상 생성되는 문자열 변환입니다.
 - 빌드 시간 차이는 같은 조건의 편차(±10초)보다 작아 구분되지 않습니다 (각 측정의 첫 빌드는 캐시 정리 때문에 더 걸림).
 - `High` 기준선이 `Medium`보다 약 1.2 MB 큽니다. 스트리핑 뒤 BCL에 EventSource(트레이싱) · Reflection.Emit · RegexCompiler가 더 남습니다 (7000.0.0a8, 원인 미확인, 다시 빌드해도 바이트까지 같음). E2String 증가량은 `Medium`과 같습니다.
-- 측정 조건: 작업 프로젝트의 치트 define(`DEV_CHEAT` · `HB_CHEAT` · `HB_CHEAT_HAS_CONSOLE`)은 측정 동안 껐습니다. `USE_HLOG`는 켜진 상태입니다.
+- 측정 조건: 이 저장소의 치트 define(`DEV_CHEAT` · `HB_CHEAT` · `HB_CHEAT_HAS_CONSOLE`)은 측정 동안 껐습니다. `USE_HLOG`는 켜진 상태입니다.
 
 ### 6-2. C# 컴파일 시간 (Unity 밖, warm Roslyn)
 
@@ -324,7 +324,7 @@ public static class BenchEnum8Extensions
 
 | 항목 | 값 |
 |---|---|
-| 코드 위치 | `Assets/Benchmarks/E2String/` — 별도 어셈블리 `HB.E2String.Benchmarks`. `E2S_BENCHMARK` define이 있는 빌드에만 포함 (일반 게임 빌드에는 들어가지 않음) |
+| 코드 위치 | `Assets/Tools/Benchmarks/E2String/` — 별도 어셈블리 `HB.E2String.Benchmarks`. `E2S_BENCHMARK` define이 있는 빌드에만 포함 (일반 게임 빌드에는 들어가지 않음) |
 | 테스트 Enum | `BenchEnum100` (100 멤버, 0~99 연속) · `BenchSparse100` (100 멤버, 7, 1016, 2025 … 띄엄띄엄) · `BenchEnum8` (8 멤버) · `BenchFlags8` (`[Flags]` 8개). 모두 `[E2String(E2StringOptions.All)]` |
 | 입력 | 정의된 값 순서대로 / 고정 시드 무작위 순서 / 실패 입력(`"Missing000"` …) |
 | 방식 | 한 프레임에 한 케이스만 실행 (케이스당 10,000회 호출 = 100 라운드 × 100 입력) |
@@ -363,7 +363,7 @@ Unity.exe -batchmode -quit -projectPath . -executeMethod HB.E2String.Benchmarks.
 
 - 크기 측정 메뉴는 같은 이름의 출력 폴더(`Builds/E2StringBenchmark_Size_<스트리핑>/<변형>/`)를 지우고 다시 빌드합니다.
 - 배치 모드로 실행하면 Unity가 종료하면서 `Temp/`를 정리하므로 CSV가 남지 않습니다. 같은 내용이 `-logFile` 로그에 `[E2S Benchmark] IL2CPP 크기 측정 결과`로 찍히니 로그에서 가져오세요.
-- 작업 프로젝트처럼 치트 define이 켜져 있으면 HB_Cheat 릴리스 가드가 Release 빌드를 막습니다. 측정 동안만 define을 끄세요.
+- 이 저장소처럼 치트 define이 켜져 있으면 HB_Cheat 릴리스 가드가 Release 빌드를 막습니다. 측정 동안만 define을 끄세요.
 
 ### 7-3. 측정 코드 (핵심)
 
@@ -411,7 +411,7 @@ private void Update()
 
 - 호출 결과는 정적 필드(`s_StringSink` 등)에 저장해 컴파일러가 호출을 제거하지 못하게 합니다.
 - 샘플 리스트는 용량을 미리 잡아, 측정 중 리스트 확장 할당이 GC 값에 섞이지 않게 합니다.
-- 전체 코드: `Assets/Benchmarks/E2String/E2StringProfilerBenchmark.cs`, 빌드: `Assets/Benchmarks/E2String/Editor/E2StringProfilerBenchmarkBuild.cs`
+- 전체 코드: [`E2StringProfilerBenchmark.cs`](E2StringProfilerBenchmark.cs), 빌드: [`Editor/E2StringProfilerBenchmarkBuild.cs`](Editor/E2StringProfilerBenchmarkBuild.cs)
 
 ---
 
