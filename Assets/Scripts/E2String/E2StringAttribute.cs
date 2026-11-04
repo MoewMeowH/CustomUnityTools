@@ -4,7 +4,7 @@ using System;
 [Flags]
 public enum E2StringOptions
 {
-    /// <summary>ToStringFast, To{Enum}Fast(string, ignoreCase) — 항상 생성</summary>
+    /// <summary>ToStringFast, To{Enum}Fast(string) — 항상 생성</summary>
     ParseExact = 0,
     /// <summary>ToIntFast, To{Enum}Fast(int), IsDefinedFast (+ [Flags]면 IsValidFlagsFast)</summary>
     IntConversion = 1 << 1,
