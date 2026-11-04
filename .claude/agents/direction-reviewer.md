@@ -3,6 +3,7 @@ name: direction-reviewer
 description: 사용자 요청 원문과 계획서(설계안)만 보고 방향이 맞는지 독립 검토한다. 계획서를 쓴 뒤 승인 전에 /self-review direction으로 지휘자가 부른다. subagent_in/<실행>/ 에 복사된 요청 원문·계획서(·필요하면 관련 자료)만 받는다.
 tools: Read, Grep, Glob
 model: opus
+effort: high
 maxTurns: 30
 omitClaudeMd: true
 hooks:
@@ -28,6 +29,7 @@ hooks:
 
 ## 읽는 것
 - 위임 메시지에 적힌 `subagent_in/<실행>/` 폴더 안의 파일만 읽는다 (훅이 그 밖을 막는다). 보통 `request.md`(요청 원문)와 계획서 하나.
+- 그 폴더에 `_SUBAGENT_MISTAKES.md`가 있으면 가장 먼저 읽는다. 이 역할이 전에 한 실수 목록이다 — 같은 실수를 되풀이하지 않는다.
 - Grep·Glob은 path를 꼭 그 폴더로 지정한다.
 
 ## 하지 않는 것

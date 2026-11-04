@@ -1,4 +1,4 @@
-"""cleanup_guard · push_guard · run_mode_guard · share_guard 회귀 시험 (계획서 2026-10-19_훅-규칙-강제, /cross-review 10bfc8de41 반영).
+"""cleanup_guard · push_guard · run_mode_guard · share_guard · subagent_input_guard 회귀 시험 (/cross-review 10bfc8de41 반영).
 사용: python -I .claude/scripts/test_hooks.py  → 마지막 줄 'ALL True'면 통과 (exit 0), 아니면 exit 1.
 H2는 임시 폴더에 저장소와 bare 원격을 만들어 시험한다 (실제 원격·실제 저장소는 건드리지 않는다).
 입력은 UTF-8 바이트로 보낸다 (Claude Code가 보내는 것과 같게 — 한글 깨짐 회귀 시험).
@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 
 sys.stdout.reconfigure(encoding='utf-8')
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -66,7 +67,7 @@ expect('H1 셸 현재 폴더 = 대상', h1('Remove-Item -Recurse -Force "F:\\AI\
 expect('H1 셸 현재 폴더가 대상 밖', h1('rm -rf /f/AI/x', cwd='F:\\AI'), 0)
 expect('H1 따옴표 안 문자열은 명령 아님', h1('git commit -m "rm -rf 규칙 && 정리"'), 0)
 expect('H1 grep -r 은 삭제 아님', h1('grep -rn foo src | head'), 0)
-# 본문에 재귀 삭제 글자가 있으면 묶음의 모든 조각이 데이터 전용이어야 한다 (H5와 같은 규칙, 계획서 2026-10-23_H1-H2-heredoc-본문과-rm-옵션)
+# 본문에 재귀 삭제 글자가 있으면 묶음의 모든 조각이 데이터 전용이어야 한다 (H5와 같은 규칙)
 expect('H1 heredoc 본문의 rm -rf + cd · echo 묶음은 막힘', h1("cd /f/x && cat >> log.md <<'EOF'\n- `cd … && rm -rf y`가 막히는지\nEOF\necho ok"), 2, '데이터 전용')
 expect('H1 heredoc 본문의 rm -rf 는 명령 아님 (cat 단독)', h1("cat >> /f/x/log.md <<'EOF'\n- `cd … && rm -rf y`가 막히는지\nEOF"), 0)
 expect('H1 heredoc 뒤의 진짜 rm -rf', h1("cat > a <<'EOF'\nx\nEOF\nrm -rf /f/x"), 2, '묶여')
@@ -74,7 +75,7 @@ expect('H1 끝 표시 없는 heredoc 은 본문을 지우지 않음', h1("cat > 
 expect('H1 따옴표 안 <<EOF 는 heredoc 아님', h1('echo "a<<EOF b"\nrm -rf x'), 2)
 expect('H1 here-string <<< 는 heredoc 아님', h1('cat <<< "x"\nrm -rf x'), 2)
 expect('H1 PowerShell here-string 본문', h1("git commit -m @'\nrm -rf 정리 규칙\n'@", 'PowerShell'), 0)
-# 따옴표 짝 · 주석 · heredoc 경계 (계획서 2026-10-23_H5-셸-문법-우회 — 이전 판 실측 exit 0)
+# 따옴표 짝 · 주석 · heredoc 경계 (이전 판 실측 exit 0)
 expect('H1 주석 속 따옴표로 숨긴 rm', h1("ls # '\nrm -rf build\n'"), 2, '묶여')
 expect("H1 $'…'로 숨긴 rm", h1("echo $'\\'' ; rm -rf build ; 'z'"), 2, '묶여')
 # 본문 검사가 먼저 막는다 (본문의 $( )는 실행되므로 data_only도 아님) — 이전에는 '명령 치환'으로 막힘
@@ -111,7 +112,7 @@ for name, cmd, tool in [
 ]:
     expect(f'H1 재검토 {name}', h1(cmd, tool), 2, '[정리 명령 차단]')
 expect('H1 리다이렉트 2>&1 은 묶음 아님', h1('rm -rf /f/AI/ToolWithCS/subagent_in/x 2>&1'), 0)
-# heredoc 본문 · 재귀 삭제 옵션 형식 (계획서 2026-10-23_H1-H2-heredoc-본문과-rm-옵션, 실측: 모두 재귀 삭제)
+# heredoc 본문 · 재귀 삭제 옵션 형식 (실측: 모두 재귀 삭제)
 for name, cmd, tool in [
     ('heredoc을 bash에', "bash <<'EOF'\nrm -rf build\nEOF", 'Bash'),
     ('heredoc을 python에', "python - <<'EOF'\nimport os; os.system('rm -rf build')\nEOF", 'Bash'),
@@ -144,7 +145,7 @@ expect('H1 en dash 폴더 · 셸 현재 폴더가 그 안', h1('Remove-Item -Lit
 expect('H1 en dash 폴더 · 밖에서 지움', h1('Remove-Item -LiteralPath "F:\\a\u2013b" -Recurse -Force', 'PowerShell', cwd='F:\\AI'), 0)
 expect('H1 cat <<EOF | git commit -F - (파일 안 씀)', h1("cat <<'EOF' | git commit -F -\nrm -rf 정리\nEOF"), 0)
 expect('H1 bash 줄 이음 절대 경로 단독', h1('rm \\\n -rf /f/AI/ToolWithCS/subagent_in/x'), 0)
-# 따옴표 문자열로 넘긴 명령 — 허용 목록 (계획서 2026-10-23_따옴표-명령-허용목록과-perf-ownReview)
+# 따옴표 문자열로 넘긴 명령 — 허용 목록
 for name, cmd, tool in [
     ('bash -c', 'bash -c "rm -rf build"', 'Bash'),
     ('powershell -Command', 'powershell -Command "Remove-Item build -Recurse -Force"', 'Bash'),
@@ -336,7 +337,34 @@ try:
     open(old, 'w', encoding='utf-8').write('x')
     os.utime(old, (0, 0))
     expect('H3 예전 계획서만', h3('review_main'), 2)
-    open(os.path.join(plans, f'{datetime.date.today().isoformat()}_오늘.md'), 'w', encoding='utf-8').write('x')
+    # 직접 코딩 흐름: [plan:파일] 태그면 날짜와 상관없이 그 파일이 있는지만 · 7일 안의 이름 · 고친 날
+    expect('H3 오래된 계획서 + [plan:태그]', h3('review_main', '[plan:2026-01-01_예전.md] 이유'), 0)
+    expect('H3 ownReview 태그 뒤의 [plan:태그]', h3('review_main', '이유 [PLAN:2026-01-01_예전.md]'), 0)
+    expect('H3 [plan:태그]의 파일이 없음', h3('review_main', '[plan:없는-계획.md] 이유'), 2, '[plan:')
+    expect('H3 [plan:태그]에 경로는 형식 오류', h3('review_main', '[plan:../x/2026-01-01_예전.md] 이유'), 2, '형식')
+    expect('H3 [plan:태그]에 .md 빠짐은 형식 오류', h3('review_main', '[plan:2026-01-01_예전] 이유'), 2, '형식')
+    expect('H3 [plan:태그] 뒤 공백은 형식 오류', h3('review_main', '[plan:2026-01-01_예전.md ] 이유'), 2, '형식')
+    nfd = unicodedata.normalize('NFD', '2026-01-01_예전.md')
+    expect('H3 [plan:태그] NFD로 써도 같은 계획서', h3('review_main', f'[plan:{nfd}] 이유'), 0)
+    today = datetime.date.today()
+
+    def dated(days: int, name: str, mtime_days: int | None = None) -> str:
+        path = os.path.join(plans, f'{(today - datetime.timedelta(days=days)).isoformat()}_{name}.md')
+        open(path, 'w', encoding='utf-8').write('x')
+        when = (datetime.datetime.now() - datetime.timedelta(days=mtime_days)).timestamp() if mtime_days is not None else 0
+        os.utime(path, (when, when))
+        return path
+
+    p = dated(6, '엿새')
+    expect('H3 6일 전 날짜 이름', h3('review_main'), 0)
+    os.remove(p)
+    p = dated(7, '이레')
+    expect('H3 7일 전 날짜 이름은 막음', h3('review_main'), 2, '[plan:')
+    os.remove(p)
+    p = dated(400, '고친지-사흘', mtime_days=3)
+    expect('H3 이름은 오래돼도 사흘 전에 고침', h3('review_main'), 0)
+    os.remove(p)
+    open(os.path.join(plans, f'{today.isoformat()}_오늘.md'), 'w', encoding='utf-8').write('x')
     expect('H3 오늘 계획서 (깊이 4)', h3('review_main'), 0)
     expect('H3 review_high', h3('review_high'), 0)
     expect('H3 예전 이름 review는 검사 안 함 (서버가 거절)', h3('review'), 0)
@@ -344,6 +372,9 @@ try:
     good = '## 지적\n- C1 [major] a.cs:1 — 문제\n## 자료 부족\n- 없음\n## 읽은 파일\n- subagent_in/2026-10-19_x/a.cs:1-10\n'
     tag = '[ownReview:self-reviewer] 이유'
     expect('H4 원문 형식 (한글, UTF-8)', h3('review_main', tag, good), 0)
+    # 실제 /cross-review 모양: [ownReview:…] 원문이 H4를 지난 뒤 H3가 [plan:] 태그로 본다 (오늘 계획서가 있어도 태그가 우선)
+    expect('H3+H4 ownReview 태그 + [plan:있는 파일]', h3('review_main', tag + ' [plan:2026-01-01_예전.md]', good), 0)
+    expect('H3+H4 ownReview 태그 + [plan:없는 파일]', h3('review_main', tag + ' [plan:없는.md]', good), 2, '[plan:없는.md]')
     expect('H4 키 이름 own_review', h3('review_main', tag, good, key='own_review'), 0)
     expect('H4 요약 (읽은 파일 없음)', h3('review_main', tag, '## 지적\n- C1 요약\n(상세는 첫 호출과 같다)'), 2, "'## 읽은 파일'")
     expect('H4 폴더 밖 읽음', h3('review_main', tag, good.replace('subagent_in/2026-10-19_x/a.cs', 'docs/worklog.md')), 2, 'subagent_in/ 밖')
@@ -358,13 +389,13 @@ try:
     expect('H4 지적 없음', h3('review_main', tag, '## 읽은 파일\n- subagent_in/x\n'), 2, "'## 지적'")
     expect('H4 perf_main 원문 형식', h3('perf_main', tag, good), 0)
     expect('H4 perf_main 요약 (안내에 /mode)', h3('perf_main', tag, '## 지적\n- C1 요약'), 2, '/mode 3단계')
-    # 2026-10-22 '## 비고' 칸 (계획서 2026-10-22_self-reviewer-비고-칸): 읽은 파일 검사는 그대로, 비고는 경로 검사 안 함
+    # 2026-10-22 '## 비고' 칸: 읽은 파일 검사는 그대로, 비고는 경로 검사 안 함
     explain = '- 폴더 안에서 Grep으로 StepResult 정의를 찾았으나 없었다.\n'
     expect('H4 비고 칸의 설명 줄', h3('review_main', tag, good + '## 비고\n' + explain), 0)
     expect('H4 비고 칸의 폴더 밖 경로 (검사 대상 아님)', h3('review_main', tag, good + '## 비고\n- docs/worklog.md 는 받지 못함\n'), 0)
     expect('H4 읽은 파일의 설명 줄은 계속 막음 (10-22 실사용 차단 문구)', h3('review_main', tag, good + explain + '## 비고\n- 없음\n'), 2, 'subagent_in/ 밖')
     expect('H4 두 번째 읽은 파일 절의 폴더 밖 경로', h3('review_main', tag, good + '## 비고\n- 없음\n## 읽은 파일\n- docs/worklog.md:1-5\n'), 2, 'subagent_in/ 밖')
-    # 검토형 서브에이전트 추가 (계획서 2026-10-23_서브에이전트-종류-추가)
+    # 검토형 서브에이전트 추가
     expect('H4 perf-reviewer 태그', h3('perf_main', '[ownReview:perf-reviewer] 이유', good), 0)
     expect('H4 perf-reviewer 요약은 막음', h3('perf_main', '[ownReview:perf-reviewer] 이유', '## 지적\n- C1 요약'), 2, 'perf-reviewer 결과 원문이 아니다')
     both = good + '\n' + good
@@ -380,7 +411,7 @@ try:
     expect('H4 소문자 접두어도 검사', h3('review_main', '[ownreview:self-reviewer] 이유', '## 지적\n- C1 요약'), 2, '결과 원문이 아니다')
     expect('H4 대문자 이름 받음', h3('review_main', '[ownReview:Self-Reviewer] 이유', good), 0)
     expect('H4 빈 태그', h3('review_main', '[ownReview:] 이유', good), 2, '모른다')
-    # 태그 빠짐 · '- ' 아닌 줄 (계획서 2026-10-23_H5-셸-문법-우회, security-reviewer 7282089076 C10 · C11)
+    # 태그 빠짐 · '- ' 아닌 줄 (security-reviewer 7282089076 C10 · C11)
     expect('H4 review_main 태그 없는 ownReview', h3('review_main', '이유', good), 2, 'reason 맨 앞')
     expect('H4 태그 없는 서브에이전트 원문 (perf_main)', h3('perf_main', '이유', good), 2, '태그가 없다')
     expect('H4 perf_main 태그 없는 지휘자 의견 (설계안)', h3('perf_main', '이유', '설계안 검토: 할당 줄이기'), 0)
@@ -393,10 +424,25 @@ try:
     expect('H4 변형 제목 읽은 파일 절도 검사', h3('review_main', tag, good + '## 읽은 파일 (추가)\n- docs/worklog.md:1-5\n'), 2, 'subagent_in/ 밖')
     expect('H4 태그 없는 변형 제목', h3('perf_main', '이유', '## 지적\n- x\n## 읽은 파일 (추가)\n- subagent_in/x/a.cs\n'), 2, '태그가 없다')
     expect('H4 들여쓴 · ### 읽은 파일 절도 검사', h3('review_main', tag, good + '## 비고\n- 없음\n  ### 읽은 파일\n- docs/worklog.md:1-5\n'), 2, 'subagent_in/ 밖')
+    # API 리뷰(sub_*) 결과 — 작업 폴더 기준 상대 경로 (2차 리뷰 9ea51e562a 뒤 결정)
+    api = good.replace('subagent_in/2026-10-19_x/a.cs', 'Orchestration/src/a.cs')
+    api_tag = '[ownReview:sub_self] 이유'
+    expect('H4 sub_self 상대 경로', h3('review_main', api_tag, api), 0)
+    expect('H4 sub_perf', h3('perf_main', '[ownReview:sub_perf] 이유', api), 0)
+    expect('H4 sub_self+sub_security 이어 붙임', h3('review_main', '[ownReview:sub_self+sub_security] 이유', api + '\n' + api), 0)
+    expect('H4 sub_self 요약은 막음', h3('review_main', api_tag, '## 지적\n- C1 요약'), 2, "'## 지적'부터")
+    expect('H4 sub_self 절대 경로', h3('review_main', api_tag, api.replace('Orchestration/src/a.cs', 'C:\\Users\\x\\review_in\\a.cs')), 2, '상대 경로가 아닌')
+    expect('H4 sub_self / 로 시작', h3('review_main', api_tag, api.replace('Orchestration/src/a.cs', '/tmp/a.cs')), 2, '상대 경로가 아닌')
+    expect('H4 sub_self .. 로 나감', h3('review_main', api_tag, api.replace('Orchestration/src/a.cs', 'src/../../a.cs')), 2, '상대 경로가 아닌')
+    expect('H4 sub_self ~ 경로', h3('review_main', api_tag, api.replace('Orchestration/src/a.cs', '~/a.cs')), 2, '상대 경로가 아닌')
+    expect('H4 sub_self 읽은 파일의 머리 줄', h3('review_main', api_tag, api + 'runId: abc\n'), 2, "'- '로 시작하지 않는")
+    expect('H4 서브에이전트와 sub_* 섞음', h3('review_main', '[ownReview:self-reviewer+sub_security] 이유', good + '\n' + api), 2, '섞였다')
+    expect('H4 sub_direction은 모름', h3('review_main', '[ownReview:sub_direction] 이유', api), 2, '모른다')
+    expect('H4 서브에이전트 태그에 상대 경로는 계속 막음', h3('review_main', tag, api), 2, 'subagent_in/ 밖')
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
-# ── H5 share_guard (계획서 2026-10-23_plan-share-명령과-share_guard) ────
+# ── H5 share_guard ────
 tmp = tempfile.mkdtemp(prefix='hb-shareguard-')
 try:
     proj = os.path.join(tmp, 'proj')  # CLAUDE_PROJECT_DIR · 셸 현재 폴더
@@ -482,7 +528,6 @@ try:
     expect('H5 PowerShell here-string 인자', h5raw("slackplan reply C1-2 @'\nProjectX\n'@", 'PowerShell'), 2, 'here-string')
     expect('H5 모르는 하위 명령', h5(f'publish {clean}'), 2, '모른다')
     expect('H5 react (이모지만)', h5('react C1-2 eyes'), 0)
-    # 계획서 2026-10-23_H5-새-하위-명령과-지우는-명령
     expect('H5 list', h5('list'), 0)
     expect('H5 approval-record', h5(f'approval-record C1-2 --plan {clean}'), 0)
     expect('H5 status --link', h5('status C1-2 --link'), 0)
@@ -509,7 +554,7 @@ try:
     expect('H5 슬래시 UNC', h5(f'new {plan("u2.md", "//srv/share/x")}'), 2, 'UNC')
     expect('H5 POSIX 절대 경로', h5(f'new {plan("t.md", "로그 /tmp/x.log")}'), 2, 'POSIX')
     expect('H5 URL 속 /var/ (오탐 아님)', h5(f'new {plan("url2.md", "https://example.org/var/x")}'), 0)
-    # 봇 secret_scan 시험과 같은 비교 목록 (계획서 결정 2, 봇 test_secret_scan.ShareCheck SHARED_HIT/SHARED_PASS)
+    # 봇 secret_scan 시험과 같은 비교 목록 (봇 test_secret_scan.ShareCheck SHARED_HIT/SHARED_PASS)
     for i, s in enumerate(['sk-' + 'Q7vR2mK9pL4xN8wT3bZ6', '-----BEGIN RSA ' + 'PRIVATE KEY-----', 'F:/AI/x', 'C:\\Users\\me', '\\\\srv\\share', '/Users/me/x', '/f/AI/x']):
         expect(f'H5 비교 목록 걸림 {i}', h5(f'new {plan(f"hit{i}.md", s)}'), 2, '막는 패턴')
     for i, s in enumerate(['https://example.org/var/x', 'e.g. 1:2', 'and/or', 'A/B', '1/2/3', 'a/b/c']):
@@ -521,7 +566,7 @@ try:
     expect('H5 셸 현재 폴더가 SlackPlanBot', h5raw(f'dotnet run -- new {bad_abs}', cwd=bot), 2, '비밀')
     expect('H5 PowerShell 실행 파일 경로', h5raw(f'& "{bot}\\bin\\slackplan.exe" new {bad}', 'PowerShell'), 2, '비밀')
     expect('H5 cmd /c 형식', h5raw(f'cmd /c slackplan new {clean}'), 2, '해석하지 못했다')
-    # 앞 낱말 · 따옴표 · 줄 이음으로 감싸면 이전에는 검사 없이 통과 (계획서 2026-10-23_H5-앞-낱말-우회, /self-review e256053430 — 실측 exit 0)
+    # 앞 낱말 · 따옴표 · 줄 이음으로 감싸면 이전에는 검사 없이 통과 (/self-review e256053430 — 실측 exit 0)
     unparsed, chained = '해석하지 못했다', '다른 명령과 묶여'
     for pre in ['env', 'X=1', 'env X=1', 'command', 'exec', 'nice', 'time', 'sudo', 'nohup', 'eval']:
         expect(f'H5 앞 낱말 {pre} purge --yes', h5raw(f'{pre} slackplan purge --yes'), 2, unparsed)
@@ -574,7 +619,7 @@ try:
         expect(f'H5 읽기 명령 {cmd}', h5raw(cmd), 0)
     expect('H5 읽기 명령 (PowerShell)', h5raw('Select-String -Path README.md -Pattern slackplan', 'PowerShell'), 0)
     expect('H5 heredoc 본문을 git에 (셸 아님)', h5raw("git commit -F - <<'EOF'\nslackplan purge --yes 정리\nEOF"), 0)
-    # 따옴표 짝 · 주석 · heredoc 경계 + 본문은 허용 목록 (계획서 2026-10-23_H5-셸-문법-우회, security-reviewer 7282089076 — 이전 판 실측 exit 0)
+    # 따옴표 짝 · 주석 · heredoc 경계 + 본문은 허용 목록 (security-reviewer 7282089076 — 이전 판 실측 exit 0)
     for name, cmd, tool in [
         ("C2 $'\\''로 묶음 숨김", "slackplan status $'\\'' ; slackplan purge X --yes ; 'z'", 'Bash'),
         ("C2 읽기 예외로 묶음 숨김", "grep $'\\'' ; slackplan purge X --yes ; 'z' f", 'Bash'),
@@ -615,7 +660,7 @@ try:
         ('주석 속 낱말 (읽기)', 'grep -n x f # slackplan 메모', 'Bash'),
     ]:
         expect(f'H5 셸 문법 통과 {name}', h5raw(cmd, tool), 0)
-    # 읽기 예외를 좁혀 막히는 것 (계획서 결정: 단독 읽기 명령만, git commit 속 낱말도 막힘 — 사용자 "git 명령어는 크게 신경 안써도되")
+    # 읽기 예외를 좁혀 막히는 것 (단독 읽기 명령만, git commit 속 낱말도 막힘 — 사용자 "git 명령어는 크게 신경 안써도되")
     for cmd in ['cat notes.md | grep slackplan', 'echo slackplan list', 'ls bin/slackplan.exe', 'git commit -m "slackplan new 형식"']:
         expect(f'H5 좁힌 예외 {cmd}', h5raw(cmd), 2)
     subprocess.run(['git', 'init', '-q', proj], check=True, capture_output=True)
@@ -624,6 +669,90 @@ try:
     expect('H5 깨진 입력은 막음', (lambda r: (r.returncode, r.stderr.decode('utf-8', 'replace')))(subprocess.run([sys.executable, '-I', os.path.join(HERE, 'share_guard.py')], input=b'{', capture_output=True)), 2)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
+
+# ── H6 subagent_input_guard ──
+proj6 = tempfile.mkdtemp(prefix='h6-')
+try:
+    env6 = dict(os.environ, CLAUDE_PROJECT_DIR=proj6)
+    run_dir = os.path.join(proj6, 'subagent_in', '2026-10-27_x')
+    os.makedirs(os.path.join(run_dir, 'src', 'deep'))
+    open(os.path.join(run_dir, 'src', 'a.cs'), 'w').close()
+
+    def h6(prompt, tool: str = 'Agent') -> tuple[int, str]:
+        return run('subagent_input_guard.py', {'tool_name': tool, 'tool_input': {'subagent_type': 'self-reviewer', 'prompt': prompt}}, env6)
+
+    def put(rel: str, is_dir: bool = False) -> str:
+        p = os.path.join(proj6, rel)
+        os.makedirs(p) if is_dir else open(p, 'w').close()
+        return p
+
+    win = f'폴더: {run_dir}\\ (이 폴더 안만 읽는다)\n대상: src/a.cs'
+    rel = '폴더: `subagent_in/2026-10-27_x/`\n대상: src/a.cs:1-10'
+    expect('H6 깨끗한 폴더 (Windows 경로)', h6(win), 0)
+    expect('H6 깨끗한 폴더 (상대 경로)', h6(rel), 0)
+    expect('H6 subagent_in 언급 없음', h6('웹에서 X를 찾아 요약'), 0)
+    expect('H6 자리표시 <실행>만', h6('`subagent_in/<실행>/` 밖은 읽지 않는다'), 0)
+    expect('H6 없는 실행 폴더', h6('폴더: subagent_in/없는폴더/'), 0)
+    expect('H6 이름 바꾼 CLAUDE.md.txt', (put('subagent_in/2026-10-27_x/CLAUDE.md.txt'), h6(win))[1], 0)
+    for name, rel_path, is_dir in [('CLAUDE.md', 'subagent_in/2026-10-27_x/CLAUDE.md', False),
+                                   ('소문자 claude.md', 'subagent_in/2026-10-27_x/src/claude.md', False),
+                                   ('깊은 곳', 'subagent_in/2026-10-27_x/src/deep/CLAUDE.md', False),
+                                   ('CLAUDE.local.md', 'subagent_in/2026-10-27_x/CLAUDE.local.md', False),
+                                   ('.claude 폴더', 'subagent_in/2026-10-27_x/.claude', True),
+                                   ('subagent_in 바로 아래', 'subagent_in/CLAUDE.md', False)]:
+        p = put(rel_path, is_dir)
+        expect(f'H6 막음 {name} (Windows 경로)', h6(win), 2, '[입력 차단]')
+        expect(f'H6 막음 {name} (상대 경로)', h6(rel), 2, 'CLAUDE.md.txt' if 'subagent_in/2026' in rel_path else '[입력 차단]')
+        os.rmdir(p) if is_dir else os.remove(p)
+    if os.name == 'nt':
+        put('subagent_in/2026-10-27_x/CLAUDE.md')
+        gb = '/' + proj6[0].lower() + proj6[2:].replace('\\', '/')
+        expect('H6 Git Bash 경로', h6(f'폴더: {gb}/subagent_in/2026-10-27_x/'), 2, '[입력 차단]')
+        os.remove(os.path.join(run_dir, 'CLAUDE.md'))
+    # /self-review security 78e1a3aaca C1 · C2: 경로 해석이 빗나가도 subagent_in/ 전체를 검사한다
+    p = put('subagent_in/2026-10-27_x/CLAUDE.md')
+    for name, prompt in [('붙여 쓴 콜론', '폴더:subagent_in/2026-10-27_x/'), ('path= 꼴', 'path=subagent_in/2026-10-27_x'),
+                         ('대소문자', f'폴더: {proj6}\\Subagent_In\\2026-10-27_x\\'), ('한국어 조사', 'subagent_in/2026-10-27_x에서 읽는다'),
+                         ('자리표시만', '`subagent_in/<실행>/` 안만 읽는다'), ('띄어 쓴 설명', 'subagent_in 폴더의 2026-10-27_x')]:
+        expect(f'H6 해석 빗나가도 막음 {name}', h6(prompt), 2, '[입력 차단]')
+    os.remove(p)
+    other = put('subagent_in/2026-10-26_old', True)
+    put('subagent_in/2026-10-26_old/CLAUDE.md')
+    expect('H6 다른 실행 폴더의 CLAUDE.md도 막음', h6(win), 2, '2026-10-26_old')
+    shutil.rmtree(other)
+    expect('H6 SendMessage 이어 부르기 (깨끗)', run('subagent_input_guard.py', {'tool_name': 'SendMessage', 'tool_input': {'to': 'a1', 'message': rel}}, env6), 0)
+    p = put('subagent_in/2026-10-27_x/CLAUDE.md')
+    expect('H6 SendMessage 이어 부르기 (CLAUDE.md)', run('subagent_input_guard.py', {'tool_name': 'SendMessage', 'tool_input': {'to': 'a1', 'message': rel}}, env6), 2, '[입력 차단]')
+    expect('H6 SendMessage 언급 없음', run('subagent_input_guard.py', {'tool_name': 'SendMessage', 'tool_input': {'to': 'peer', 'message': '테스트 끝났어'}}, env6), 0)
+    os.remove(p)
+    # C3: 폴더 링크 · 정션은 안을 볼 수 없으니 막는다 (Python 3.10 os.walk는 정션 안으로 들어감)
+    outside = tempfile.mkdtemp(prefix='h6-out-')
+    open(os.path.join(outside, 'CLAUDE.md'), 'w').close()
+    link = os.path.join(run_dir, 'linked')
+    made = False
+    if os.name == 'nt':
+        made = subprocess.run(['cmd', '/c', 'mklink', '/J', link, outside], capture_output=True).returncode == 0
+    else:
+        os.symlink(outside, link, target_is_directory=True)
+        made = True
+    if made:
+        expect('H6 폴더 링크 · 정션 막음', h6(win), 2, '링크')
+        os.rmdir(link) if os.name == 'nt' else os.remove(link)
+    else:
+        expect('H6 정션 만들기 (시험 준비)', (1, 'mklink /J 실패'), 0)
+    shutil.rmtree(outside, ignore_errors=True)
+    expect('H6 Task 이름', h6(rel, tool='Task'), 0)
+    expect('H6 .. 로 밖', h6('폴더: subagent_in/../docs/'), 2, '밖이다')
+    expect('H6 다른 프로젝트의 subagent_in', h6('폴더: F:\\Other\\subagent_in\\x\\' if os.name == 'nt' else '폴더: /other/subagent_in/x/'), 2, '밖이다')
+    expect('H6 비슷한 낱말은 경로 아님', h6('not_subagent_in/x 와 subagent_inbox'), 0)
+    # 문자열이 아닌 prompt는 JSON 글로 바꿔 언급을 찾는다 (형식이 바뀌어도 놓치지 않게)
+    expect('H6 prompt가 문자열 아님 (언급 없음)', run('subagent_input_guard.py', {'tool_name': 'Agent', 'tool_input': {'prompt': ['x']}}, env6), 0)
+    p = put('subagent_in/2026-10-27_x/CLAUDE.md')
+    expect('H6 prompt가 문자열 아님 (언급 있음)', run('subagent_input_guard.py', {'tool_name': 'Agent', 'tool_input': {'prompt': {'folder': 'subagent_in/2026-10-27_x'}}}, env6), 2, '[입력 차단]')
+    os.remove(p)
+    expect('H6 깨진 입력은 막음', (lambda r: (r.returncode, r.stderr.decode('utf-8', 'replace')))(subprocess.run([sys.executable, '-I', os.path.join(HERE, 'subagent_input_guard.py')], input=b'{', capture_output=True, env=env6)), 2)
+finally:
+    shutil.rmtree(proj6, ignore_errors=True)
 
 print('ALL', ok)
 sys.exit(0 if ok else 1)
