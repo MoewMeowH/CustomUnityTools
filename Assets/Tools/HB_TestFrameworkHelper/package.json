@@ -4,6 +4,13 @@
   "displayName": "HB_TestFrameworkHelper",
   "description": "Test Framework Helper - Includes Inspector slot null validation ([NeedSlotNullCheck]) and expandable test utilities.",
   "unity": "6000.3",
+  "samples": [
+    {
+      "displayName": "Test Examples",
+      "description": "EditMode / PlayMode tests using TestScope, HBTestFixture, HBAssert, HBWait, TempDirectory, TempAssetFolder and TempScene. Requires com.unity.test-framework and testables.",
+      "path": "Samples~/TestExamples"
+    }
+  ],
   "author": {
     "name": "HoBeenH",
     "email": "whdmstlsk@gmail.com"

@@ -1,0 +1,22 @@
+{
+    "name": "HB.TestFrameworkHelper.Samples.TestExamples.Tests.PlayMode",
+    "rootNamespace": "HB.TestFrameworkHelper.Samples.Tests",
+    "references": [
+        "HB.TestFrameworkHelper.Samples.TestExamples",
+        "HB.TestFrameworkHelper.Testing",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

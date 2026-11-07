@@ -292,3 +292,11 @@ private TestScope m_Scope;
   * 테스트가 임시 씬에 한 변경은 버립니다.
 * **`NoGCAlloc`:** Unity Test Framework의 `AllocatingGCMemory`(메인 스레드 · 프로파일러 기록 기반)를 씁니다. 에디터에서는 에디터 기준 값입니다.
 * 메인 스레드 전용입니다. 같은 프로젝트를 여러 에디터 프로세스가 동시에 쓰는 경우는 다루지 않습니다 (Unity가 프로젝트를 잠금).
+
+### 샘플
+
+`Window > Package Manager > HB_TestFrameworkHelper > Samples > Test Examples > Import`로 가져옵니다.
+
+- 위 API를 모두 쓰는 EditMode · PlayMode 예제 테스트와 테스트 대상 가짜 게임 코드, asmdef 3개가 들어 있습니다.
+- 가져온 위치는 `Assets/Samples/HB_TestFrameworkHelper/<버전>/Test Examples`입니다. 파일별 설명은 그 폴더의 README에 있습니다.
+- 위 [`testables` 필수](#참조-설정) 설정이 있어야 컴파일됩니다.
