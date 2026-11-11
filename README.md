@@ -20,6 +20,7 @@ AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴�
 | [HB_Build](Assets/Tools/HB_Build/README.md) | `com.hb.custombuild` | 1.0.0 | 멀티 플랫폼 빌드 매니저와 Jenkinsfile 생성기 |
 | [HB_TestFrameworkHelper](Assets/Tools/HB_TestFrameworkHelper/README.md) | `com.hb.testframeworkhelper` | 1.0.0 | 인스펙터 슬롯 · 에셋 건강 검사 QA 헬퍼와 테스트 작성 도우미 |
 | [HB_ScreenRecorder](Assets/Tools/HB_ScreenRecorder/README.md) | `com.hb.screenrecorder` | 1.0.0 | GameView 녹화 · 스크린샷과 진단 데이터 덤프 |
+| [HB_PerfProbe](Assets/Tools/HB_PerfProbe/README.md) | `com.hb.perfprobe` | 1.0.0 | Android 개발 빌드 성능 감시와 자동 캡처 (PC 스크립트 포함) |
 
 도구 이름을 누르면 상세 문서로 갑니다. 도구마다 할 수 있는 일은 [도구별 기능](#도구별-기능)에 있습니다.
 
@@ -38,6 +39,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrameworkHelper
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRecorder
+https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_PerfProbe
 ```
 
 - 지원 버전은 **Unity 6.3 (6000.3) 이상**입니다.
@@ -97,6 +99,11 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRec
 
 - Unity Recorder 기반으로 GameView 화면을 MP4로 녹화하고 스크린샷을 찍습니다.
 - 녹화 · 캡처 때 시스템 진단 데이터와 로그를 자동으로 덤프하는 QA 도구입니다.
+
+### HB_PerfProbe
+
+- Android 개발 빌드에서 1초마다 성능 지표(프레임 · 메인 스레드 · GC · 메모리 · 드로우콜)를 logcat으로 보냅니다.
+- PC 감시 스크립트가 메모리 증가 · 과부하를 판정해 캡처(최근 프레임 · 오브젝트 집계 · 메모리 스냅샷 · 스크린샷 · 로그)를 가져오고 Markdown 리포트를 만듭니다.
 
 ---
 

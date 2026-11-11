@@ -1,0 +1,26 @@
+{
+  "port": 34999,
+  "stale_sec": 15,
+  "serial": null,
+  "out_dir": "HBProbe_out",
+  "pull": true,
+  "drop_after_pull": true,
+  "baseline_census": true,
+  "print_every": 10,
+  "thermal_poll_sec": 10,
+  "post_capture_ignore_sec": 5,
+  "cooldown_sec": 120,
+  "leak": {
+    "enabled": true,
+    "metric": "totalUsed",
+    "window_sec": 180,
+    "min_samples": 30,
+    "slope_kb_per_sec": 64,
+    "min_r2": 0.8
+  },
+  "overload": {
+    "enabled": true,
+    "frame_budget_ms": 33.3,
+    "sustain_sec": 5
+  }
+}

@@ -1,0 +1,22 @@
+{
+    "name": "HB.PerfProbe.Tests.Runtime",
+    "rootNamespace": "HB.PerfProbe.Tests",
+    "references": [
+        "HB.PerfProbe",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "HB_PERFPROBE",
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

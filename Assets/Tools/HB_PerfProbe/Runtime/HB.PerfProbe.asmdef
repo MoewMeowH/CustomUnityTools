@@ -1,0 +1,16 @@
+{
+    "name": "HB.PerfProbe",
+    "rootNamespace": "HB.PerfProbe",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "HB_PERFPROBE"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

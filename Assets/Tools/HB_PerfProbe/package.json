@@ -1,0 +1,19 @@
+{
+  "name": "com.hb.perfprobe",
+  "version": "1.0.0",
+  "displayName": "HB_PerfProbe",
+  "description": "Development-build performance probe for Android devices: per-second metrics to logcat, a localhost command socket (via adb forward) for captures (frame ring buffer, object census, memory snapshot, screenshot, recent logs), and PC-side Python watch scripts.",
+  "unity": "6000.3",
+  "dependencies": {},
+  "keywords": [
+    "profiler",
+    "performance",
+    "memory",
+    "android",
+    "debug"
+  ],
+  "author": {
+    "name": "HoBeenH",
+    "email": "whdmstlsk@gmail.com"
+  }
+}
