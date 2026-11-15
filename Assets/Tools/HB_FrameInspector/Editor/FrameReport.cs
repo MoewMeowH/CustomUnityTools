@@ -18,7 +18,53 @@ namespace HB.FrameInspector.Editor
         public OverdrawReport overdraw = new OverdrawReport();
         public DrawListReport drawList = new DrawListReport();
         public List<ShaderStat> shaders = new List<ShaderStat>();
+        public RenderGraphReport renderGraph = new RenderGraphReport();
+        public ProfilerReport profiler = new ProfilerReport();
         public List<string> notes = new List<string>();
+    }
+
+    [Serializable]
+    public class ProfilerReport
+    {
+        public bool recorded;
+        public int frames;
+        public string file;
+        public string unavailableReason;
+    }
+
+    [Serializable]
+    public class RenderGraphReport
+    {
+        public bool available;
+        public string unavailableReason;
+        public List<RenderGraphExecution> executions = new List<RenderGraphExecution>();
+    }
+
+    // 필드 이름은 URP core 17.7 RenderGraphDebugSessionManager 출력(GraphMetricsOutput 등)과 같게 둔다 — JsonUtility로 그대로 옮겨 읽는다.
+    [Serializable]
+    public class RenderGraphExecution
+    {
+        public string graphName;
+        public string executionName;
+        public int totalPasses;
+        public int culledPasses;
+        public int unmergedPasses;
+        public int totalResources;
+        public int textureCount;
+        public int bufferCount;
+        public int importedResourceCount;
+        public List<string> insights = new List<string>();
+        public List<RenderGraphUnmergedPass> unmerged = new List<RenderGraphUnmergedPass>();
+        public List<string> culled = new List<string>();
+    }
+
+    [Serializable]
+    public class RenderGraphUnmergedPass
+    {
+        public int index;
+        public string name;
+        public string breakReason;
+        public string nextPassName;
     }
 
     [Serializable]
@@ -39,6 +85,8 @@ namespace HB.FrameInspector.Editor
         public int screenHeight;
         public int sampledFrames;
         public float targetFrameMs;
+        // 배치 모드(-batchmode)는 게임 화면을 그리지 않아 GPU · 렌더 스레드 · 렌더링 카운터 · 드로우 목록이 측정되지 않는다 (6000.3.23f1 실측).
+        public bool batchMode;
     }
 
     [Serializable]

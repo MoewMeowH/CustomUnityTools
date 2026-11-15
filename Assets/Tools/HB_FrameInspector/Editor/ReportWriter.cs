@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -21,6 +22,10 @@ namespace HB.FrameInspector.Editor
         public const string JsonFile = "report.json";
         public const string OverdrawFile = "overdraw.png";
         public const string ScreenFile = "screen.png";
+        public const string ProfilerFile = "profiler.data";
+        public const string CompareMarkdownFile = "compare.md";
+        public const string CompareJsonFile = "compare.json";
+        const int TopChanges = 10;
 
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -54,6 +59,7 @@ namespace HB.FrameInspector.Editor
                 new[] { "Game 뷰 해상도", $"{m.screenWidth}×{m.screenHeight}" },
                 new[] { "잰 프레임 수", m.sampledFrames.ToString(Inv) },
                 new[] { "목표 프레임 시간", m.targetFrameMs > 0 ? $"{F(m.targetFrameMs)} ms" : "지정 없음 (Application.targetFrameRate)" },
+                new[] { "배치 모드", m.batchMode ? "예 — GPU · 렌더 스레드 · 렌더링 카운터 · 드로우 목록 · 렌더 그래프는 측정 안 됨" : "아니오" },
             });
 
             sb.AppendLine("## 병목 힌트");
@@ -75,10 +81,12 @@ namespace HB.FrameInspector.Editor
             sb.AppendLine($"GPU 값 출처: {r.timing.gpuSource}. CPU 값 출처: FrameTimingManager.");
             sb.AppendLine();
 
-            sb.AppendLine("## 렌더링 카운터 (프레임당)");
+            sb.AppendLine("## 렌더링 · 메모리 카운터 (프레임당)");
+            sb.AppendLine();
+            sb.AppendLine("bytes 단위는 1MB 미만이면 KB, 이상이면 MB로 적었다 (report.json에는 bytes 그대로).");
             sb.AppendLine();
             if (r.counters.Count == 0) sb.AppendLine("(없음)").AppendLine();
-            else Table(sb, new[] { "카운터", "평균", "최대", "단위" }, r.counters.Select(c => new[] { c.name, F(c.avg, 0), F(c.max, 0), c.unit }).ToList());
+            else Table(sb, new[] { "카운터", "평균", "최대" }, r.counters.Select(c => new[] { c.name, ReportMath.FormatCounter(c.avg, c.unit), ReportMath.FormatCounter(c.max, c.unit) }).ToList());
 
             sb.AppendLine("## CPU 요약 (주요 마커, ms)");
             sb.AppendLine();
@@ -103,12 +111,90 @@ namespace HB.FrameInspector.Editor
 
             WriteOverdraw(sb, r.overdraw, hasOverdrawImage, hasScreenImage);
             WriteDrawList(sb, r.drawList);
+            WriteRenderGraph(sb, r.renderGraph);
             WriteShaders(sb, r.shaders);
+            WriteProfiler(sb, r.profiler);
 
             sb.AppendLine("## 참고 · 한계");
             sb.AppendLine();
             foreach (string n in r.notes) sb.AppendLine($"- {n}");
             return sb.ToString();
+        }
+
+        public static string ToJson(ComparisonReport c) => JsonUtility.ToJson(c, true);
+
+        /// <summary>전후 비교 compare.md — 이 파일만 받은 AI가 무엇이 좋아지고 나빠졌는지 읽을 수 있게.</summary>
+        public static string ToMarkdown(ComparisonReport c, FrameThresholds thresholds = null)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("# Unity 프레임 리포트 전후 비교");
+            sb.AppendLine();
+            sb.AppendLine($"> 이전 `{c.baselineLabel}` → 이후 `{c.currentLabel}`. HB_FrameInspector가 에디터 Play 모드에서 잰 두 리포트를 지표별로 비교했다.");
+            sb.AppendLine("> 모든 지표는 **낮을수록 좋다**. 차이 = 이후 − 이전, 차이% = 차이 ÷ 이전. 1% 미만은 '같음'. 같은 데이터의 기계용 형식은 `compare.json`.");
+            sb.AppendLine("> 에디터 측정은 매번 흔들린다 — 작은 차이보다 크게 바뀐 것과 측정 조건 차이를 먼저 본다.");
+            sb.AppendLine();
+
+            sb.AppendLine("## 측정 조건 차이");
+            sb.AppendLine();
+            if (c.conditionDiffs.Count == 0) sb.AppendLine("(없음 — 같은 조건)").AppendLine();
+            else
+            {
+                foreach (string d in c.conditionDiffs) sb.AppendLine($"- {d}");
+                sb.AppendLine("- 조건이 다르면 차이가 코드 변경 때문인지 조건 때문인지 가르기 어렵다.");
+                sb.AppendLine();
+            }
+
+            List<MetricDelta> comparable = c.metrics.Where(m => m.comparable).ToList();
+            sb.AppendLine("## 나빠진 것 (차이% 큰 순)");
+            sb.AppendLine();
+            DeltaTable(sb, comparable.Where(m => m.direction > 0).OrderByDescending(m => m.deltaPercent).Take(TopChanges).ToList());
+            sb.AppendLine("## 좋아진 것 (차이% 큰 순)");
+            sb.AppendLine();
+            DeltaTable(sb, comparable.Where(m => m.direction < 0).OrderBy(m => m.deltaPercent).Take(TopChanges).ToList());
+
+            List<string> violations = FrameReportComparer.Check(c, thresholds);
+            FrameThresholds t = thresholds ?? new FrameThresholds();
+            sb.AppendLine("## 허용치 검사");
+            sb.AppendLine();
+            sb.AppendLine(FormattableString.Invariant($"기준: 시간 +{t.timePercent:0.#}% 그리고 +{t.timeMinMs:0.##}ms 초과, 카운터 +{t.counterPercent:0.#}% 초과, 오버드로우 픽셀당 +{t.overdrawPerPixel:0.##}회 초과."));
+            sb.AppendLine();
+            if (violations.Count == 0) sb.AppendLine("넘은 지표 없음.").AppendLine();
+            else
+            {
+                foreach (string v in violations) sb.AppendLine($"- {v}");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("## 전체 지표");
+            sb.AppendLine();
+            DeltaTable(sb, comparable);
+
+            List<MetricDelta> skipped = c.metrics.Where(m => !m.comparable).ToList();
+            if (skipped.Count > 0)
+            {
+                sb.AppendLine("## 비교 불가");
+                sb.AppendLine();
+                Table(sb, new[] { "묶음", "지표", "이유" }, skipped.Select(m => new[] { m.group, m.name, m.reason }).ToList());
+            }
+            return sb.ToString();
+        }
+
+        static void DeltaTable(StringBuilder sb, List<MetricDelta> rows)
+        {
+            if (rows.Count == 0)
+            {
+                sb.AppendLine("(없음)").AppendLine();
+                return;
+            }
+
+            Table(sb, new[] { "묶음", "지표", "단위", "이전", "이후", "차이", "차이%", "판단" }, rows.Select(m => new[]
+            {
+                m.group, m.name, ReportMath.UnitLabel(m.unit),
+                ReportMath.FormatCounter(m.baseline, m.unit, 3), ReportMath.FormatCounter(m.current, m.unit, 3),
+                (m.delta >= 0 ? "+" : "") + ReportMath.FormatCounter(m.delta, m.unit, 3),
+                (m.deltaPercent >= 0 ? "+" : "") + F(m.deltaPercent, 1) + "%",
+                m.direction > 0 ? "나빠짐" : m.direction < 0 ? "좋아짐" : "같음",
+            }).ToList());
         }
 
         static void WriteOverdraw(StringBuilder sb, OverdrawReport o, bool hasOverdrawImage, bool hasScreenImage)
@@ -155,6 +241,56 @@ namespace HB.FrameInspector.Editor
             Table(sb, new[] { "종류", "이벤트 수" }, d.byType.Select(e => new[] { e.name, e.count.ToString(Inv) }).ToList());
             if (d.byObject.Count > 0)
                 Table(sb, new[] { "오브젝트 (상위 30)", "이벤트 수" }, d.byObject.Select(e => new[] { e.name, e.count.ToString(Inv) }).ToList());
+        }
+
+        static void WriteRenderGraph(StringBuilder sb, RenderGraphReport g)
+        {
+            sb.AppendLine("## 렌더 그래프 (URP core 17.7+)");
+            sb.AppendLine();
+            if (!g.available)
+            {
+                sb.AppendLine($"(없음 — {g.unavailableReason})").AppendLine();
+                return;
+            }
+
+            sb.AppendLine("카메라(실행)마다 렌더 그래프가 만든 패스 수 · 버려진(culled) 패스 · 다음 패스와 합쳐지지 못한(native pass merge 실패) 패스다. 합쳐지지 못하면 타일 GPU(모바일)에서 메모리 읽기 · 쓰기가 늘어난다.");
+            if (!string.IsNullOrEmpty(g.unavailableReason)) sb.AppendLine($"참고: {g.unavailableReason}.");
+            sb.AppendLine();
+            foreach (RenderGraphExecution e in g.executions)
+            {
+                sb.AppendLine($"### {e.graphName} / {e.executionName}");
+                sb.AppendLine();
+                Table(sb, new[] { "패스", "버려진 패스", "합쳐지지 못한 패스", "리소스", "텍스처", "버퍼", "가져온 리소스" }, new List<string[]>
+                {
+                    new[] { e.totalPasses, e.culledPasses, e.unmergedPasses, e.totalResources, e.textureCount, e.bufferCount, e.importedResourceCount }.Select(v => v.ToString(Inv)).ToArray(),
+                });
+                if (e.insights.Count > 0)
+                {
+                    sb.AppendLine("Unity가 낸 요약:");
+                    foreach (string insight in e.insights) sb.AppendLine($"- {insight.Replace("\n", " ")}");
+                    sb.AppendLine();
+                }
+                if (e.unmerged.Count > 0)
+                    Table(sb, new[] { "합쳐지지 못한 패스", "다음 패스", "이유" }, e.unmerged.Select(u => new[] { u.name, u.nextPassName, u.breakReason }).ToList());
+                if (e.culled.Count > 0)
+                    sb.AppendLine("버려진 패스: " + string.Join(", ", e.culled)).AppendLine();
+            }
+        }
+
+        static void WriteProfiler(StringBuilder sb, ProfilerReport p)
+        {
+            sb.AppendLine("## Profiler 녹화");
+            sb.AppendLine();
+            if (!p.recorded)
+            {
+                sb.AppendLine($"(없음 — {p.unavailableReason})").AppendLine();
+                return;
+            }
+
+            string file = string.IsNullOrEmpty(p.file) ? "(아직 저장 안 함)" : $"`{p.file}`";
+            sb.AppendLine($"{p.frames}프레임을 녹화했다: {file}. 위 측정이 끝난 뒤 따로 녹화해 위 수치에는 녹화 오버헤드가 없다.");
+            sb.AppendLine("함수 단위 CPU 시간 · hot path · GC 할당 위치를 볼 때 연다: Unity Profiler 창의 Load, 또는 `com.unity.pipeline` 1.0 이상이면 `diagnostics profiler_session`. 바이너리라 웹 AI는 읽지 못한다.");
+            sb.AppendLine();
         }
 
         static void WriteShaders(StringBuilder sb, List<ShaderStat> shaders)

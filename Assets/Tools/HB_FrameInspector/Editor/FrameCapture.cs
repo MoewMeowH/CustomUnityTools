@@ -25,6 +25,9 @@ namespace HB.FrameInspector.Editor
 
         /// <summary>오버드로우 · 화면을 그릴 카메라. 비우면 Camera.main.</summary>
         public Camera Camera;
+
+        /// <summary>Profiler를 녹화해 .data로 남긴다 (최대 300프레임). Profiler 창의 기존 기록이 지워진다.</summary>
+        public bool RecordProfiler;
     }
 
     public sealed class FrameCaptureResult
@@ -32,6 +35,15 @@ namespace HB.FrameInspector.Editor
         public FrameReport Report;
         public byte[] OverdrawPng;
         public byte[] ScreenPng;
+
+        /// <summary>Profiler 녹화 임시 파일 (RecordProfiler일 때). 저장하면 리포트 폴더로 옮겨진다.</summary>
+        public string ProfilerTempFile;
+    }
+
+    /// <summary>캡처 도중 Play가 끝나거나 일시정지됐다. 단계별 리더가 삼키지 않고 캡처 전체를 실패로 끝낸다.</summary>
+    public sealed class CaptureInterruptedException : InvalidOperationException
+    {
+        public CaptureInterruptedException(string message) : base(message) { }
     }
 
     /// <summary>
@@ -47,16 +59,25 @@ namespace HB.FrameInspector.Editor
         const int GpuDiscoveryFrames = 3;
         const int MaxGpuPasses = 40;
 
-        static readonly (ProfilerCategory category, string name, string unit)[] Counters =
+        // needsRendering: 게임 화면을 그려야 값이 생기는 카운터 (배치 모드에서는 0이라 뺀다, 6000.3.23f1 실측)
+        static readonly (ProfilerCategory category, string name, string unit, bool needsRendering)[] Counters =
         {
-            (ProfilerCategory.Render, "Draw Calls Count", "count"),
-            (ProfilerCategory.Render, "Batches Count", "count"),
-            (ProfilerCategory.Render, "SetPass Calls Count", "count"),
-            (ProfilerCategory.Render, "Triangles Count", "count"),
-            (ProfilerCategory.Render, "Vertices Count", "count"),
-            (ProfilerCategory.Memory, "GC Allocated In Frame", "bytes"),
-            (ProfilerCategory.Memory, "GC Allocation In Frame Count", "count"),
+            (ProfilerCategory.Render, "Draw Calls Count", "count", true),
+            (ProfilerCategory.Render, "Batches Count", "count", true),
+            (ProfilerCategory.Render, "SetPass Calls Count", "count", true),
+            (ProfilerCategory.Render, "Triangles Count", "count", true),
+            (ProfilerCategory.Render, "Vertices Count", "count", true),
+            (ProfilerCategory.Memory, "GC Allocated In Frame", "bytes", false),
+            (ProfilerCategory.Memory, "GC Allocation In Frame Count", "count", false),
+            (ProfilerCategory.Memory, "Total Used Memory", "bytes", false),
+            (ProfilerCategory.Memory, "GC Used Memory", "bytes", false),
+            (ProfilerCategory.Memory, "Gfx Used Memory", "bytes", false),
+            (ProfilerCategory.Memory, "Texture Memory", "bytes", false),
+            (ProfilerCategory.Memory, "Mesh Memory", "bytes", false),
+            (ProfilerCategory.Render, "Render Textures Bytes", "bytes", false),
         };
+
+        const string BatchModeReason = "배치 모드(-batchmode)라 측정 안 됨 — 게임 화면을 그리지 않는다";
 
         // 다른 AI에게도 넘길 최소 CPU 요약. 깊은 분석(hot path · 마커 집계)은 Profiler 녹화로 한다.
         static readonly string[] CpuMarkers =
@@ -95,22 +116,64 @@ namespace HB.FrameInspector.Editor
                 Camera camera = options.Camera != null ? options.Camera : Camera.main;
                 FillMeta(report.meta, camera, frames);
 
+                bool batch = report.meta.batchMode;
+
                 progress?.Report("프레임 시간 · 카운터 · CPU 마커");
-                await SampleTimingAsync(report, frames);
+                await SampleTimingAsync(report, frames, batch);
 
-                progress?.Report("렌더 패스 GPU 시간");
-                await SampleGpuPassesAsync(report, frames);
+                if (batch)
+                {
+                    report.notes.Add("렌더 패스 GPU 시간: " + BatchModeReason);
+                    report.bottleneck = new BottleneckHint { side = "unknown", reason = "GPU · 렌더 스레드 시간: " + BatchModeReason };
+                }
+                else
+                {
+                    progress?.Report("렌더 패스 GPU 시간");
+                    await SampleGpuPassesAsync(report, frames);
 
-                // 에디터 UI 샘플러도 서로 중첩되므로 더하지 않고 가장 큰 것(바깥 샘플러)을 쓴다.
-                float editorGpu = report.editorGpu.Count > 0 ? report.editorGpu.Max(s => s.avg) : 0f;
-                report.bottleneck = ReportMath.Bottleneck(report.timing, editorGpu);
+                    // 에디터 UI 샘플러도 서로 중첩되므로 더하지 않고 가장 큰 것(바깥 샘플러)을 쓴다.
+                    float editorGpu = report.editorGpu.Count > 0 ? report.editorGpu.Max(s => s.avg) : 0f;
+                    report.bottleneck = ReportMath.Bottleneck(report.timing, editorGpu);
+                }
 
                 progress?.Report("오버드로우");
                 OverdrawCapture.Output od = OverdrawCapture.Capture(camera, report.meta.screenWidth, report.meta.screenHeight);
                 report.overdraw = od.Report;
 
+                if (batch)
+                {
+                    report.renderGraph.unavailableReason = BatchModeReason;
+                }
+                else
+                {
+                    progress?.Report("렌더 그래프");
+                    report.renderGraph = await RenderGraphReader.ReadAsync(NextFrameAsync);
+                }
+
+                ProfilerCapture.Output profiler = null;
+                if (options.RecordProfiler && batch)
+                {
+                    // 배치 모드에서는 SaveProfile이 실패한다 (6000.3.23f1 실측, 화면 모드에서는 저장됨)
+                    report.profiler.unavailableReason = "배치 모드(-batchmode)에서는 Profiler 녹화가 저장되지 않음";
+                }
+                else if (options.RecordProfiler)
+                {
+                    // 녹화 오버헤드가 위 수치를 흔들지 않게 다른 측정이 끝난 뒤에 녹화한다.
+                    progress?.Report("Profiler 녹화");
+                    profiler = await ProfilerCapture.RecordAsync(frames, NextFrameAsync);
+                    report.profiler = profiler.Report;
+                }
+                else
+                {
+                    report.profiler.unavailableReason = "Profiler 녹화를 끈 상태로 캡처함";
+                }
+
                 FrameDebuggerReader.Result fd = null;
-                if (options.DrawList)
+                if (batch)
+                {
+                    report.drawList.unavailableReason = BatchModeReason;
+                }
+                else if (options.DrawList)
                 {
                     progress?.Report("드로우 목록 (Frame Debugger)");
                     fd = await FrameDebuggerReader.ReadAsync();
@@ -125,7 +188,13 @@ namespace HB.FrameInspector.Editor
                 report.shaders = ShaderCollector.Collect(ShaderCollector.DrawCountsFrom(fd));
 
                 AddStandingNotes(report);
-                return new FrameCaptureResult { Report = report, OverdrawPng = od.OverdrawPng, ScreenPng = od.ScreenPng };
+                return new FrameCaptureResult
+                {
+                    Report = report,
+                    OverdrawPng = od.OverdrawPng,
+                    ScreenPng = od.ScreenPng,
+                    ProfilerTempFile = profiler?.TempFile,
+                };
             }
             finally
             {
@@ -150,6 +219,7 @@ namespace HB.FrameInspector.Editor
             meta.screenHeight = (int)gameView.y;
             meta.sampledFrames = frames;
             meta.targetFrameMs = Application.targetFrameRate > 0 ? 1000f / Application.targetFrameRate : 0f;
+            meta.batchMode = Application.isBatchMode;
         }
 
         static async Task NextFrameAsync()
@@ -158,15 +228,15 @@ namespace HB.FrameInspector.Editor
             while (Time.frameCount == frame)
             {
                 if (!EditorApplication.isPlaying)
-                    throw new InvalidOperationException("캡처 중 Play 모드가 끝났다.");
+                    throw new CaptureInterruptedException("캡처 중 Play 모드가 끝났다.");
                 // 일시정지(버튼 · Error Pause · Debug.Break)면 프레임이 넘어가지 않아 기다리지 않고 끝낸다.
                 if (EditorApplication.isPaused)
-                    throw new InvalidOperationException("캡처 중 Play가 일시정지됐다. 일시정지를 풀고 다시 캡처한다.");
+                    throw new CaptureInterruptedException("캡처 중 Play가 일시정지됐다. 일시정지를 풀고 다시 캡처한다.");
                 await Task.Yield();
             }
         }
 
-        static async Task SampleTimingAsync(FrameReport report, int frames)
+        static async Task SampleTimingAsync(FrameReport report, int frames, bool batch)
         {
             var cpu = new Accumulator();
             var main = new Accumulator();
@@ -183,8 +253,15 @@ namespace HB.FrameInspector.Editor
             try
             {
                 if (gpuRecorder.isValid) gpuRecorder.enabled = true;
-                foreach (var (category, name, unit) in Counters)
+                var skippedForBatch = new List<string>();
+                foreach (var (category, name, unit, needsRendering) in Counters)
                 {
+                    if (batch && needsRendering)
+                    {
+                        skippedForBatch.Add(name);
+                        continue;
+                    }
+
                     var rec = ProfilerRecorder.StartNew(category, name);
                     if (rec.Valid) counterRecorders.Add((rec, name, unit, new Accumulator()));
                     else
@@ -193,6 +270,8 @@ namespace HB.FrameInspector.Editor
                         report.notes.Add($"카운터 '{name}'을(를) 이 Unity 버전에서 찾지 못함");
                     }
                 }
+                if (skippedForBatch.Count > 0)
+                    report.notes.Add($"렌더링 카운터({string.Join(" · ", skippedForBatch)}): {BatchModeReason}");
 
                 foreach (string name in CpuMarkers)
                 {
@@ -236,7 +315,13 @@ namespace HB.FrameInspector.Editor
             report.timing.cpuFrameMs = cpu.ToStat();
             report.timing.cpuMainThreadMs = main.ToStat();
             report.timing.cpuRenderThreadMs = render.ToStat();
-            if (gpu.Count > 0)
+            if (batch)
+            {
+                report.timing.cpuRenderThreadMs = new Stat();
+                report.timing.gpuFrameMs = new Stat();
+                report.timing.gpuSource = BatchModeReason;
+            }
+            else if (gpu.Count > 0)
             {
                 report.timing.gpuFrameMs = gpu.ToStat();
                 report.timing.gpuSource = "Recorder(FrameTime.GPU)";
@@ -315,6 +400,7 @@ namespace HB.FrameInspector.Editor
             report.notes.Add("렌더 패스 GPU 시간은 중첩된다 (부모 샘플러가 자식 시간을 포함). 합계를 내지 말 것.");
             report.notes.Add("렌더링 카운터는 이 프레임에 그린 모든 카메라 합이다 (Scene 뷰가 열려 있으면 그 카메라도 포함될 수 있음).");
             report.notes.Add("오버드로우는 선택한 카메라 하나만 그린 결과다 (Screen Space Overlay UI · 다른 카메라는 제외).");
+            report.notes.Add("메모리 카운터(Total · GC · Gfx · Texture · Mesh 등)는 에디터 자신이 쓰는 메모리도 포함한다 — 절대값보다 전후 비교에 쓴다.");
         }
     }
 }

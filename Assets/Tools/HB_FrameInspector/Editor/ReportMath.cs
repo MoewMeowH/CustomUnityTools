@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace HB.FrameInspector.Editor
@@ -39,6 +40,32 @@ namespace HB.FrameInspector.Editor
     {
         // 게임 화면이 아니라 에디터 창을 그리는 샘플러 (IMGUI · UI Toolkit 렌더러, 7000.0.0a8에서 GPU 샘플이 잡힌 것)
         static readonly string[] EditorUiPrefixes = { "GUIView.", "GUITexture.", "UIR." };
+
+        /// <summary>
+        /// 카운터 값을 단위에 맞게 쓴다: bytes는 1MB 미만이면 KB · 이상이면 MB, 그 밖은 소수 maxDecimals자리까지.
+        /// report.json에는 원래 값이 남는다.
+        /// </summary>
+        public static string FormatCounter(float value, string unit, int maxDecimals = 0)
+        {
+            const float Kb = 1024f, Mb = 1024f * 1024f;
+            if (unit == "bytes")
+            {
+                string bytesFormat = maxDecimals <= 0 ? "0.0" : "0.0#";
+                return Math.Abs(value) < Mb
+                    ? (value / Kb).ToString(bytesFormat, CultureInfo.InvariantCulture) + " KB"
+                    : (value / Mb).ToString(bytesFormat, CultureInfo.InvariantCulture) + " MB";
+            }
+            return value.ToString(maxDecimals <= 0 ? "0" : "0." + new string('#', maxDecimals), CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>비교표의 단위 이름. bytes는 값에 KB · MB가 이미 붙는다.</summary>
+        public static string UnitLabel(string unit) => unit switch
+        {
+            "bytes" => "KB/MB",
+            "count" => "개",
+            null => "",
+            _ => unit,
+        };
 
         public static bool IsEditorUiMarker(string name) =>
             !string.IsNullOrEmpty(name) && EditorUiPrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal));

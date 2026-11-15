@@ -20,7 +20,7 @@ AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴�
 | [HB_Build](Assets/Tools/HB_Build/README.md) | `com.hb.custombuild` | 1.0.0 | 멀티 플랫폼 빌드 매니저와 Jenkinsfile 생성기 |
 | [HB_TestFrameworkHelper](Assets/Tools/HB_TestFrameworkHelper/README.md) | `com.hb.testframeworkhelper` | 1.0.0 | 인스펙터 슬롯 · 에셋 건강 검사 QA 헬퍼와 테스트 작성 도우미 |
 | [HB_ScreenRecorder](Assets/Tools/HB_ScreenRecorder/README.md) | `com.hb.screenrecorder` | 1.0.0 | GameView 녹화 · 스크린샷과 진단 데이터 덤프 |
-| [HB_FrameInspector](Assets/Tools/HB_FrameInspector/README.md) | `com.hb.frameinspector` | 1.0.0 | 오버드로우 · 프레임 시간 · 패스별 GPU · 드로우 목록 리포트와 AI용 내보내기 |
+| [HB_FrameInspector](Assets/Tools/HB_FrameInspector/README.md) | `com.hb.frameinspector` | 1.0.0 | 오버드로우 · 프레임 시간 · 패스별 GPU · 렌더 그래프 리포트, 전후 비교 · 회귀 검사, AI용 내보내기 |
 
 도구 이름을 누르면 상세 문서로 갑니다. 도구마다 할 수 있는 일은 [도구별 기능](#도구별-기능)에 있습니다.
 
@@ -102,9 +102,10 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_FrameInsp
 
 ### HB_FrameInspector
 
-- 에디터 Play 모드에서 버튼 한 번으로 오버드로우 · 프레임 시간(CPU/GPU) · 렌더 패스별 GPU 시간 · 렌더링 카운터 · 드로우 목록 · 셰이더 정보를 모아 창에 보여 줍니다.
+- 에디터 Play 모드에서 버튼 한 번으로 오버드로우 · 프레임 시간(CPU/GPU) · 렌더 패스별 GPU 시간 · 렌더링 · 메모리 카운터 · 드로우 목록 · 셰이더 정보 · 렌더 그래프 지표(URP 17.7+)를 모아 창에 보여 줍니다. 선택하면 Profiler 녹화(`profiler.data`)도 함께 남깁니다.
 - 저장하면 `report.md` · `report.json` · 오버드로우 색 그림이 남고, `report.md`는 다른 AI에게 그대로 넘겨도 읽히게 뜻 · 단위 · 한계를 함께 적습니다 ([AI용 복사] 버튼).
-- 스크립트 · AI 에이전트용 입구 `FrameInspectorApi.CaptureAndSaveAsync()`가 있습니다.
+- 저장된 리포트 두 개를 비교해 `compare.md`(나빠진 것 · 좋아진 것 · 조건 차이)를 만들고, 기준 리포트 · 허용치로 성능 회귀를 검사하는 API(`FrameReportComparer.Check`)가 있습니다.
+- 스크립트 · AI 에이전트용 입구 `FrameInspectorApi.CaptureAndSaveAsync()` · `CompareAndSave()`가 있습니다.
 
 ---
 
@@ -121,7 +122,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_FrameInsp
 | HB_TestFrameworkHelper | `com.unity.test-framework` | 프리팹 · 에셋 건강 검사 테스트가 Test Runner에 보이고, 테스트 작성 도우미를 쓸 수 있음 (설치한 프로젝트는 `testables` 등록 필요) |
 | HB_InGameConsole | HB_Build | DefineContainer의 LIVE 항목에서 `USE_HLOG`를 빼면 출시 빌드에서 HLog가 꺼짐 (켜진 채 릴리즈 빌드하면 InGameConsole이 경고) |
 | HB_FrameInspector | `com.unity.render-pipelines.universal` | URP가 활성 파이프라인이면 오버드로우를 잼 (없으면 오버드로우 절만 빠짐) |
-| HB_FrameInspector | `com.unity.pipeline` | 리포트로 부족한 함수 단위 CPU 원인은 Unity CLI `diagnostics profiler_*` 명령(1.0.0 이상)으로 녹화 · 분석 (컴파일 참조 없음) |
+| HB_FrameInspector | `com.unity.pipeline` | 함께 저장한 `profiler.data`를 Unity CLI `diagnostics profiler_session`(1.0.0 이상)으로 열어 함수 단위 CPU 원인 분석 (컴파일 참조 없음) |
 
 ---
 

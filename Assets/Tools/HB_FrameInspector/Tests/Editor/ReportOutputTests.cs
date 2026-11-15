@@ -46,7 +46,7 @@ namespace HB.FrameInspector.Tests
         {
             string md = ReportWriter.ToMarkdown(SampleReport(), hasOverdrawImage: true, hasScreenImage: true);
 
-            foreach (string heading in new[] { "## 측정 조건", "## 병목 힌트", "## 프레임 시간 (ms)", "## 렌더링 카운터", "## CPU 요약", "## 렌더 패스 GPU 시간", "## 오버드로우", "## 드로우 목록", "## 셰이더", "## 참고 · 한계" })
+            foreach (string heading in new[] { "## 측정 조건", "## 병목 힌트", "## 프레임 시간 (ms)", "## 렌더링 · 메모리 카운터", "## CPU 요약", "## 렌더 패스 GPU 시간", "## 오버드로우", "## 드로우 목록", "## 셰이더", "## 참고 · 한계" })
                 StringAssert.Contains(heading, md);
 
             StringAssert.Contains("ms(밀리초)", md);

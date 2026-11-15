@@ -47,8 +47,9 @@ namespace HB.FrameInspector.Tests
 
             var rs = UniversalRenderPipelineDebugDisplaySettings.Instance.renderingSettings;
             DebugOverdrawMode modeBefore = rs.overdrawMode;
+            bool profilerBefore = UnityEditorInternal.ProfilerDriver.enabled;
 
-            Task<FrameCaptureResult> task = FrameCapture.CaptureAsync(new FrameCaptureOptions { Frames = 5, DrawList = true, Camera = cam });
+            Task<FrameCaptureResult> task = FrameCapture.CaptureAsync(new FrameCaptureOptions { Frames = 5, DrawList = true, Camera = cam, RecordProfiler = true });
             while (!task.IsCompleted) yield return null;
             Assert.IsNull(task.Exception, task.Exception?.ToString());
             FrameReport r = task.Result.Report;
@@ -66,6 +67,45 @@ namespace HB.FrameInspector.Tests
                 Assert.IsTrue(r.drawList.available, "드로우 목록을 읽지 못함: " + r.drawList.unavailableReason);
                 Assert.GreaterOrEqual(r.drawList.eventCount, QuadCount);
                 Assert.IsTrue(r.shaders.Exists(s => s.shader == "Sprites/Default" && s.drawCount >= QuadCount));
+            }
+            else
+            {
+                Assert.IsTrue(r.meta.batchMode);
+                Assert.IsFalse(r.timing.gpuFrameMs.available, "배치 모드는 GPU 시간을 측정하지 않는다");
+                Assert.IsFalse(r.counters.Exists(c => c.name == "Draw Calls Count"), "배치 모드는 렌더링 카운터를 빼고 적는다");
+            }
+
+            // Profiler 녹화 (배치 모드에서는 저장되지 않아 건너뛴다 — 6000.3.23f1 실측)
+            if (!Application.isBatchMode)
+            {
+                Assert.IsTrue(r.profiler.recorded, r.profiler.unavailableReason);
+                Assert.IsTrue(System.IO.File.Exists(task.Result.ProfilerTempFile));
+                System.IO.File.Delete(task.Result.ProfilerTempFile);
+            }
+            else
+            {
+                Assert.IsFalse(r.profiler.recorded);
+                StringAssert.Contains("배치 모드", r.profiler.unavailableReason);
+            }
+            Assert.AreEqual(profilerBefore, UnityEditorInternal.ProfilerDriver.enabled, "ProfilerDriver.enabled 원래대로");
+
+            // 렌더 그래프: 리더와 같은 조건(세션 관리자 · 라이브 세션 타입이 있음 = URP core 17.7+)이고 배치가 아니면
+            // 지표가 있고, 끝나면 우리가 연 세션은 닫힌다
+            const System.Reflection.BindingFlags anyStatic = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            System.Reflection.Assembly core = typeof(UnityEngine.Rendering.RenderGraphModule.RenderGraph).Assembly;
+            System.Type manager = core.GetType("UnityEngine.Rendering.RenderGraphModule.RenderGraphDebugSessionManager");
+            System.Type liveSession = core.GetType("UnityEngine.Rendering.RenderGraphModule.LiveRenderGraphDebugSession");
+            if (manager != null && liveSession != null && !Application.isBatchMode)
+            {
+                Assert.IsTrue(r.renderGraph.available, r.renderGraph.unavailableReason);
+                Assert.Greater(r.renderGraph.executions.Count, 0);
+                Assert.Greater(r.renderGraph.executions[0].totalPasses, 0, "0을 실측처럼 남기지 않음");
+                Assert.IsFalse((bool)manager.GetProperty("hasActiveDebugSession", anyStatic).GetValue(null), "렌더 그래프 세션 닫힘");
+            }
+            else
+            {
+                Assert.IsFalse(r.renderGraph.available);
+                Assert.IsNotEmpty(r.renderGraph.unavailableReason);
             }
 
             // 원상 복구
