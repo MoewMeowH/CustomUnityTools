@@ -1,0 +1,33 @@
+{
+    "name": "HB.FrameInspector.Tests.Editor",
+    "rootNamespace": "HB.FrameInspector.Tests",
+    "references": [
+        "HB.FrameInspector.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipeline.Universal.ShaderLibrary"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "",
+            "define": "HB_FI_URP"
+        }
+    ],
+    "noEngineReferences": false
+}

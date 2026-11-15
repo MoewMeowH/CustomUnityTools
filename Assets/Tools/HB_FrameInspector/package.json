@@ -1,0 +1,18 @@
+{
+  "name": "com.hb.frameinspector",
+  "version": "1.0.0",
+  "displayName": "HB_FrameInspector",
+  "description": "Editor Play Mode frame report: overdraw, frame timing, render pass GPU time, render counters, draw list and shader info. Shows it in a window, saves report.md / report.json / png, and copies an AI-readable summary.",
+  "unity": "6000.3",
+  "author": {
+    "name": "HoBeenH"
+  },
+  "keywords": [
+    "profiling",
+    "overdraw",
+    "frame",
+    "gpu",
+    "rendering",
+    "editor"
+  ]
+}

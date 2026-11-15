@@ -20,6 +20,7 @@ AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴�
 | [HB_Build](Assets/Tools/HB_Build/README.md) | `com.hb.custombuild` | 1.0.0 | 멀티 플랫폼 빌드 매니저와 Jenkinsfile 생성기 |
 | [HB_TestFrameworkHelper](Assets/Tools/HB_TestFrameworkHelper/README.md) | `com.hb.testframeworkhelper` | 1.0.0 | 인스펙터 슬롯 · 에셋 건강 검사 QA 헬퍼와 테스트 작성 도우미 |
 | [HB_ScreenRecorder](Assets/Tools/HB_ScreenRecorder/README.md) | `com.hb.screenrecorder` | 1.0.0 | GameView 녹화 · 스크린샷과 진단 데이터 덤프 |
+| [HB_FrameInspector](Assets/Tools/HB_FrameInspector/README.md) | `com.hb.frameinspector` | 1.0.0 | 오버드로우 · 프레임 시간 · 패스별 GPU · 드로우 목록 리포트와 AI용 내보내기 |
 
 도구 이름을 누르면 상세 문서로 갑니다. 도구마다 할 수 있는 일은 [도구별 기능](#도구별-기능)에 있습니다.
 
@@ -38,6 +39,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_E2String
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrameworkHelper
 https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRecorder
+https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_FrameInspector
 ```
 
 - 지원 버전은 **Unity 6.3 (6000.3) 이상**입니다.
@@ -98,6 +100,12 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRec
 - Unity Recorder 기반으로 GameView 화면을 MP4로 녹화하고 스크린샷을 찍습니다.
 - 녹화 · 캡처 때 시스템 진단 데이터와 로그를 자동으로 덤프하는 QA 도구입니다.
 
+### HB_FrameInspector
+
+- 에디터 Play 모드에서 버튼 한 번으로 오버드로우 · 프레임 시간(CPU/GPU) · 렌더 패스별 GPU 시간 · 렌더링 카운터 · 드로우 목록 · 셰이더 정보를 모아 창에 보여 줍니다.
+- 저장하면 `report.md` · `report.json` · 오버드로우 색 그림이 남고, `report.md`는 다른 AI에게 그대로 넘겨도 읽히게 뜻 · 단위 · 한계를 함께 적습니다 ([AI용 복사] 버튼).
+- 스크립트 · AI 에이전트용 입구 `FrameInspectorApi.CaptureAndSaveAsync()`가 있습니다.
+
 ---
 
 ## 도구 간 연동
@@ -112,6 +120,8 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_ScreenRec
 | HB_TestFrameworkHelper | `com.hb.custombuild`(HB_Build) | 빌드 시작 전에 켜진 검사(프리팹 슬롯 · 에셋 건강 검사)를 실제 빌드 씬으로 도는 스텝이 더해짐 |
 | HB_TestFrameworkHelper | `com.unity.test-framework` | 프리팹 · 에셋 건강 검사 테스트가 Test Runner에 보이고, 테스트 작성 도우미를 쓸 수 있음 (설치한 프로젝트는 `testables` 등록 필요) |
 | HB_InGameConsole | HB_Build | DefineContainer의 LIVE 항목에서 `USE_HLOG`를 빼면 출시 빌드에서 HLog가 꺼짐 (켜진 채 릴리즈 빌드하면 InGameConsole이 경고) |
+| HB_FrameInspector | `com.unity.render-pipelines.universal` | URP가 활성 파이프라인이면 오버드로우를 잼 (없으면 오버드로우 절만 빠짐) |
+| HB_FrameInspector | `com.unity.pipeline` | 리포트로 부족한 함수 단위 CPU 원인은 Unity CLI `diagnostics profiler_*` 명령(1.0.0 이상)으로 녹화 · 분석 (컴파일 참조 없음) |
 
 ---
 
