@@ -107,26 +107,7 @@ public class LogChannel
 
     [Conditional("USE_HLOG")]
     [HideInCallstack]
-    public void LogError(object message, UnityEngine.Object context = null)
-    {
-#if USE_HLOG
-        if (!HLogCore.IsLogEnabled || !Enabled) return;
-        LogTagged(LogType.Error, message, context);
-#endif
-    }
-
-    [Conditional("USE_HLOG")]
-    [HideInCallstack]
     public void Exception(Exception exception, UnityEngine.Object context = null)
-    {
-#if USE_HLOG
-        LogExceptionWithTag(exception, context);
-#endif
-    }
-
-    [Conditional("USE_HLOG")]
-    [HideInCallstack]
-    public void LogException(Exception exception, UnityEngine.Object context = null)
     {
 #if USE_HLOG
         LogExceptionWithTag(exception, context);

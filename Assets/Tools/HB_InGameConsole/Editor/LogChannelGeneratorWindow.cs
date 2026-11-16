@@ -479,8 +479,6 @@ namespace InGameConsoleSystem.Editor
             AppendForward(sb, "public static void Log(object message, UnityEngine.Object context = null) => Channel.Log(message, context);");
             AppendForward(sb, "public static void Warning(object message, UnityEngine.Object context = null) => Channel.Warning(message, context);");
             AppendForward(sb, "public static void Error(object message, UnityEngine.Object context = null) => Channel.Error(message, context);");
-            AppendForward(sb, "public static void LogError(object message, UnityEngine.Object context = null) => Channel.LogError(message, context);");
-            AppendForward(sb, "public static void LogException(Exception exception, UnityEngine.Object context = null) => Channel.LogException(exception, context);");
             AppendForward(sb, "public static void Exception(Exception exception, UnityEngine.Object context = null) => Channel.Exception(exception, context);");
             AppendForward(sb, "public static void Watch<T>(string key, Func<T> getter, UnityEngine.Object owner = null) => Channel.Watch<T>(key, getter, owner);");
             AppendForward(sb, "public static void Unwatch(string key) => Channel.Unwatch(key);");

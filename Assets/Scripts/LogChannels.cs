@@ -63,14 +63,6 @@ public static partial class HLog
 
         [Conditional(Cond)]
         [HideInCallstack]
-        public static void LogError(object message, UnityEngine.Object context = null) => Channel.LogError(message, context);
-
-        [Conditional(Cond)]
-        [HideInCallstack]
-        public static void LogException(Exception exception, UnityEngine.Object context = null) => Channel.LogException(exception, context);
-
-        [Conditional(Cond)]
-        [HideInCallstack]
         public static void Exception(Exception exception, UnityEngine.Object context = null) => Channel.Exception(exception, context);
 
         [Conditional(Cond)]

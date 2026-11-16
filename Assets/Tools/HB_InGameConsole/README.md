@@ -121,7 +121,7 @@ Scripting Define Symbol은 플랫폼 단위라 Development/Release를 구분하�
 **어느 스레드에서나** 부를 수 있는 API:
 
 - 채널 가져오기: `HLog.Get` · `HLog.Channel` · `HLogCore.GetChannel`
-- 로그 출력: `Log` · `Warning` · `Error` · `LogError` · `Exception` · `LogException`
+- 로그 출력: `Log` · `Warning` · `Error` · `Exception`
 - 태그 등록: `HLogCore.RegisterTag` (이벤트는 메인 스레드에서 발생)
 - 상태 읽기 (잠금 안에서 복사본): `History` · `HistoryCount` · `GetLogTypeCounts` · `HasUntaggedLogs` · `Watches` · `WatchCount` · `KnownTags` · `ChannelTags` · `IsChannelTag` · `IsLogEnabled`(읽기) · `IsInitialized`
 
@@ -160,7 +160,7 @@ Scripting Define Symbol은 플랫폼 단위라 Development/Release를 구분하�
 채널의 모든 로그 · Watch · 진단 메서드에 `[Conditional("USE_HLOG")]`가 붙어 있습니다.
 심볼이 없으면 IL 호출 자체가 제로 오버헤드로 스트리핑됩니다 ([동작 조건](#동작-조건-use_hlog-심볼)).
 
-대상 메서드: `Log`, `Warning`, `Error`, `LogError`, `Exception`, `LogException`, `Watch`, `Unwatch`, `BreakIf`, `Assert`, `ReportIf`, `BreakWhen`, `ReportWhen`
+대상 메서드: `Log`, `Warning`, `Error`, `Exception`, `Watch`, `Unwatch`, `BreakIf`, `Assert`, `ReportIf`, `BreakWhen`, `ReportWhen`
 
 ### 3. 에디터 & 인게임 실시간 로그 On/Off
 
@@ -184,7 +184,7 @@ Scripting Define Symbol은 플랫폼 단위라 Development/Release를 구분하�
   에디터 창은 마우스 휠을 가로 스크롤로 바꿔 주고, 인게임 콘솔은 가로 ScrollView입니다.
 - **다중 채널 구독 (에디터 창)**: 여러 채널을 동시에 체크/구독하여 함께 거를 수 있습니다.
   인게임 콘솔의 태그 바는 `All Tags` 또는 한 태그만 고릅니다.
-- 채널의 `Exception()` / `LogException()`으로 남긴 예외도 그 채널로 분류됩니다.
+- 채널의 `Exception()`으로 남긴 예외도 그 채널로 분류됩니다.
 
 **태그 해석**
 
@@ -334,7 +334,7 @@ private void Start()
 
 | API | 설명 |
 |---|---|
-| `HLog.{채널}.Log/Warning/Error/LogError/Exception/LogException` | 채널 로그. `Error`와 `LogError`는 같습니다. |
+| `HLog.{채널}.Log/Warning/Error/Exception` | 채널 로그. |
 | `HLog.{채널}.Watch/Unwatch/BreakIf/Assert/ReportIf/BreakWhen/ReportWhen` | 채널 Watch · 진단 (위 예제). |
 | `HLog.{채널}.Channel` | 그 채널의 `LogChannel` 인스턴스 (`Enabled` · `FilterLevel` 조작). |
 | `HLog.Get(name)` · `HLog.Channel(name)` | 이름으로 채널 가져오기 (없으면 만듦, 빈 이름은 `Common`). |
