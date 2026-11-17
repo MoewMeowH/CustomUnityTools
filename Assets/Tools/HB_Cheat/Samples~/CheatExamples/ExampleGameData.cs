@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // 치트 예제용 가짜 게임 코드 (테이블, 플레이어, 네트워크).
-// 실제 프로젝트에서는 이미 있는 게임 코드이므로 DEV_CHEAT로 감싸지 않는다.
+// 실제 프로젝트에서는 이미 있는 게임 코드이므로 HB_CHEAT로 감싸지 않는다.
 namespace CheatExamples
 {
     public enum ItemGrade

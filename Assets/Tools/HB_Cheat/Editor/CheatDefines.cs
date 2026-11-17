@@ -10,7 +10,7 @@ using UnityEngine;
 namespace HB.Cheat.Editor
 {
     /// <summary>
-    /// 치트 심볼 관리. 패키지 심볼(HB_CHEAT)과 프로젝트 심볼(설정의 UserDefine)을 항상 함께 켜고 끈다.
+    /// 치트 심볼(HB_CHEAT) 관리. 패키지 코드와 프로젝트 치트 코드가 같은 심볼을 쓴다.
     /// 콘솔이 패키지가 아닌 Assets 폴더로 들어와 있으면 versionDefines가 동작하지 않으므로 HB_CHEAT_HAS_CONSOLE도 함께 관리한다.
     /// </summary>
     public static class CheatDefines
@@ -61,57 +61,39 @@ namespace HB.Cheat.Editor
             return profile != null && profile.scriptingDefines != null ? profile.scriptingDefines : Array.Empty<string>();
         }
 
-        public static bool IsEnabled(NamedBuildTarget target)
-        {
-            var defines = GetDefines(target);
-            return defines.Contains(CoreDefine) && defines.Contains(CheatSettings.Load().UserDefine);
-        }
+        public static bool IsEnabled(NamedBuildTarget target) => GetDefines(target).Contains(CoreDefine);
 
-        /// <summary>한쪽만 켜진 상태 (빌드 가드가 실패시킨다)</summary>
-        public static bool IsMismatched(ICollection<string> defines, string userDefine)
-        {
-            return defines.Contains(CoreDefine) != defines.Contains(userDefine);
-        }
+        /// <summary>켜고 끌 때 같이 다루는 심볼 (콘솔이 Assets 설치면 HB_CHEAT_HAS_CONSOLE 포함)</summary>
+        public static string[] GetManagedDefines(bool includeConsole) =>
+            includeConsole ? new[] { CoreDefine, ConsoleDefine } : new[] { CoreDefine };
 
         public static void SetEnabled(NamedBuildTarget target, bool enabled)
         {
-            string userDefine = CheatSettings.Load().UserDefine;
             var defines = GetDefines(target);
 
             if (enabled)
             {
                 defines.Add(CoreDefine);
-                defines.Add(userDefine);
                 if (NeedsManualConsoleDefine()) defines.Add(ConsoleDefine);
             }
             else
             {
                 defines.Remove(CoreDefine);
-                defines.Remove(userDefine);
                 defines.Remove(ConsoleDefine);
             }
 
             PlayerSettings.SetScriptingDefineSymbols(target, defines.OrderBy(d => d, StringComparer.Ordinal).ToArray());
-            Debug.Log($"[HB_Cheat] {target.TargetName}: cheats {(enabled ? "ON" : "OFF")} ({CoreDefine}, {userDefine})");
+            Debug.Log($"[HB_Cheat] {target.TargetName}: cheats {(enabled ? "ON" : "OFF")} ({CoreDefine})");
+
+            CheatBuildDefineSync.SyncPlatformOf(target);
         }
 
-        /// <summary>
-        /// 프로젝트 심볼 이름을 바꿀 때 기존 이름을 새 이름으로 교체한다.
-        /// 지금 창에 보이는 대상만이 아니라 옛 이름이 남아 있는 모든 플랫폼을 바꾼다
-        /// (예전에 WebGL에서 켜 둔 뒤 다른 플랫폼으로 바꿨어도 WebGL에 옛 이름이 남아 MISMATCH가 되지 않게).
-        /// </summary>
-        public static void RenameUserDefine(string oldDefine, string newDefine)
-        {
-            if (string.IsNullOrWhiteSpace(oldDefine) || string.IsNullOrWhiteSpace(newDefine) || oldDefine == newDefine) return;
+        // 1.0.x API. 1.1.0에서 프로젝트 심볼을 HB_CHEAT 하나로 합쳐 의미가 없어졌다 (이 API를 쓰던 프로젝트 에디터 코드가 바로 깨지지 않도록 한 버전 남김)
+        [Obsolete("Cheat defines are merged into HB_CHEAT (1.1.0). There is no separate project define.")]
+        public static bool IsMismatched(ICollection<string> defines, string userDefine) => false;
 
-            foreach (var target in GetAllNamedTargets())
-            {
-                var defines = GetDefines(target);
-                if (!defines.Remove(oldDefine)) continue;
-                defines.Add(newDefine);
-                PlayerSettings.SetScriptingDefineSymbols(target, defines.OrderBy(d => d, StringComparer.Ordinal).ToArray());
-            }
-        }
+        [Obsolete("Cheat defines are merged into HB_CHEAT (1.1.0). There is no project define to rename.")]
+        public static void RenameUserDefine(string oldDefine, string newDefine) { }
 
         /// <summary> 심볼을 가질 수 있는 모든 플랫폼 (BuildTargetGroup 값 + Dedicated Server). 쓰지 않는 · 없어진 그룹은 건너뛴다 </summary>
         internal static List<NamedBuildTarget> GetAllNamedTargets()

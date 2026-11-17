@@ -2,9 +2,8 @@
 
 HB_Cheat 치트를 종류별로 모은 예제입니다.
 
-- 치트 파일은 모두 `#if DEV_CHEAT`로 감싸 있어서, 치트 심볼이 꺼져 있으면 컴파일되지 않습니다.
+- 치트 파일은 모두 `#if HB_CHEAT`로 감싸 있어서, 치트 심볼이 꺼져 있으면 컴파일되지 않습니다.
 - `ExampleGameData.cs`는 치트가 아니라 가짜 게임 코드라서 감싸지 않습니다.
-- 프로젝트 심볼 이름(`User Define`)을 `DEV_CHEAT`가 아닌 이름으로 바꿨다면 샘플 파일의 `#if DEV_CHEAT`도 같이 바꿔야 합니다.
 
 샘플에는 asmdef가 없으므로 Assembly-CSharp로 컴파일됩니다.
 

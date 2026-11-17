@@ -45,11 +45,11 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
 ## 시작하기
 
 1. `Tools > HB > Cheat`를 엽니다. 탭은 **Settings** · **Cheats** 두 개입니다.
-2. **Settings** 탭의 **Cheat Defines**에서 플랫폼별 `Turn On`을 누릅니다.
+2. **Settings** 탭의 **Cheat Define**에서 플랫폼별 `Turn On`을 누릅니다.
    - 줄은 Standalone · Android · iOS입니다. 현재 활성 플랫폼이 그 밖이면(WebGL · Dedicated Server 등) 그 플랫폼 줄도 보입니다.
-   - `HB_CHEAT`(패키지)와 `DEV_CHEAT`(프로젝트)가 함께 켜집니다.
-   - `DEV_CHEAT`는 이름을 바꿀 수 있습니다. 영문자 · 숫자 · `_`만 쓰고 숫자로 시작할 수 없습니다. 규칙에 안 맞으면 경고 후 `DEV_CHEAT`를 씁니다.
-   - 상태는 `ON` / `OFF` / `MISMATCH`(한쪽만 켜짐)로 보입니다.
+   - 심볼은 `HB_CHEAT` 하나입니다. 패키지와 프로젝트 치트 코드가 같은 심볼을 씁니다.
+   - HB_Build가 있으면 DefineContainer에도 반영합니다 ([HB_Build DefineContainer 연동](manual/editor.md#hb_build-definecontainer-연동)).
+   - 1.0.x에서 올리면 옛 프로젝트 심볼(`DEV_CHEAT` 등)을 한 번 지웁니다 ([1.0.x에서 올리기](manual/editor.md#10x에서-올리기)).
 3. 설정 에셋이 없으면 기본값으로 동작합니다.
    `Create Settings Asset`을 누르면 `Assets/Editor/HBCheat/HBCheatSettings.asset`을 만듭니다 (Editor 폴더라 빌드에 들어가지 않음).
 4. `Class Name`을 적고 `Create Cheat File`로 치트 파일을 만듭니다. 생성 위치는 `Cheat Folder`(기본 `Assets/Cheats`)입니다.
@@ -59,7 +59,7 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
    - InGameConsole이 있으면 콘솔의 `Cheat` 탭으로 들어갑니다.
 
 ```csharp
-#if DEV_CHEAT   // Assembly-CSharp에 둘 때 (asmdef 방식이면 필요 없음)
+#if HB_CHEAT   // Assembly-CSharp에 둘 때 (asmdef 방식이면 필요 없음)
 using System.Collections.Generic;
 using HB.Cheat;
 

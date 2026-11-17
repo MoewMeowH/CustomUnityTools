@@ -7,9 +7,9 @@
 | 패키지 런타임 (`HB.Cheat`) | asmdef `defineConstraints: HB_CHEAT` |
 | 패키지 에디터 생성기 · CLI · 콘솔 연동 · 테스트 | 각 asmdef `defineConstraints`에 `HB_CHEAT` (아래 설명) |
 | 패키지 에디터 기본 (`HB.Cheat.Editor`) | 심볼과 무관하게 컴파일되는 Editor 전용 어셈블리입니다 (설정 창, 심볼 관리, 빌드 가드, runInBackground 복원). |
-| 치트 코드 (Assembly-CSharp) | 파일 전체를 `#if DEV_CHEAT`로 감쌉니다 (템플릿이 자동으로 넣음). 가드를 빠뜨리면 `HB.Cheat` 타입이 없어 컴파일 에러가 납니다. |
-| 치트 코드 (asmdef) | `Create Cheat asmdef`로 만든 asmdef는 `HB_CHEAT` + `DEV_CHEAT`를 둘 다 요구합니다. |
-| 생성 레지스트리 | `#if HB_CHEAT && DEV_CHEAT` |
+| 치트 코드 (Assembly-CSharp) | 파일 전체를 `#if HB_CHEAT`로 감쌉니다 (템플릿이 자동으로 넣음). 가드를 빠뜨리면 `HB.Cheat` 타입이 없어 컴파일 에러가 납니다. |
+| 치트 코드 (asmdef) | `Create Cheat asmdef`로 만든 asmdef는 `defineConstraints`로 `HB_CHEAT`를 요구합니다. |
+| 생성 레지스트리 | `#if HB_CHEAT` |
 | UI | USS, UXML, Resources를 쓰지 않고 코드로만 만듭니다. 설정 에셋은 `Assets/Editor`에 둡니다. |
 
 에디터 생성기 · CLI · 콘솔 연동 · 테스트 asmdef는 `HB_CHEAT`에 더해 다음 심볼도 요구합니다.
@@ -24,7 +24,6 @@
 
 1. **빌드 전**
    - 릴리즈 빌드인데 치트 심볼이 켜져 있으면 실패합니다.
-   - 두 심볼 중 하나만 켜져 있으면 릴리즈가 아니어도 실패합니다.
    - 다른 빌드 단계가 심볼을 바꾼 뒤에 검사하도록 늦게(`callbackOrder` 10000) 돕니다.
 2. **스크립트 컴파일 직후** (릴리즈 빌드만)
    - 컴파일된 DLL에 패키지 어셈블리(`HB.Cheat.dll` · `HB.Cheat.*.dll`)가 있으면 실패합니다.
@@ -71,7 +70,7 @@ Development가 아닌 QA 빌드에도 치트가 필요하면 `Treat Non Developm
 
 | 치트 코드 위치 | 심볼 OFF일 때 IDE 표시 |
 |---|---|
-| Assembly-CSharp (`#if DEV_CHEAT`) | `#if` 안쪽이 회색(비활성)으로 보임 |
+| Assembly-CSharp (`#if HB_CHEAT`) | `#if` 안쪽이 회색(비활성)으로 보임 |
 | 치트 전용 asmdef | 치트 파일이 프로젝트 밖 파일로 잡혀 **빨간 에러**로 보임 |
 
 - 치트 전용 asmdef가 빨갛게 보이는 것은 Unity가 그 asmdef의 csproj를 **파일 없이** 만들기 때문입니다.

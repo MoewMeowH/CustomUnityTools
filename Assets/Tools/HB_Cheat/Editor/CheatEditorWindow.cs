@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
@@ -44,6 +45,7 @@ namespace HB.Cheat.Editor
         private void OnProjectChange()
         {
             RefreshConstrainedAsmdefs();
+            m_ContainerStatus = null;
             Repaint();
         }
 
@@ -118,36 +120,38 @@ namespace HB.Cheat.Editor
 
         private void DrawDefineSection()
         {
-            var settings = CheatSettings.Load();
-            EditorGUILayout.LabelField("Cheat Defines", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Cheat Define", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                $"{CheatDefines.CoreDefine} (패키지) + {settings.UserDefine} (프로젝트)를 함께 켜고 끕니다.\n" +
-                "릴리즈 빌드에서 켜져 있거나 한쪽만 켜져 있으면 빌드가 실패합니다.", MessageType.None);
+                $"{CheatDefines.CoreDefine}를 켜고 끕니다. 패키지와 프로젝트 치트 코드가 같은 심볼을 씁니다.\n" +
+                "릴리즈 빌드에서 켜져 있으면 빌드가 실패합니다.", MessageType.None);
 
             // Standalone · Android · iOS + 현재 활성 플랫폼(그 밖이면, 예: WebGL · Dedicated Server)
             foreach (var target in CheatDefines.GetTargets())
             {
-                var defines = CheatDefines.GetDefines(target);
-                bool enabled = defines.Contains(CheatDefines.CoreDefine) && defines.Contains(settings.UserDefine);
-                bool mismatch = CheatDefines.IsMismatched(defines, settings.UserDefine);
+                bool enabled = CheatDefines.IsEnabled(target);
 
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     EditorGUILayout.LabelField(target.TargetName, GUILayout.Width(110));
                     var color = GUI.color;
-                    GUI.color = mismatch ? new Color(1f, 0.6f, 0.3f) : enabled ? new Color(0.5f, 1f, 0.6f) : color;
-                    EditorGUILayout.LabelField(mismatch ? "MISMATCH" : enabled ? "ON" : "OFF", EditorStyles.boldLabel, GUILayout.Width(90));
+                    GUI.color = enabled ? new Color(0.5f, 1f, 0.6f) : color;
+                    EditorGUILayout.LabelField(enabled ? "ON" : "OFF", EditorStyles.boldLabel, GUILayout.Width(90));
                     GUI.color = color;
 
                     if (GUILayout.Button(enabled ? "Turn Off" : "Turn On", GUILayout.Width(90)))
+                    {
                         CheatDefines.SetEnabled(target, !enabled);
+                        m_ContainerStatus = null;
+                        // 상태가 바뀌어 이번 이벤트에서 그릴 컨트롤 수가 Layout 때와 달라질 수 있다
+                        GUIUtility.ExitGUI();
+                    }
                 }
             }
 
-            DrawIdeProjectWarning(settings);
+            DrawIdeProjectWarning();
 
             var profileDefines = CheatDefines.GetActiveProfileDefines();
-            if (profileDefines.Contains(CheatDefines.CoreDefine) || profileDefines.Contains(settings.UserDefine))
+            if (profileDefines.Contains(CheatDefines.CoreDefine))
             {
                 EditorGUILayout.HelpBox("활성 Build Profile의 Scripting Defines에도 치트 심볼이 있습니다. 위 토글은 Player Settings만 바꿉니다.", MessageType.Warning);
             }
@@ -156,19 +160,86 @@ namespace HB.Cheat.Editor
             {
                 EditorGUILayout.HelpBox($"InGameConsole이 UPM 패키지가 아닌 Assets 폴더에 있어 {CheatDefines.ConsoleDefine}를 심볼과 함께 관리합니다.", MessageType.None);
             }
+
+            DrawBuildDefineContainerSection();
+        }
+
+        // HB_Build DefineContainer 상태 캐시. null이면 다시 읽는다 (매 프레임 에셋을 찾지 않도록)
+        private List<CheatBuildDefineSync.EntryStatus> m_ContainerStatus;
+
+        private void OnFocus() => m_ContainerStatus = null;
+
+        /// <summary>HB_Build가 있으면 DefineContainer 항목별 치트 심볼 상태와 맞추기 단추</summary>
+        private void DrawBuildDefineContainerSection()
+        {
+            if (!CheatBuildDefineSync.IsAvailable) return;
+
+            CheatBuildDefineSync.ReadPlayerSettingsState(out bool pcOn, out bool mobileOn);
+            m_ContainerStatus ??= CheatBuildDefineSync.Inspect(pcOn, mobileOn);
+
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField("HB_Build DefineContainer", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "토글하면 그 플랫폼 종류의 DefineContainer 항목에도 반영합니다: PC ← Standalone, MOBILE ← Android 또는 iOS.\n" +
+                "켜면 DEV · QA 항목에 넣고(LIVE 제외), 끄면 DEV · QA · LIVE에서 뺍니다. 있는 항목만 고칩니다.", MessageType.None);
+
+            if (mobileOn && CheatDefines.IsEnabled(NamedBuildTarget.Android) != CheatDefines.IsEnabled(NamedBuildTarget.iOS))
+            {
+                EditorGUILayout.HelpBox("Android · iOS 중 하나만 켜져 있습니다. DefineContainer의 MOBILE 항목은 둘이 같이 쓰므로 다른 쪽 DEV · QA 빌드에도 치트가 들어갑니다.", MessageType.Warning);
+            }
+
+            if (m_ContainerStatus.Count == 0)
+            {
+                EditorGUILayout.LabelField("DefineContainer 항목이 없습니다 (빌드가 Player Settings 심볼을 그대로 씁니다).", EditorStyles.miniLabel);
+                return;
+            }
+
+            foreach (var group in m_ContainerStatus.GroupBy(e => e.AssetPath))
+            {
+                EditorGUILayout.LabelField(group.Key, EditorStyles.miniBoldLabel);
+                foreach (var entry in group)
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        EditorGUILayout.LabelField($"  {entry.BuildType}/{entry.PlatformType}", GUILayout.Width(130));
+                        var color = GUI.color;
+                        bool warn = entry.IsOutOfSync || entry.IsLiveWithCheat;
+                        if (warn) GUI.color = new Color(1f, 0.6f, 0.3f);
+                        string state = entry.HasCheat ? "ON" : "OFF";
+                        if (entry.IsOutOfSync) state += entry.WantCheat == true ? " (맞춰야 함)" : " (꺼야 함)";
+                        else if (entry.IsLiveWithCheat) state += " (LIVE에 치트 심볼)";
+                        EditorGUILayout.LabelField(state, EditorStyles.boldLabel);
+                        GUI.color = color;
+                    }
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(!m_ContainerStatus.Any(e => e.IsOutOfSync)))
+            {
+                if (GUILayout.Button("DefineContainer에 맞추기"))
+                {
+                    CheatBuildDefineSync.Sync(pcOn, mobileOn);
+                    m_ContainerStatus = null;
+                    GUIUtility.ExitGUI();
+                }
+            }
+
+            if (m_ContainerStatus.Any(e => e.IsLiveWithCheat))
+            {
+                EditorGUILayout.HelpBox("LIVE 항목에 치트 심볼이 있습니다. 치트를 켜 둔 동안에는 맞추기가 LIVE를 건드리지 않으니 DefineContainer에서 직접 빼세요 (릴리즈 빌드는 빌드 가드가 막지만, 판정은 릴리즈 규칙을 따릅니다).", MessageType.Warning);
+            }
         }
 
         /// <summary>
         /// 치트 asmdef는 심볼이 꺼지면 Unity가 파일 없는 csproj를 만들어, IDE(Rider 등)에서 치트 파일이 프로젝트 밖으로 잡히고 에러로 표시된다.
         /// </summary>
-        private void DrawIdeProjectWarning(CheatSettings settings)
+        private void DrawIdeProjectWarning()
         {
             if (m_ConstrainedCheatAsmdefs.Length == 0) return;
 
             // 에디터 컴파일이 쓰는 대상 (Dedicated Server면 Server 심볼)
             var activeTarget = CheatDefines.GetActiveTarget();
-            var defines = CheatDefines.GetDefines(activeTarget);
-            if (defines.Contains(CheatDefines.CoreDefine) && defines.Contains(settings.UserDefine)) return;
+            if (CheatDefines.IsEnabled(activeTarget)) return;
 
             EditorGUILayout.HelpBox(
                 $"현재 플랫폼({activeTarget.TargetName})에서 치트 심볼이 꺼져 있어, 다음 asmdef의 치트 코드가 IDE에서 프로젝트 밖 파일로 표시됩니다 (빨간 에러, 실제 Unity 컴파일과는 무관).\n" +
@@ -177,7 +248,11 @@ namespace HB.Cheat.Editor
                 MessageType.Warning);
 
             if (GUILayout.Button($"{activeTarget.TargetName}에서 켜기"))
+            {
                 CheatDefines.SetEnabled(activeTarget, true);
+                m_ContainerStatus = null;
+                GUIUtility.ExitGUI();
+            }
         }
 
         private void DrawSettingsAsset()
@@ -197,7 +272,7 @@ namespace HB.Cheat.Editor
 
             m_SerializedSettings.ApplyModifiedProperties();
 
-            // 레지스트리에 들어가는 값(프로젝트 심볼 포함)이 바뀌었을 때만 심볼 이름 변경 · 저장 · 재생성
+            // 레지스트리에 들어가는 값이 바뀌었을 때만 저장 · 재생성
             // (리스트 칸처럼 글자마다 바뀌는 것은 포커스를 잃거나 창을 닫을 때 저장)
             if (changed) CheatSettingsWatcher.NotifyChanged();
 
@@ -216,7 +291,7 @@ namespace HB.Cheat.Editor
             bool inAssemblyCSharp = CheatFileTemplates.IsAssemblyCSharp(cheatFolder);
             EditorGUILayout.HelpBox(
                 inAssemblyCSharp
-                    ? $"'{cheatFolder}'는 Assembly-CSharp입니다. 치트 파일은 '#if {settings.UserDefine}'로 감싸서 만듭니다."
+                    ? $"'{cheatFolder}'는 Assembly-CSharp입니다. 치트 파일은 '#if {CheatDefines.CoreDefine}'로 감싸서 만듭니다."
                     : $"'{cheatFolder}'는 '{CheatFileTemplates.AssemblyOf(cheatFolder)}' 어셈블리입니다. asmdef의 defineConstraints로 제외됩니다.",
                 MessageType.None);
 

@@ -1,4 +1,4 @@
-#if DEV_CHEAT
+#if HB_CHEAT
 using System.Collections.Generic;
 using HB.Cheat;
 using UnityEngine.SceneManagement;

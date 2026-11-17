@@ -46,6 +46,7 @@ namespace HB.Cheat.Tests
             Assert.AreEqual(expected, CheatCodeGenerator.Str(input));
         }
 
+        // 1.0.x User Define 값 → 지울 옛 심볼 (1.0.x처럼 잘못된 이름은 기본값으로 본다)
         [TestCase("DEV_CHEAT", "DEV_CHEAT")]
         [TestCase("  QA_CHEAT2  ", "QA_CHEAT2")]
         [TestCase("_cheat", "_cheat")]
@@ -54,20 +55,11 @@ namespace HB.Cheat.Tests
         [TestCase("1ST_CHEAT", "DEV_CHEAT")]
         [TestCase("A;B", "DEV_CHEAT")]
         [TestCase("", "DEV_CHEAT")]
-        public void UserDefine_InvalidNameFallsBackToDefault(string value, string expected)
+        [TestCase(null, "DEV_CHEAT")]
+        [TestCase("HB_CHEAT", null)]
+        public void ResolveLegacyDefine_InvalidNameFallsBackToDefault(string value, string expected)
         {
-            var settings = UnityEngine.ScriptableObject.CreateInstance<CheatSettings>();
-            try
-            {
-                var so = new UnityEditor.SerializedObject(settings);
-                so.FindProperty("userDefine").stringValue = value;
-                so.ApplyModifiedPropertiesWithoutUndo();
-                Assert.AreEqual(expected, settings.UserDefine);
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(settings);
-            }
+            Assert.AreEqual(expected, CheatDefineMigration.ResolveLegacyDefine(value));
         }
 
         [TestCase(float.NaN)]

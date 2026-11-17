@@ -1,4 +1,4 @@
-#if DEV_CHEAT
+#if HB_CHEAT
 using HB.Cheat;
 using UnityEngine;
 

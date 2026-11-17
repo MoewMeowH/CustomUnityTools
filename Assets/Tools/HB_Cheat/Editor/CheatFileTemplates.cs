@@ -33,7 +33,7 @@ namespace HB.Cheat.Editor
         public static bool IsAssemblyCSharp(string folder) => AssemblyOf(folder) == "Assembly-CSharp";
 
         /// <summary>
-        /// 치트 카테고리 파일 생성. Assembly-CSharp 폴더면 파일 전체를 프로젝트 심볼로 감싼다 (asmdef면 asmdef의 defineConstraints가 막는다).
+        /// 치트 카테고리 파일 생성. Assembly-CSharp 폴더면 파일 전체를 치트 심볼(HB_CHEAT)로 감싼다 (asmdef면 asmdef의 defineConstraints가 막는다).
         /// 클래스 이름이 C# 식별자가 아니면 ArgumentException. 같은 파일이나 같은 이름의 전역 타입이 있으면 뒤에 번호를 붙인다(ItemCheats2 …).
         /// </summary>
         public static string CreateCheatFile(string folder, string className)
@@ -41,7 +41,6 @@ namespace HB.Cheat.Editor
             string error = ValidateClassName(className);
             if (error != null) throw new ArgumentException(error);
 
-            var settings = CheatSettings.Load();
             Directory.CreateDirectory(folder);
             string requested = className;
             className = UniqueClassName(folder, requested);
@@ -56,7 +55,7 @@ namespace HB.Cheat.Editor
             string idPrefix = category.ToLowerInvariant();
 
             var sb = new StringBuilder();
-            if (guard) sb.AppendLine($"#if {settings.UserDefine}");
+            if (guard) sb.AppendLine($"#if {CheatDefines.CoreDefine}");
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using HB.Cheat;");
             sb.AppendLine("using UnityEngine;");
@@ -209,8 +208,7 @@ namespace HB.Cheat.Editor
             sb.AppendLine("    \"precompiledReferences\": [],");
             sb.AppendLine("    \"autoReferenced\": false,");
             sb.AppendLine("    \"defineConstraints\": [");
-            sb.AppendLine($"        \"{CheatDefines.CoreDefine}\",");
-            sb.AppendLine($"        \"{settings.UserDefine}\"");
+            sb.AppendLine($"        \"{CheatDefines.CoreDefine}\"");
             sb.AppendLine("    ],");
             sb.AppendLine("    \"versionDefines\": [],");
             sb.AppendLine("    \"noEngineReferences\": false");

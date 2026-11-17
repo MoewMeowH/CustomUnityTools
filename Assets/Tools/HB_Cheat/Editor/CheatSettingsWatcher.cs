@@ -22,8 +22,6 @@ namespace HB.Cheat.Editor
 
         // 마지막으로 반영한 레지스트리 입력값. null이면 아직 모름 (변경 알림이 오면 생성을 시도하고, 같으면 생성기가 쓰지 않는다)
         private static string s_LastInputs;
-        // 마지막으로 본 프로젝트 심볼 이름 (어느 경로로 바뀌든 PlayerSettings 심볼을 같이 바꾸기 위해)
-        private static string s_LastUserDefine;
         // 설정 에셋 guid 캐시. null이면 다시 찾는다, ""이면 에셋 없음. 에셋 속성 변경 이벤트마다 FindAssets를 하지 않도록 임포트 · 삭제 때만 비운다
         private static string s_SettingsGuid;
 
@@ -40,7 +38,6 @@ namespace HB.Cheat.Editor
             {
                 var settings = CheatSettings.Load();
                 s_LastInputs ??= settings.RegistryInputs;
-                s_LastUserDefine ??= settings.UserDefine;
             };
         }
 
@@ -57,8 +54,6 @@ namespace HB.Cheat.Editor
             if (inputs == s_LastInputs) return;
             s_LastInputs = inputs;
 
-            SyncUserDefine(settings.UserDefine);
-
             if (save && !string.IsNullOrEmpty(AssetDatabase.GetAssetPath(settings)))
                 AssetDatabase.SaveAssetIfDirty(settings);
             RequestRegenerate();
@@ -66,19 +61,6 @@ namespace HB.Cheat.Editor
 
         /// <summary>설정 에셋이 생기거나 지워졌을 수 있다 → guid를 다시 찾게 한다</summary>
         internal static void InvalidateSettingsGuid() => s_SettingsGuid = null;
-
-        // 레지스트리는 #if {UserDefine}으로 감싸므로, 에셋 값만 바뀌고 PlayerSettings 심볼이 그대로면 치트가 통째로 컴파일에서 빠진다.
-        // 설정 창 · Inspector · Undo · VCS 어느 경로든 같이 바꾼다 (옛 이름이 심볼에 없으면 RenameUserDefine은 아무것도 하지 않는다)
-        private static void SyncUserDefine(string userDefine)
-        {
-            string previous = s_LastUserDefine;
-            s_LastUserDefine = userDefine;
-            if (previous == null || previous == userDefine) return;
-
-            CheatDefines.RenameUserDefine(previous, userDefine);
-            UnityEngine.Debug.LogWarning($"[HB_Cheat] Project define renamed {previous} → {userDefine}. " +
-                                         "Update '#if' guards in cheat files and defineConstraints in cheat asmdefs.");
-        }
 
         private static void RequestRegenerate()
         {

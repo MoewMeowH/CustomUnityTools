@@ -25,11 +25,11 @@ namespace HB.Cheat.Editor
     public class CheatSettings : ScriptableObject
     {
         public const string DefaultAssetPath = "Assets/Editor/HBCheat/HBCheatSettings.asset";
-        public const string DefaultUserDefine = "DEV_CHEAT";
+        /// <summary>1.0.x의 프로젝트 심볼 기본 이름 (1.1.0에서 HB_CHEAT 하나로 합침. 옛 심볼 정리용)</summary>
+        internal const string LegacyDefaultUserDefine = "DEV_CHEAT";
 
-        [Header("Define")]
-        [Tooltip("프로젝트 치트 코드용 심볼. 패키지는 HB_CHEAT를 쓰며 둘은 항상 함께 켜고 끈다. 영문자 · 숫자 · '_'만 (숫자로 시작 불가), 아니면 DEV_CHEAT를 쓴다.")]
-        [Delayed] [SerializeField] private string userDefine = DefaultUserDefine;
+        // 1.0.x의 프로젝트 심볼 이름. 옛 심볼을 한 번 지울 때 읽고 비운다 (CheatDefineMigration)
+        [HideInInspector] [SerializeField] private string userDefine = string.Empty;
 
         [Header("Code")]
         [Tooltip("치트 파일을 만들 기본 폴더")]
@@ -67,25 +67,22 @@ namespace HB.Cheat.Editor
         [Tooltip("릴리즈 빌드에서 컴파일된 스크립트 어셈블리를 하나도 검사하지 못하면 빌드를 실패시킨다")]
         [SerializeField] private bool failWhenUnverifiable = true;
 
-        public string UserDefine
+        // 1.0.x API. 1.1.0에서 HB_CHEAT 하나로 합쳤다 (이 API를 쓰던 프로젝트 에디터 코드가 바로 깨지지 않도록 한 버전 남김)
+        [System.Obsolete("Cheat defines are merged into HB_CHEAT (1.1.0). Use CheatDefines.CoreDefine.")]
+        public const string DefaultUserDefine = CheatDefines.CoreDefine;
+
+        [System.Obsolete("Cheat defines are merged into HB_CHEAT (1.1.0). Use CheatDefines.CoreDefine.")]
+        public string UserDefine => CheatDefines.CoreDefine;
+
+        /// <summary>1.0.x 설정 에셋에 남은 프로젝트 심볼 이름 (없으면 빈 문자열)</summary>
+        internal string LegacyUserDefine => userDefine?.Trim() ?? string.Empty;
+
+        internal void ClearLegacyUserDefine()
         {
-            get
-            {
-                if (string.IsNullOrWhiteSpace(userDefine)) return DefaultUserDefine;
-                string trimmed = userDefine.Trim();
-                if (IsValidDefine(trimmed)) return trimmed;
-
-                // 생성 코드 #if가 깨지거나(공백 · 하이픈) PlayerSettings에서 둘로 쪼개지는(;) 이름 → 기본값
-                if (s_WarnedInvalidDefine != trimmed)
-                {
-                    s_WarnedInvalidDefine = trimmed;
-                    Debug.LogWarning($"[HB_Cheat] Project define '{trimmed}' is not a valid symbol name (letters, digits, '_', not starting with a digit). Using '{DefaultUserDefine}'.");
-                }
-                return DefaultUserDefine;
-            }
+            if (string.IsNullOrEmpty(userDefine)) return;
+            userDefine = string.Empty;
+            EditorUtility.SetDirty(this);
         }
-
-        private static string s_WarnedInvalidDefine;
 
         /// <summary>전처리기 심볼로 쓸 수 있는 이름인지 (ASCII 영문자 · 숫자 · '_', 숫자로 시작하지 않음)</summary>
         internal static bool IsValidDefine(string name)
@@ -194,7 +191,7 @@ namespace HB.Cheat.Editor
 
         /// <summary>생성 레지스트리 코드에 들어가는 값 (바뀌었는지 비교용)</summary>
         internal string RegistryInputs => string.Join("|",
-            UserDefine, AssemblyCSharpOutputFolder, AutoGenerate, InitMode, PreferConsoleTab, ShowFloatingButton,
+            AssemblyCSharpOutputFolder, AutoGenerate, InitMode, PreferConsoleTab, ShowFloatingButton,
             ToggleKey, ServerTimeoutSeconds.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
             HistoryCapacity, PersistAcrossScenes, AllowRawFromAutomation);
 

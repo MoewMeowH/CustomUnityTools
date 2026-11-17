@@ -54,6 +54,8 @@ Windows 64bit, Android (APK/AAB), iOS 빌드를 지원합니다.
 심볼은 `PlayerSettings.SetScriptingDefineSymbols`로 빌드 타깃 그룹에 씁니다 (빌드 뒤 복원).
 찾는 순서와 실패 조건은 [전처리기 심볼](build-behavior.md#전처리기-심볼)에 있습니다.
 
+HB_Cheat(`com.hb.cheat`)가 있으면 치트 창에서 치트를 켜고 끌 때 DEV · QA 항목의 `HB_CHEAT`를 같이 넣고 뺍니다 (끄면 LIVE에서도 뺍니다. 이미 있는 항목만).
+
 ## 환경별 씬 제외 (`SceneDefine`)
 
 빌드 타입마다 빌드에서 뺄 씬을 정합니다.

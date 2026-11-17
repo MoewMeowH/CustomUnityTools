@@ -18,18 +18,39 @@ Runtime 값은 Init Mode, Prefer Console Tab, Show Floating Button, 열기 키, 
 - Input System 키보드에 없는 키면 Play 중에 경고 후 끕니다.
 - 키를 읽을 입력 시스템이 없으면(Active Input Handling이 Input System인데 패키지가 없는 등) 키 이름과 따로 그 사실을 경고합니다.
 
-### 프로젝트 심볼 이름 바꾸기
+### HB_Build DefineContainer 연동
 
-프로젝트 심볼 이름(`User Define`)을 바꾸면 옛 이름이 있는 모든 플랫폼의 PlayerSettings 심볼도 새 이름으로 바꿉니다.
-대상은 Standalone · Android · iOS · Dedicated Server · 예전에 켜 둔 WebGL 등입니다.
+HB_Build(`com.hb.custombuild`)가 있으면 치트를 켜고 끌 때 `Assets` 아래 모든 DefineContainer(`ProjectDefine`) 에셋에도 반영합니다.
+토글은 그 플랫폼 종류(PC 또는 MOBILE) 항목만 고칩니다. WebGL · Dedicated Server 토글은 DefineContainer를 건드리지 않습니다.
+HB_Build는 빌드 때 DefineContainer 항목이 있으면 그 목록으로 심볼을 통째로 바꾸므로, Player Settings만 켜면 그 빌드에서 치트가 빠지기 때문입니다.
 
-치트 파일의 `#if`와 치트 asmdef의 `defineConstraints`는 직접 고쳐야 합니다 (Console에 경고).
+| DefineContainer 항목 | 따르는 플랫폼 | 켜짐 | 꺼짐 |
+|---|---|---|---|
+| `DEV` · `QA` / `PC` | Standalone | `HB_CHEAT` 추가 | `HB_CHEAT` 제거 |
+| `DEV` · `QA` / `MOBILE` | Android **또는** iOS | `HB_CHEAT` 추가 | `HB_CHEAT` 제거 |
+| `LIVE` / `PC` · `MOBILE` | 위와 같음 | 그대로 (넣지 않음) | `HB_CHEAT` 제거 |
+
+- 이미 있는 항목만 고칩니다. 항목이 없으면 빌드가 Player Settings 심볼을 그대로 쓰므로 새로 만들지 않습니다.
+- 콘솔이 Assets 폴더에 있으면 `HB_CHEAT_HAS_CONSOLE`도 함께 넣고 뺍니다.
+- MOBILE 항목은 Android · iOS가 같이 씁니다. 둘 중 하나만 켜져 있으면 다른 쪽 DEV · QA 빌드에도 치트가 들어갑니다 (창에 경고).
+- Settings 탭의 **HB_Build DefineContainer** 절에 항목별 상태가 보입니다. DefineContainer를 손으로 고쳐 어긋났으면 `DefineContainer에 맞추기`를 누릅니다 (PC · MOBILE 전체를 Player Settings 상태로 맞춤).
+- LIVE 항목에 `HB_CHEAT`가 있으면 경고합니다. 치트를 켜 둔 동안에는 맞추기가 LIVE를 건드리지 않으니 직접 빼세요.
+- HB_Build 어셈블리를 참조하지 않고 타입 전체 이름(`HB.CustomBuild.Editor.ProjectDefine`)으로 찾습니다. HB_Build가 UPM 패키지든 Assets 폴더든, asmdef 이름이 달라도 동작합니다.
+
+### 1.0.x에서 올리기
+
+1.0.x는 `HB_CHEAT`와 프로젝트 심볼(`User Define`, 기본 `DEV_CHEAT`)을 함께 썼습니다. 1.1.0부터 `HB_CHEAT` 하나만 씁니다.
+
+에디터를 처음 열 때 한 번 다음을 합니다 (배치 모드에서는 하지 않음).
+
+- 모든 플랫폼의 Player Settings와 DefineContainer에서 **`HB_CHEAT`와 함께 켜진** 옛 심볼을 지웁니다.
+- 옛 심볼을 `#if` · `#elif` · `[Conditional]`로 쓰는 `.cs` 파일, `defineConstraints`(식 포함)로 요구하는 asmdef, 활성 Build Profile의 심볼을 Console 경고로 알립니다 (`Assets` 아래만). 파일은 고치지 않으니 옛 이름을 `HB_CHEAT`로 바꾸세요. 바꾸지 않으면 그 치트는 에러 없이 컴파일에서 빠집니다.
+- 끝나면 `ProjectSettings/HB_Cheat.DefineMerged.txt`를 남깁니다. 이 파일이 있으면 다시 하지 않습니다 (Git에 올려 팀이 공유).
 
 ## 설정 항목 (Settings 탭)
 
 | 묶음 | 항목 | 기본값 | 내용 |
 |---|---|---|---|
-| Define | `User Define` | `DEV_CHEAT` | 프로젝트 치트 코드용 심볼. `HB_CHEAT`와 항상 함께 켜고 끕니다. |
 | Code | `Cheat Folder` | `Assets/Cheats` | `Create Cheat File` · `Create Cheat asmdef`가 파일을 만드는 폴더입니다. |
 | Code | `Assembly C Sharp Output Folder` | `Assets/Cheats/Generated` | Assembly-CSharp에 있는 치트의 레지스트리 생성 폴더입니다. |
 | Code | `Cheat Asmdef Name` | `Game.Cheats` | `Create Cheat asmdef`가 만드는 asmdef 이름입니다. |
@@ -82,7 +103,7 @@ Runtime 값은 Init Mode, Prefer Console Tab, Show Floating Button, 열기 키, 
 - 겹침으로 보는 것: 같은 파일, 같은 이름의 전역 타입, 같은 이름의 스크립트 파일 (심볼이 꺼져 컴파일되지 않은 치트 파일과 예제 Provider 포함)
 - 이때 분류와 id에도 번호가 붙습니다 (`ItemCheats2` → `Item2/Log`, id `item2.log`).
 
-폴더가 Assembly-CSharp면 파일 전체를 `#if <User Define>`로 감쌉니다.
+폴더가 Assembly-CSharp면 파일 전체를 `#if HB_CHEAT`로 감쌉니다.
 asmdef 폴더면 감싸지 않습니다 (asmdef의 `defineConstraints`가 막음). 설정 화면에 그 폴더가 어느 어셈블리인지 보입니다.
 
 ### Create Cheat asmdef
@@ -91,7 +112,7 @@ asmdef 폴더면 감싸지 않습니다 (asmdef의 `defineConstraints`가 막음
 
 - `Cheat Asmdef Name`으로 asmdef를 만듭니다.
 - 참조: `HB.Cheat` + `Cheat Asmdef References`
-- `defineConstraints`: `HB_CHEAT` + `User Define`
+- `defineConstraints`: `HB_CHEAT`
 - 이미 있으면 경고만 냅니다.
 
 ## 레지스트리 생성

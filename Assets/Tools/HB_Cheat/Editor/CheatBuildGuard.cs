@@ -11,7 +11,7 @@ namespace HB.Cheat.Editor
 {
     /// <summary>
     /// 릴리즈 빌드에 치트가 들어가지 않도록 막는다.
-    /// 1) 빌드 전: 릴리즈인데 치트 심볼이 켜져 있거나, 두 심볼(HB_CHEAT / 프로젝트 심볼) 중 하나만 켜져 있으면 실패.
+    /// 1) 빌드 전: 릴리즈인데 치트 심볼(HB_CHEAT)이 켜져 있으면 실패.
     /// 2) 스크립트 컴파일 직후: 릴리즈인데 컴파일 결과에 HB.Cheat 어셈블리나 그 참조가 있으면 실패 (심볼 설정과 무관하게 결과물 기준).
     /// 이 검사는 산출물을 만들기 전에 멈추는 장치이고, 배포 단계(CI)의 검사를 대신하지 않는다.
     /// </summary>
@@ -27,27 +27,18 @@ namespace HB.Cheat.Editor
 
         public void OnPreprocessBuild(BuildReport report)
         {
-            var settings = CheatSettings.Load();
             var defines = CollectDefines(report);
             bool hasCore = defines.Contains(CheatDefines.CoreDefine);
-            bool hasUser = defines.Contains(settings.UserDefine);
-
-            if (hasCore != hasUser)
-            {
-                throw new BuildFailedException(
-                    $"[HB_Cheat] Define mismatch: {CheatDefines.CoreDefine}={(hasCore ? "ON" : "OFF")}, {settings.UserDefine}={(hasUser ? "ON" : "OFF")}. " +
-                    "Turn both on or both off (Tools > HB > Cheat).");
-            }
 
             if (IsRelease(report, defines, out string reason))
             {
                 if (hasCore)
                 {
                     throw new BuildFailedException(
-                        $"[HB_Cheat] Release build ({reason}) with cheat defines ON ({CheatDefines.CoreDefine}, {settings.UserDefine}). " +
+                        $"[HB_Cheat] Release build ({reason}) with cheat define ON ({CheatDefines.CoreDefine}). " +
                         "Turn cheats off for this build target or change the release rule in Tools > HB > Cheat.");
                 }
-                Debug.Log($"[HB_Cheat] Release build ({reason}): cheat defines are OFF.");
+                Debug.Log($"[HB_Cheat] Release build ({reason}): cheat define is OFF.");
             }
             else if (hasCore)
             {
