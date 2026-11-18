@@ -65,7 +65,7 @@ namespace HB.CustomBuild.Editor
             BuildHelper.Log($"[Xcode] '{settings.name}' plan checked: {plan.Describe().Count} change(s) to apply after the build.");
         }
 
-        private const string SNAPSHOT_KEY = "XcodeSettings.Snapshot";
+        internal const string SNAPSHOT_KEY = "XcodeSettings.Snapshot";
 
         public virtual void OnPostBuild(BuildContext context)
         {
@@ -105,17 +105,8 @@ namespace HB.CustomBuild.Editor
 
         protected virtual HBXcodeSettings LoadSettings(BuildContext context)
         {
-            // 프로필 · 창이 넘긴 값이 있으면 그것만 쓴다. 깨진 참조(Missing)나 다른 타입(CustomEntries의 같은 키)을 조용히 건너뛰지 않는다
-            if (context.CustomData.TryGetValue(CUSTOM_DATA_KEY, out object value))
-            {
-                if (value is not HBXcodeSettings settings)
-                    throw BuildHelper.ThrowError($"[Xcode] CustomData '{CUSTOM_DATA_KEY}' is a {value?.GetType().Name ?? "null"}, not an HBXcodeSettings asset (CustomEntries must not use this key).");
-                // UnityEngine.Object는 == null로 판정한다 (참조는 있는데 null이면 삭제 · Missing)
-                if (settings == null)
-                    throw BuildHelper.ThrowError("[Xcode] The build profile references an XcodeSettings asset that is missing (deleted or broken reference). Fix the reference or clear the slot.");
-                return settings;
-            }
-            return HBXcodeSettings.LoadIfExists(context);
+            // 프로필 슬롯만 본다 (비었으면 건너뜀). 깨진 참조(Missing)나 다른 타입을 조용히 건너뛰지 않는다
+            return BuildHelper.GetSettingsAsset<HBXcodeSettings>(context, CUSTOM_DATA_KEY);
         }
 
         private static XcodePlanInput CreateInput(BuildContext context) => new XcodePlanInput

@@ -38,32 +38,29 @@ namespace HB.CustomBuild.Editor
     #endif
     public static class BuildHelper
     {
-        public const string BUILD_TARGET = "buildTarget";
-        public const string BUILD_TYPE = "buildType";
+        public const string BUILD_PROFILE = "buildProfile";
+        // 프로필 값을 덮어쓸 수 있는 인자는 이 셋뿐이다 (나머지 빌드 설정은 프로필에 커밋되어야 추적된다)
         public const string BUILD_VERSION = "buildVersion";
         public const string VERSION_CODE = "versionCode";
-        public const string IS_AAB = "isAab";
-        public const string SCENE_LIST = "sceneList";
         public const string DEV_BUILD = "devBuild";
-        public const string AUTO_PROF = "autoProfile";
-        public const string DEEP_PROF = "deepProfile";
-        public const string CLEAN_BUILD = "cleanBuild";
-        public const string OUTPUT_PATH = "outputPath";
-        public const string ZIP_PACKAGE = "zipPackage";
-        public const string BUILD_PROFILE = "buildProfile";
-        public const string DISABLED_STEPS = "disabledSteps";
+
+        /// <summary> 예전에 받던 빌드 인자. 넘기면 조용히 무시하지 않고 실패시킨다 (값이 바뀐 줄 알지 않게) </summary>
+        internal static readonly string[] REMOVED_ARGS =
+        {
+            "buildType", "isAab", "zipPackage", "deepProfile", "cleanBuild", "disabledSteps", "sceneList", "outputPath", "autoProfile"
+        };
 
         public const string USER_BUILD_DATA_DIR = "Assets/Editor/HBBuild";
         public const string USER_PROFILES_DIR = "Assets/Editor/HBBuild/Profiles";
         public const string USER_DEFINE_CONTAINER_PATH = "Assets/Editor/HBBuild/DefineContainer.asset";
         public const string USER_SCENE_DEFINE_PATH = "Assets/Editor/HBBuild/SceneDefine.asset";
         public const string USER_XCODE_SETTINGS_PATH = "Assets/Editor/HBBuild/XcodeSettings.asset";
-        public const string NONE_SCENE_LIST = "NONE";
+        /// <summary> 빌드 산출물 폴더 (프로젝트 루트 기준). 출력은 항상 이 아래 &lt;Target&gt; 폴더 </summary>
+        public const string BUILD_OUTPUT_DIR = "BuildOutput";
 
         private static List<string> s_Args = new List<string>();
         private const string LOG_HEAD = "[HB_Build]";
 
-        public static bool IsAutoProfile = false;
         public static string ProjectPath = string.Empty;
 
     #if UNITY_EDITOR
@@ -71,7 +68,6 @@ namespace HB.CustomBuild.Editor
         private static void ResetStaticsOnDomainReload()
         {
             s_Args = new List<string>();
-            IsAutoProfile = false;
             ProjectPath = string.Empty;
         }
     #endif
@@ -87,14 +83,25 @@ namespace HB.CustomBuild.Editor
             Log($"Command Line Args Count: {s_Args.Count}");
         }
 
-        public static void ReadDevBuildState()
+        /// <summary>
+        /// 배치 빌드 인자를 빌드 시작 전에 검사한다: 없앤 인자가 있거나 -devBuild 값이 틀리면 실패 (값 자체는 덮어쓸 때 다시 읽음).
+        /// </summary>
+        public static void ValidateArgs()
         {
-            // 잘못된 값은 조용히 무시하지 않고 빌드 시작 전에 실패시킨다 (TryGetBoolArg가 예외를 던짐)
-            // devBuild · deepProfile · cleanBuild 값 자체는 BuildContext를 만들 때 다시 읽는다
+            var removed = REMOVED_ARGS.Where(HasArg).Select(a => "-" + a).ToList();
+            if (removed.Count > 0)
+                throw ThrowError($"{string.Join(", ", removed)} is no longer supported. Set it in the build profile " +
+                                 $"(only -{BUILD_VERSION}, -{VERSION_CODE}, -{DEV_BUILD} can override the profile).");
             TryGetBoolArg(DEV_BUILD, out _);
-            TryGetBoolArg(DEEP_PROF, out _);
-            TryGetBoolArg(CLEAN_BUILD, out _);
-            if (TryGetBoolArg(AUTO_PROF, out bool autoProf)) IsAutoProfile = autoProf;
+        }
+
+        /// <summary> -buildProfile 값. 배치 빌드는 프로필이 필수다 (없거나 비면 실패) </summary>
+        public static string GetRequiredProfileArg()
+        {
+            string profile = GetArg(BUILD_PROFILE);
+            if (string.IsNullOrWhiteSpace(profile))
+                throw ThrowError($"-{BUILD_PROFILE} <asset path> is required. Every build runs from a build profile asset.");
+            return profile;
         }
 
         public static void ReadEnvironment()
@@ -187,11 +194,11 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
-        /// 기본 출력 경로 (프로젝트 루트 기준 상대 경로). 절대 경로를 프로필에 저장하지 않도록 상대 경로로 반환합니다.
+        /// 출력 경로 BuildOutput/&lt;Target&gt; (프로젝트 루트 기준 상대 경로). 로컬 · Jenkins 모두 이 경로에 만든다.
         /// </summary>
-        public static string GetDefaultOutputPath(BuildTarget target)
+        public static string GetOutputPath(BuildTarget target)
         {
-            return Path.Combine("BuildOutput", target.ToString()).Replace('\\', '/');
+            return Path.Combine(BUILD_OUTPUT_DIR, target.ToString()).Replace('\\', '/');
         }
 
         /// <summary>
@@ -248,42 +255,24 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
-        /// 빌드에 쓸 설정 에셋(DefineContainer · SceneDefine)을 찾습니다.
-        /// 기본 경로에 파일이 있으면 그것을 쓰고(읽지 못하면 실패), 없으면 프로젝트 전체에서 찾습니다.
-        /// 여러 개면 어느 것이 쓰일지 사람이 알 수 없으므로 LIVE는 실패, DEV · QA는 경로 순 첫 번째를 쓰고 경고합니다.
+        /// 프로필 슬롯에서 넘어온 설정 에셋 (CustomData[key]). 슬롯이 비었으면 null — 기본 경로 · 프로젝트에서 찾지 않는다.
+        /// 깨진 참조(Missing, 에셋 삭제)나 다른 타입이면 조용히 건너뛰지 않고 실패한다.
         /// </summary>
-        internal static T LoadSettingsAssetForBuild<T>(string defaultPath, BuildContext context) where T : UnityEngine.Object
+        internal static T GetSettingsAsset<T>(BuildContext context, string key) where T : UnityEngine.Object
         {
-            string typeName = typeof(T).Name;
-            if (File.Exists(defaultPath))
-            {
-                var asset = AssetDatabase.LoadAssetAtPath<T>(defaultPath);
-                if (asset == null)
-                {
-                    // 파일은 있는데 아직 임포트 전일 수 있다 (자동 Refresh 꺼짐, git pull 직후 등)
-                    AssetDatabase.ImportAsset(defaultPath);
-                    asset = AssetDatabase.LoadAssetAtPath<T>(defaultPath);
-                }
-                if (asset == null)
-                    throw ThrowError($"{defaultPath} exists but cannot be loaded as {typeName} (different type, import error, or missing script).");
-                return asset;
-            }
-
-            var paths = FindAssetPaths<T>();
-            if (paths.Count == 0) return null;
-            if (paths.Count > 1)
-            {
-                string list = string.Join(", ", paths);
-                if (context.BuildType == EBuildType.LIVE)
-                    throw ThrowError($"Multiple {typeName} assets found and none at {defaultPath}: {list}. Move the one to use to {defaultPath} or set it in the build profile.");
-                context.AddWarning($"Multiple {typeName} assets found and none at {defaultPath}: {list}. Using '{paths[0]}' (LIVE builds fail on this).");
-            }
-            return AssetDatabase.LoadAssetAtPath<T>(paths[0]);
+            if (!context.CustomData.TryGetValue(key, out object value))
+                return null;
+            if (value is not T asset)
+                throw ThrowError($"CustomData '{key}' is a {value?.GetType().Name ?? "null"}, not an {typeof(T).Name} asset.");
+            // Missing 참조는 관리 객체는 있지만 Unity 비교로 null이다
+            if (asset == null)
+                throw ThrowError($"The build profile slot '{key}' references a {typeof(T).Name} asset that is missing (deleted or broken reference). Assign it again or clear the slot.");
+            return asset;
         }
 
         /// <summary>
-        /// 빌드 밖(창의 자동 연결 등)에서 설정 에셋 찾기: 기본 경로, 없으면 프로젝트에 하나뿐일 때 그것.
-        /// 여러 개면 null (임의로 고르지 않는다 — 빌드 때 LoadSettingsAssetForBuild가 LIVE 실패 · DEV · QA 경고로 처리)
+        /// 새 프로필의 슬롯을 채울 설정 에셋 찾기: 기본 경로, 없으면 프로젝트에 하나뿐일 때 그것. 여러 개면 null (임의로 고르지 않음).
+        /// 빌드는 이 찾기를 쓰지 않고 프로필 슬롯만 본다.
         /// </summary>
         internal static T LoadSettingsAsset<T>(string defaultPath) where T : UnityEngine.Object
         {

@@ -25,13 +25,9 @@ namespace HB.CustomBuild.Editor
         [Tooltip("Files의 *.lproj 폴더 이름으로 Info.plist CFBundleLocalizations를 채운다")]
         [SerializeField] public bool FillLocalizationsFromLproj = true;
 
-        /// <summary> 기본 경로에 있으면 그것, 없으면 프로젝트에 하나뿐일 때 그것 (창의 자동 연결용) </summary>
+        /// <summary> 기본 경로에 있으면 그것, 없으면 프로젝트에 하나뿐일 때 그것 (새 프로필 슬롯 채우기용) </summary>
         public static HBXcodeSettings LoadIfExists() =>
             BuildHelper.LoadSettingsAsset<HBXcodeSettings>(BuildHelper.USER_XCODE_SETTINGS_PATH);
-
-        /// <summary> 빌드용: 기본 경로 우선(읽지 못하면 실패). 기본 경로에 없고 여러 개면 LIVE는 실패, DEV · QA는 경고 후 경로 순 첫 번째 </summary>
-        public static HBXcodeSettings LoadIfExists(BuildContext context) =>
-            BuildHelper.LoadSettingsAssetForBuild<HBXcodeSettings>(BuildHelper.USER_XCODE_SETTINGS_PATH, context);
 
         /// <summary>
         /// 기본 경로에 새 에셋을 만듭니다. 이미 있으면 새로 만들지 않고 기존 에셋을 반환합니다 (CreateAsset은 같은 경로의 기존 에셋을 지우고 만든다).

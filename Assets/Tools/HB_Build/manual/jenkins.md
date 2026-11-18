@@ -39,39 +39,24 @@
 - `BUILD_VERSION` · `VERSION_CODE`: 영문 · 숫자 · `.` · `_` · `-`만 (`-`로 시작 불가)
 - 프로필 경로: 글자 · 숫자 · 공백 · `.` · `_` · `/` · `-`로 된 `.asset` 경로만
 
-## 파라미터 모드
+## 파라미터
 
-| 파라미터 | 순수 프로필 | 전체 풀기 | 프로필+오버라이드 |
-|---|---|---|---|
-| `BUILD_PROFILE` | 선택 (생성 PC의 프로필, 고른 프로필이 첫 항목) | - | 선택 |
-| `BUILD_PROFILE_PATH` | 문자열 (비우면 `BUILD_PROFILE`) | - | 문자열 |
-| `BUILD_TARGET` | `(profile)` · `StandaloneWindows64` · `Android` · `iOS` | `StandaloneWindows64` · `Android` · `iOS` | `(profile)` · … |
-| `BUILD_TYPE` | - | `DEV` · `QA` · `LIVE` | `(profile)` · `DEV` · `QA` · `LIVE` |
-| `DEV_BUILD` | - | booleanParam (false) | `(profile)` · `true` · `false` |
-| `BUILD_VERSION` · `VERSION_CODE` | - | 문자열 (빈 값) | 문자열 (비우면 프로필 값) |
-| `DEEP_PROFILE` · `CLEAN_BUILD` · `IS_AAB` · `ZIP_PACKAGE` | - | booleanParam (false) | - |
+Jenkins 빌드도 프로필 하나로 합니다. 기본은 고른 프로필의 값이고, 아래 파라미터 중 값을 넣은 것만 인자로 넘겨 덮어씁니다.
 
-### 프로필 모드 공통
+| 파라미터 | 값 | 설명 |
+|---|---|---|
+| `BUILD_PROFILE` | 선택 (생성 PC의 프로필, 고른 프로필이 첫 항목) | 빌드할 프로필 |
+| `BUILD_PROFILE_PATH` | 문자열 | 목록에 없는 프로필 경로. 비우면 `BUILD_PROFILE` |
+| `BUILD_TARGET` | `(profile)` · `StandaloneWindows64` · `Android` · `iOS` | `(profile)`이면 생성 시 기록된 프로필 플랫폼 |
+| `DEV_BUILD` | `(profile)` · `true` · `false` | `(profile)`이 아니면 `-devBuild`로 덮어씀 |
+| `BUILD_VERSION` · `VERSION_CODE` | 문자열 | 비어 있지 않으면 `-buildVersion` · `-versionCode`로 덮어씀 |
 
+- 빌드 타입 · AAB · ZIP 등 나머지는 파라미터로 바꿀 수 없습니다. 다른 값이 필요하면 프로필을 따로 만드세요 ([CLI 빌드](cli.md#인자)).
 - 생성 시점의 "프로필 경로 → 플랫폼" 표로 `-buildTarget`을 넘깁니다.
   프로필의 플랫폼을 바꾸면 Jenkinsfile을 다시 생성하세요. 그대로 두면 배치 빌드가 플랫폼 불일치로 실패합니다.
 - 목록(`BUILD_PROFILE`)에 없는 프로필(빌드 PC 전용 프로필 등)은 `BUILD_PROFILE_PATH`에 경로를, `BUILD_TARGET`에 플랫폼을 직접 넣습니다.
   플랫폼이 틀리면 배치 빌드가 불일치로 실패합니다.
-- 프로필 모드의 Jenkins 빌드는 프로필의 출력 경로 대신 `BuildOutput/<플랫폼>`에 만듭니다 (정리 · 보관 대상과 일치).
-
-### 전체 풀기 모드
-
-- Jenkins 파라미터: `BUILD_TARGET` · `BUILD_TYPE` · `BUILD_VERSION` · `VERSION_CODE`와 booleanParam `DEV_BUILD` · `DEEP_PROFILE` · `CLEAN_BUILD` · `IS_AAB` · `ZIP_PACKAGE`
-- 기본값은 생성한 사람의 창과 무관한 안전값입니다 (첫 선택지, 체크 모두 끔, 버전 · 버전 코드 빈 값). Jenkins에서 바꾼 값이 우선합니다.
-- `BUILD_VERSION`을 비우면 PlayerSettings의 버전을 씁니다.
-- 씬 목록과 비활성 스텝은 생성 시 창 값으로 고정됩니다.
-
-### 프로필+오버라이드 모드
-
-기본은 고른 프로필(`BUILD_PROFILE`)의 값입니다. 아래 파라미터를 넣은 것만 인자로 넘겨 프로필 값을 덮어씁니다.
-
-- `BUILD_TYPE` · `DEV_BUILD`: `(profile)`이 아닌 값
-- `BUILD_VERSION` · `VERSION_CODE`: 비어 있지 않은 값
+- 산출물은 항상 `BuildOutput/<플랫폼>`에 만들어집니다 (정리 · 보관 대상과 같음).
 
 ## 로컬 폴더 모드
 

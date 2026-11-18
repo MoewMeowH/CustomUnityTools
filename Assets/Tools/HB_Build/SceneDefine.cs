@@ -43,16 +43,14 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
-        /// Assets/Editor/HBBuild/SceneDefine.asset 위치에 에셋이 존재하면 로드합니다. 없으면 프로젝트에 하나뿐일 때 그것, 여러 개면 null (창의 자동 연결용)
+        /// Assets/Editor/HBBuild/SceneDefine.asset 위치에 에셋이 존재하면 로드합니다. 없으면 프로젝트에 하나뿐일 때 그것, 여러 개면 null (새 프로필 슬롯 채우기용)
         /// </summary>
         public static SceneDefine LoadIfExists() =>
             BuildHelper.LoadSettingsAsset<SceneDefine>(BuildHelper.USER_SCENE_DEFINE_PATH);
 
-        /// <summary>
-        /// 빌드용: 기본 경로 우선(읽지 못하면 실패). 기본 경로에 없고 여러 개면 LIVE는 실패, DEV · QA는 경고 후 경로 순 첫 번째
-        /// </summary>
-        public static SceneDefine LoadIfExists(BuildContext context) =>
-            BuildHelper.LoadSettingsAssetForBuild<SceneDefine>(BuildHelper.USER_SCENE_DEFINE_PATH, context);
+        /// <summary> 빌드용: 프로필 슬롯의 에셋 (비었으면 null, Missing이면 실패) </summary>
+        public static SceneDefine FromContext(BuildContext context) =>
+            BuildHelper.GetSettingsAsset<SceneDefine>(context, "SceneDefine");
 
         /// <summary>
         /// Assets/Editor/HBBuild/SceneDefine.asset 에 새 ScriptableObject 에셋을 생성합니다.

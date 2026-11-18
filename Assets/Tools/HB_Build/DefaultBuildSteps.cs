@@ -24,11 +24,7 @@ namespace HB.CustomBuild.Editor
 
         public virtual void OnPreBuild(BuildContext context)
         {
-            // UnityEngine.Object는 ?? 로 판정하지 않는다 (파괴/누락된 참조가 null로 취급되지 않음)
-            var sceneDefine = context.GetCustomData<SceneDefine>("SceneDefine", null);
-            if (sceneDefine == null)
-                sceneDefine = SceneDefine.LoadIfExists(context);
-
+            var sceneDefine = SceneDefine.FromContext(context);
             if (sceneDefine == null) return;
 
             int originalCount = context.Scenes.Count;
@@ -89,15 +85,13 @@ namespace HB.CustomBuild.Editor
 
         public virtual void OnPreBuild(BuildContext context)
         {
-            var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null);
-            if (container == null)
-                container = ProjectDefine.LoadIfExists(context);
+            var container = ProjectDefine.FromContext(context);
 
             // LIVE에서 심볼 설정이 없으면 커밋된 ProjectSettings의 개발용 심볼(USE_HLOG 등)이 그대로 들어가므로 실패시킨다
             if (container == null)
             {
                 if (context.BuildType == EBuildType.LIVE)
-                    throw BuildHelper.ThrowError("LIVE build requires a DefineContainer (ProjectDefine) asset. Without it, the scripting define symbols committed in ProjectSettings are used as-is.");
+                    throw BuildHelper.ThrowError("LIVE build requires a DefineContainer (ProjectDefine) asset in the build profile. Without it, the scripting define symbols committed in ProjectSettings are used as-is.");
 
                 // DEV · QA는 기존 심볼 유지하고 건너뜀
                 BuildHelper.Log("[Defines] No DefineContainer. Keeping existing symbols.");
@@ -147,7 +141,7 @@ namespace HB.CustomBuild.Editor
 
             EditorUserBuildSettings.development = context.IsDevBuild;
             EditorUserBuildSettings.buildWithDeepProfilingSupport = context.IsDeepProfile;
-            EditorUserBuildSettings.connectProfiler = BuildHelper.IsAutoProfile;
+            EditorUserBuildSettings.connectProfiler = context.AutoConnectProfiler;
 
             EditorUserBuildSettings.buildAppBundle = context.IsAab;
             EditorUserBuildSettings.androidBuildType = context.IsDevBuild 
@@ -177,7 +171,7 @@ namespace HB.CustomBuild.Editor
             PlayerSettings.bundleVersion = context.Version;
             EditorUserBuildSettings.development = context.IsDevBuild;
             EditorUserBuildSettings.buildWithDeepProfilingSupport = context.IsDeepProfile;
-            EditorUserBuildSettings.connectProfiler = BuildHelper.IsAutoProfile;
+            EditorUserBuildSettings.connectProfiler = context.AutoConnectProfiler;
         }
     }
 
@@ -202,7 +196,7 @@ namespace HB.CustomBuild.Editor
 
             EditorUserBuildSettings.development = context.IsDevBuild;
             EditorUserBuildSettings.buildWithDeepProfilingSupport = context.IsDeepProfile;
-            EditorUserBuildSettings.connectProfiler = BuildHelper.IsAutoProfile;
+            EditorUserBuildSettings.connectProfiler = context.AutoConnectProfiler;
         }
 
         /// <summary> ProvisionType 값: 자동 서명 (Unity ProvisioningProfileType에는 없는 HB_Build 전용 값) </summary>

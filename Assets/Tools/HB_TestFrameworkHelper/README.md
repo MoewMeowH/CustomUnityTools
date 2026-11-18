@@ -81,7 +81,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_TestFrame
    - `PreBuildStep_ValidateInspectorSlots`(`IPreBuildStep`)를 통해 플레이어 빌드 전 사전 검사를 수행하며, `LIVE` 빌드 시 켜진 검사의 에러가 있거나 검사를 끝까지 못 했으면 빌드를 중단합니다 (경고는 로그만). `com.hb.custombuild`가 설치된 경우에만 활성화됩니다.
      - HB_Build(`com.hb.custombuild`) 연동 스텝입니다. 별도 어셈블리 `HB.TestFrameworkHelper.BuildIntegration.Editor`에 있고, 패키지가 있을 때만 `HB_CUSTOM_BUILD_ENABLED`가 정의되어 컴파일됩니다.
      - `ExecutionOrder`는 6(HB_Build의 SceneDefine 씬 필터 5 뒤)입니다.
-     - Project Settings에서 켜진 검사를 돌립니다. 씬은 설정의 씬 대상 대신 **실제 빌드 씬 목록**(`BuildContext.Scenes` — 명령줄 · 프로필 · SceneDefine 필터 뒤)을 검사합니다.
+     - Project Settings에서 켜진 검사를 돌립니다. 씬은 설정의 씬 대상 대신 **실제 빌드 씬 목록**(`BuildContext.Scenes` — 프로필 · SceneDefine 필터 뒤)을 검사합니다.
      - 첫 줄에 `[Inspector Validation] 문제 N개 (에러 E · 경고 W)`, 이어서 문제마다 `[심각도][종류] 에셋 > GameObject 경로 > 컴포넌트.필드 (설명)`를 빌드 경고 로그로 남깁니다.
      - 에러가 있거나 검사를 끝까지 못 했으면 요약을 HB_Build 경고(`context.AddWarning` → `BuildOutput/HB_BUILD_WARNINGS.txt`, Jenkins UNSTABLE)로도 남깁니다. 경고만 있으면 로그만 남깁니다.
      - `StepId`는 `HB.TestFrameworkHelper.Editor.PreBuildStep_ValidateInspectorSlots`로 고정되어 있어, 빌드 프로필의 비활성 스텝 목록에 넣어 끌 수 있고 클래스 이름이 바뀌어도 설정이 유지됩니다.

@@ -12,6 +12,18 @@ using Unity.Scripting.LifecycleManagement;
 namespace HB.CustomBuild.Editor
 {
     /// <summary>
+    /// iOS 서명 종류. 앞 셋은 Unity ProvisioningProfileType 이름 그대로(수동 서명, ProvisionUUID 필요),
+    /// AutoSign은 UUID 없이 자동 서명 (PreBuildStep_IOSSettings.PROVISION_TYPE_AUTO_SIGN)
+    /// </summary>
+    public enum EProvisionType
+    {
+        Distribution,
+        Development,
+        Automatic,
+        AutoSign,
+    }
+
+    /// <summary>
     /// HB Custom Build Manager 전용 빌드 프로필 ScriptableObject입니다.
     /// 프로젝트 내에 복수의 프로필(.asset)을 생성하여(예: PC_Dev, Android_Live_AAB 등)
     /// 플랫폼, 환경, 버전, 씬, 전처리기 에셋 등의 빌드 설정을 독립적으로 관리하고
@@ -53,13 +65,16 @@ namespace HB.CustomBuild.Editor
         [Tooltip("PC 전용: 빌드 결과물 ZIP 압축 여부")]
         [SerializeField] public bool ZipPackage = false;
 
+        [Tooltip("Development Build일 때 플레이어가 에디터 Profiler에 자동 연결")]
+        [SerializeField] public bool AutoConnectProfiler = false;
+
         [Tooltip("iOS 전용: Provisioning Profile UUID")]
         [SerializeField] public string ProvisionUUID = string.Empty;
 
-        [Header("=== 경로 및 씬 ===")]
-        [Tooltip("빌드 출력 디렉토리 (비워둘 시 BuildOutput/<Target> 기본 경로 사용)")]
-        [SerializeField] public string OutputPath = string.Empty;
+        [Tooltip("iOS 전용: 서명 종류. UUID가 있을 때 적용 (AutoSign은 UUID 없이 자동 서명)")]
+        [SerializeField] public EProvisionType ProvisionType = EProvisionType.Distribution;
 
+        [Header("=== 씬 ===")]
         [Tooltip("빌드에 포함할 씬 목록 (비워둘 시 Build Settings 활성 씬 사용)")]
         [SerializeField] public List<string> Scenes = new List<string>();
 
@@ -73,6 +88,13 @@ namespace HB.CustomBuild.Editor
         [Tooltip("iOS 전용: 빌드 뒤 Xcode 프로젝트에 적용할 설정 에셋 (Info.plist · Capabilities · Build Settings 등)")]
         [SerializeField] public HBXcodeSettings XcodeSettingsAsset;
 
+        /// <summary> HB_Build가 BuildContext.CustomData에 쓰는 키 (CustomEntries에 쓰면 실패) </summary>
+        public static readonly IReadOnlyList<string> RESERVED_CUSTOM_KEYS = Array.AsReadOnly(new[]
+        {
+            "SceneDefine", "ProjectDefine", "ProvisionUUID", "ProvisionType",
+            BuildStep_XcodeSettings.CUSTOM_DATA_KEY, BuildStep_XcodeSettings.SNAPSHOT_KEY,
+        });
+
         [Serializable]
         public struct CustomStringEntry
         {
@@ -81,7 +103,7 @@ namespace HB.CustomBuild.Editor
         }
 
         [Header("=== 추가 커스텀 데이터 ===")]
-        [Tooltip("파이프라인 스텝(IPreBuildStep/IPostBuildStep)에 전달할 확장 Key-Value")]
+        [Tooltip("커스텀 스텝(IPreBuildStep/IPostBuildStep)에 전달할 확장 Key-Value. HB_Build가 쓰는 키는 쓸 수 없음")]
         [SerializeField] public List<CustomStringEntry> CustomEntries = new List<CustomStringEntry>();
 
         [Header("=== 파이프라인 스텝 ===")]
@@ -96,9 +118,10 @@ namespace HB.CustomBuild.Editor
             var target = GetResolvedBuildTarget();
             var targetGroup = BuildHelper.GetTargetGroup(target);
 
-            string outDir = string.IsNullOrWhiteSpace(OutputPath) 
-                ? BuildHelper.GetDefaultOutputPath(target) 
-                : OutputPath.Trim();
+            // 같은 키면 HB_Build 값을 조용히 덮어쓰므로 막는다
+            var reserved = CustomEntries?.Where(e => RESERVED_CUSTOM_KEYS.Contains(e.Key?.Trim())).Select(e => e.Key.Trim()).Distinct().ToList();
+            if (reserved != null && reserved.Count > 0)
+                throw BuildHelper.ThrowError($"Build profile '{name}' CustomEntries use key(s) reserved by HB_Build: {string.Join(", ", reserved)}. Rename them.");
 
             // 공백 항목만 있는 경우도 비어 있는 것으로 보고 Build Settings 씬을 사용
             var sceneList = Scenes != null
@@ -120,7 +143,7 @@ namespace HB.CustomBuild.Editor
                 IsCleanBuild = CleanBuild,
                 IsAab = IsAab,
                 ZipPackage = ZipPackage,
-                OutputPath = outDir,
+                AutoConnectProfiler = AutoConnectProfiler,
                 Scenes = sceneList
             };
 
@@ -133,19 +156,24 @@ namespace HB.CustomBuild.Editor
                 }
             }
 
-            if (SceneDefineAsset != null)
+            // 깨진 참조(Missing)도 넘겨서 스텝이 실패시키게 한다 (== null로 거르면 조용히 빠짐)
+            if (!ReferenceEquals(SceneDefineAsset, null))
                 context.SetCustomData("SceneDefine", SceneDefineAsset);
 
-            if (ProjectDefineAsset != null)
+            if (!ReferenceEquals(ProjectDefineAsset, null))
                 context.SetCustomData("ProjectDefine", ProjectDefineAsset);
 
-            // 깨진 참조(Missing)도 넘겨서 스텝이 실패시키게 한다 (== null이면 건너뛰어 기본 경로의 다른 에셋이 쓰일 수 있음)
             if (!ReferenceEquals(XcodeSettingsAsset, null))
                 context.SetCustomData(BuildStep_XcodeSettings.CUSTOM_DATA_KEY, XcodeSettingsAsset);
 
-            if (TargetPlatform == ProjectBuild.ESelfBuildPlatform.iOS && !string.IsNullOrWhiteSpace(ProvisionUUID))
+            if (TargetPlatform == ProjectBuild.ESelfBuildPlatform.iOS)
             {
-                context.SetCustomData("ProvisionUUID", ProvisionUUID.Trim());
+                bool hasUuid = !string.IsNullOrWhiteSpace(ProvisionUUID);
+                if (hasUuid)
+                    context.SetCustomData("ProvisionUUID", ProvisionUUID.Trim());
+                // 서명 종류는 수동 서명(UUID)이나 AutoSign일 때만 넘긴다. 아니면 프로젝트의 서명 설정을 그대로 쓴다
+                if (hasUuid || ProvisionType == EProvisionType.AutoSign)
+                    context.SetCustomData("ProvisionType", ProvisionType.ToString());
             }
 
             if (CustomEntries != null)
@@ -194,9 +222,10 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
-        /// Assets/Editor/HBBuild/Profiles 경로에 새로운 기본 프로필 에셋을 생성합니다.
+        /// Assets/Editor/HBBuild/Profiles 경로에 BuildProfile_&lt;플랫폼&gt;_&lt;타입&gt; 프로필 에셋을 생성합니다.
+        /// 선택 설정 에셋 슬롯은 이때 한 번만 채운다 (기본 경로, 없으면 프로젝트에 하나뿐일 때). 빌드는 슬롯만 본다.
         /// </summary>
-        public static HBBuildProfile CreateNewProfileAsset(string profileName = "New_BuildProfile")
+        public static HBBuildProfile CreateNewProfileAsset(ProjectBuild.ESelfBuildPlatform platform, EBuildType buildType)
         {
             string folder = BuildHelper.USER_PROFILES_DIR;
             if (!Directory.Exists(folder))
@@ -205,15 +234,21 @@ namespace HB.CustomBuild.Editor
                 AssetDatabase.Refresh();
             }
 
-            string safeName = string.Join("_", profileName.Split(Path.GetInvalidFileNameChars()));
-            string assetPath = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{safeName}.asset");
+            string assetPath = AssetDatabase.GenerateUniqueAssetPath($"{folder}/BuildProfile_{platform}_{buildType}.asset");
 
             var profile = CreateInstance<HBBuildProfile>();
+            profile.TargetPlatform = platform;
+            profile.BuildType = buildType;
             profile.Version = Application.version;
             profile.Scenes = BuildHelper.GetDefaultBuildScenes().ToList();
+            profile.SceneDefineAsset = SceneDefine.LoadIfExists();
+            profile.ProjectDefineAsset = ProjectDefine.LoadIfExists();
+            // 플랫폼과 관계없이 채운다 (나중에 iOS로 바꿔도 슬롯이 비지 않게. Xcode 스텝은 iOS에서만 돈다)
+            profile.XcodeSettingsAsset = HBXcodeSettings.LoadIfExists();
 
             AssetDatabase.CreateAsset(profile, assetPath);
-            AssetDatabase.SaveAssets();
+            // 새 프로필만 저장한다 (SaveAssets는 창에서 편집 중인 다른 프로필의 저장 안 한 값까지 디스크에 쓴다)
+            AssetDatabase.SaveAssetIfDirty(profile);
             AssetDatabase.Refresh();
 
             Debug.Log($"[HBBuildProfile] Created new build profile at: {assetPath}");

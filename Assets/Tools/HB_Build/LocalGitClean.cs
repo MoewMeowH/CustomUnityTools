@@ -14,7 +14,7 @@ namespace HB.CustomBuild.Editor
     /// 지우는 것: 추적 파일의 수정 · 스테이징(HEAD에 없는 스테이징 파일은 삭제), 무시되지 않은 미추적 파일.
     /// 남는 것: Library 등 .gitignore 대상, 빌드 산출물 폴더, 프로젝트 밖 파일, 프로젝트 안 서브모듈의 작업 트리.
     /// 되돌릴 수 없으므로 창의 두 체크박스와 최종 확인 대화상자를 거친 뒤에만 Run을 부른다.
-    /// 산출물 폴더를 지킬 수 없는 경우(제외 패턴을 만들 수 없음 · 산출물이 목록에 섞임 · 출력 경로가 소스를 덮음)는 정리를 거부한다.
+    /// 산출물 폴더(BuildOutput/)가 정리 목록에 섞이면 정리를 거부한다.
     /// </summary>
     internal sealed class LocalGitClean
     {
@@ -23,8 +23,6 @@ namespace HB.CustomBuild.Editor
         private static readonly string[] s_ScriptFiles = { "Packages/manifest.json", "Packages/packages-lock.json", "package.json" };
         // 프로젝트 설정은 에디터가 메모리에 들고 있어 디스크만 되돌리면 빌드가 메모리 값으로 될 수 있다 → 빌드를 멈추고 다시 누르게 한다
         private const string PROJECT_SETTINGS_DIR = "ProjectSettings/";
-        // gitignore 패턴에서 뜻이 있는 글자 (산출물 폴더 이름에 있으면 제외 패턴을 정확히 만들 수 없음)
-        private static readonly char[] s_PatternChars = { '"', '[', ']', '*', '?', '!', '#', '\\' };
         private const int CONSOLE_LIST_LIMIT = 500;
 
         private readonly string m_ProjectRoot;
@@ -57,9 +55,9 @@ namespace HB.CustomBuild.Editor
 
         /// <summary>
         /// 지울 것을 미리 구한다. 읽기만 하고 아무것도 저장하지 않는다.
-        /// Play 모드 · 컴파일 중, 저장 안 한 씬 · 프리팹 편집 · 에셋, git을 쓸 수 없음, 산출물 폴더를 지킬 수 없음이면 null과 이유를 돌려준다.
+        /// Play 모드 · 컴파일 중, 저장 안 한 씬 · 프리팹 편집 · 에셋, git을 쓸 수 없음이면 null과 이유를 돌려준다.
         /// </summary>
-        public static LocalGitClean Prepare(IEnumerable<string> keepDirs, out string error)
+        public static LocalGitClean Prepare(out string error)
         {
             // Play 모드에서는 플레이어 빌드가 안 되므로 되돌릴 수 없는 정리만 끝나게 된다
             if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
@@ -97,7 +95,6 @@ namespace HB.CustomBuild.Editor
             }
 
             string projectRoot = BuildHelper.ResolveProjectRelativePath(".");
-            string projectPrefix = BuildRevision.WithSeparator(projectRoot);
 
             // 프로젝트의 저장소 상대 경로는 git에게 직접 묻는다 (정션 · 링크 · 대소문자로 표기가 달라도 맞음)
             string prefix = GitRunner.Run(projectRoot, "rev-parse --show-prefix", out string gitError)?.Trim();
@@ -108,29 +105,8 @@ namespace HB.CustomBuild.Editor
             }
             prefix = prefix.Replace('\\', '/');
 
-            // 산출물 폴더는 지우지 않는다. 지킬 수 없으면 정리하지 않는다 (조용히 정리 대상이 되지 않게)
-            var keepList = keepDirs.Where(d => !string.IsNullOrWhiteSpace(d)).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var safeKeep = BuildRevision.FilterOutputDirs(keepList, out var covering);
-            if (covering.Count > 0)
-            {
-                error = $"출력 경로가 프로젝트 소스(프로젝트 루트 · Assets · Packages · ProjectSettings)를 덮습니다: {string.Join(", ", covering)}\n출력 경로를 바꾼 뒤 정리하세요.";
-                return null;
-            }
-            var excludes = new StringBuilder();
-            foreach (string dir in safeKeep)
-            {
-                string withSlash = BuildRevision.WithSeparator(dir);
-                if (!withSlash.StartsWith(projectPrefix, StringComparison.OrdinalIgnoreCase)) continue;  // 프로젝트 밖은 정리 범위가 아님
-                string relative = withSlash.Substring(projectPrefix.Length).Replace('\\', '/').TrimEnd('/');
-                if (relative.IndexOfAny(s_PatternChars) >= 0)
-                {
-                    error = $"출력 폴더 이름에 git 제외 패턴으로 쓸 수 없는 글자가 있어 보호할 수 없습니다: {relative}\n출력 폴더 이름을 바꾸거나 .gitignore에 넣은 뒤 정리하세요.";
-                    return null;
-                }
-                excludes.Append($" -e \"/{prefix}{relative}/\"");
-            }
-
-            var clean = new LocalGitClean(projectRoot, excludes.ToString());
+            // 빌드 산출물 폴더(BuildOutput/)는 지우지 않는다
+            var clean = new LocalGitClean(projectRoot, $" -e \"/{prefix}{BuildHelper.BUILD_OUTPUT_DIR}/\"");
 
             // 추적 파일. 경로는 저장소 루트 기준이고 "-- ." 로 프로젝트 폴더만
             string status = GitRunner.Run(projectRoot, "status --porcelain=v1 -z --untracked-files=no -- .", out gitError);
@@ -201,7 +177,7 @@ namespace HB.CustomBuild.Editor
                 error = $"git clean 미리보기 실패: {gitError}";
                 return null;
             }
-            var keepExclusion = new PathExclusion(safeKeep, Enumerable.Empty<string>());
+            var keepExclusion = new PathExclusion(new[] { BuildHelper.ResolveProjectRelativePath(BuildHelper.BUILD_OUTPUT_DIR) }, Enumerable.Empty<string>());
             const string removePrefix = "Would remove ";
             foreach (string line in preview.Split('\n').Select(l => l.TrimEnd('\r')))
             {
@@ -210,7 +186,7 @@ namespace HB.CustomBuild.Editor
                 // 제외 패턴이 맞지 않아 산출물이 목록에 들어왔으면 지우지 않는다
                 if (keepExclusion.IsExcluded(Path.Combine(projectRoot, relative)))
                 {
-                    error = $"빌드 산출물 폴더가 정리 목록에 들어왔습니다: {relative}\n산출물을 지키지 못하므로 정리하지 않았습니다. 출력 폴더를 .gitignore에 넣은 뒤 다시 시도하세요.";
+                    error = $"빌드 산출물 폴더가 정리 목록에 들어왔습니다: {relative}\n산출물을 지키지 못하므로 정리하지 않았습니다. {BuildHelper.BUILD_OUTPUT_DIR}/를 .gitignore에 넣은 뒤 다시 시도하세요.";
                     return null;
                 }
                 clean.Add("[삭제] " + relative, modified: false);

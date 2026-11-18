@@ -32,18 +32,21 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
 
 ### Build Manager 창
 
+모든 빌드는 빌드 프로필 에셋 하나로 합니다. 창은 고른 프로필을 직접 편집하므로, 창에 보이는 값이 빌드되는 값입니다.
+프로필을 고르지 않으면 프로필 영역만 보입니다.
+
 | 창 영역 | 기능 |
 |---|---|
-| 빌드 프로필 | `+ 새 프로필`(창의 현재 값으로 `BuildProfile_<플랫폼>_<타입>` 생성) · `프로필 저장` · `복제`, 오브젝트 필드 · 목록으로 선택 |
+| 빌드 프로필 | `+ 새 프로필`(현재 활성 플랫폼 · DEV로 `BuildProfile_<플랫폼>_<타입>` 생성) · `프로필 저장`(디스크에 쓰기, 빌드할 때도 저장) · `복제`, 오브젝트 필드 · 목록으로 선택 |
 | 타겟 플랫폼 & 환경 | Target Platform(`PC` · `Android` · `iOS`) · Build Type |
-| 선택적 설정 에셋 | Scene Define · Define Container · Xcode Settings (iOS) 슬롯, 비어 있으면 `+ 에셋 생성` |
+| 선택적 설정 에셋 | Scene Define · Define Container · Xcode Settings (iOS) 슬롯, 비어 있으면 `+ 에셋 생성`. 빌드는 이 슬롯만 봅니다 |
 | 빌드 파이프라인 실행 순서 | 사전 스텝 → BuildPlayer → 사후 스텝 목록 (아래 설명) |
 | 코드 미리보기 | 스텝 이름을 누르면 C# 소스를 보입니다 (이 클래스만 · 전체 파일, IDE에서 열기, 에셋 위치 Ping) |
-| 버전 정보 | App Version · Version Code, iOS면 Provision UUID |
-| 빌드 세부 옵션 | Development Build(켜면 Deep Profiling), Clean Build Cache, Android면 AAB, PC면 ZIP |
-| 빌드 출력 경로 | 직접 입력 · 폴더 선택 · 열기. 비우면 기본 경로 표시 |
-| 빌드 씬 목록 | Build Settings에서 불러오기 · 현재 씬 추가 · 전체 비우기 · 하나씩 제거 |
-| Jenkins & Unity CLI 명령어 생성기 | 모드(순수 프로필 · 전체 풀기 · 프로필+오버라이드), 미리보기, 복사, `.bat` · `.ps1` 저장 |
+| 버전 정보 | App Version · Version Code, iOS면 Provision UUID · Provision Type |
+| 빌드 세부 옵션 | Development Build(켜면 Deep Profiling · Autoconnect Profiler), Clean Build Cache, Android면 AAB, PC면 ZIP |
+| 빌드 출력 경로 | `BuildOutput/<플랫폼>` 표시 · 열기 (바꿀 수 없음) |
+| 빌드 씬 목록 | Build Settings에서 불러오기 · 현재 씬 추가 · 전체 비우기 · 하나씩 제거. 비우면 빌드 때 Build Settings의 활성 씬 |
+| Jenkins & Unity CLI 명령어 생성기 | 프로필 빌드 명령 미리보기, 복사, `.bat` · `.ps1` 저장, Jenkins 체크아웃 방식 |
 | 하단 버튼 | `Local Player Build 실행` · `Generate Jenkinsfile` |
 
 빌드 파이프라인 실행 순서 영역에서는 체크박스로 스텝을 끄고 켭니다.
@@ -57,7 +60,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_Build
 |---|---|
 | [빌드 프로필 · 심볼 · 씬](manual/profiles-and-defines.md) | 플랫폼별 산출물, `HBBuildProfile` 필드, `ProjectDefine` · `SceneDefine` |
 | [빌드 스텝](manual/build-steps.md) | 스텝 파이프라인, 기본 스텝 표, 커스텀 스텝, 빌드 전 검증 |
-| [CLI 빌드](manual/cli.md) | `-executeMethod` 명령, 인자 표, 버전 코드 규칙, 명령어 생성기 |
+| [CLI 빌드](manual/cli.md) | `-executeMethod` 명령, 인자 표(프로필 필수 · 덮어쓰기 3개), 버전 코드 규칙, 명령어 생성기 |
 | [빌드 동작](manual/build-behavior.md) | 빌드 순서, 설정 복원, 심볼, 경고 파일, 산출물 이름, 빌드 전 git 정리, 출력 경로 |
-| [Jenkins](manual/jenkins.md) | Jenkinsfile 생성, 파라미터 모드, 로컬 폴더 모드, 라이브 프로필 운영 |
+| [Jenkins](manual/jenkins.md) | Jenkinsfile 생성, 파라미터(덮어쓰기 3개), 로컬 폴더 모드, 라이브 프로필 운영 |
 | [iOS 서명 · Xcode 설정](manual/ios.md) | 서명 종류, `HBXcodeSettings` · `HBXcodeFragment`, 충돌 규칙, 지역화 |

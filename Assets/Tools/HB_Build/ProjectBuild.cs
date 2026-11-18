@@ -31,48 +31,21 @@ namespace HB.CustomBuild.Editor
             iOS = 2,
         }
 
-        public enum ECliCommandMode
-        {
-            ProfileOnly = 0,      // 1) 순수 프로필 기반 (-buildProfile)
-            FullUnpack = 1,       // 2) 전체 파라미터 풀기 (-buildTarget, -buildType, ...)
-            ProfileOverride = 2   // 3) 프로필 + 파라미터 오버라이드 (-buildProfile + -buildVersion 등)
-        }
-
         public enum EJenkinsCheckout
         {
             Scm = 0,          // job의 SCM 설정으로 워크스페이스에 받음 (checkout scm)
             LocalFolder = 1   // 빌드 PC의 고정 작업 폴더를 git으로 원격 커밋에 맞춤 (fetch + checkout -f)
         }
 
-        [Header("=== 빌드 프로필 (ScriptableObject) ===")]
+        // 창은 선택한 프로필 에셋을 직접 편집한다 (창에 보이는 값 = 빌드되는 값). 값 사본을 두지 않는다
         [SerializeField] private HBBuildProfile m_SelectedProfile;
-
-        [Header("=== 빌드 타겟 및 환경 ===")]
-        [SerializeField] private ESelfBuildPlatform m_Platform = ESelfBuildPlatform.PC;
-        [SerializeField] private EBuildType m_BuildType = EBuildType.DEV;
-        [SerializeField] private string m_Version = "1.0.0";
-        [SerializeField] private string m_VersionCode = string.Empty;
-        [SerializeField] private bool m_DevBuild = false;
-        [SerializeField] private bool m_DeepProfile = false;
-        [SerializeField] private bool m_CleanBuild = false;
-        [SerializeField] private bool m_IsAab = false;
-        [SerializeField] private bool m_ZipPackage = false;
-        [SerializeField] private string m_ProvisionUUID = string.Empty;
-        [SerializeField] private string m_OutputPath = string.Empty;
-        [SerializeField] private List<string> m_ScenePath = new List<string>();
-        [SerializeField] private List<string> m_DisabledStepIds = new List<string>();
+        private SerializedObject m_ProfileSO;
 
         // 프로필 목록 캐시 (OnEnable / OnProjectChange / 생성·복제 시 갱신)
         private List<HBBuildProfile> m_ProfileCache = new List<HBBuildProfile>();
         private string[] m_ProfileNames = Array.Empty<string>();
 
-        // 선택적 설정 에셋 (미할당 시 자동 건너뜀)
-        [SerializeField] private SceneDefine m_SceneDefine;
-        [SerializeField] private ProjectDefine m_ProjectDefine;
-        [SerializeField] private HBXcodeSettings m_XcodeSettings;
-
         // CLI 생성 옵션 상태
-        private ECliCommandMode m_CliMode = ECliCommandMode.ProfileOnly;
         private EJenkinsCheckout m_JenkinsCheckout = EJenkinsCheckout.Scm;
         private string m_JenkinsProjectDir = string.Empty;   // 빌드 PC의 경로 (Jenkinsfile에 상수로 들어감)
         private string m_JenkinsBranch = string.Empty;       // Jenkins BRANCH 기본값 (비우면 현재 브랜치)
@@ -136,32 +109,15 @@ namespace HB.CustomBuild.Editor
             RefreshProfileCache();
 
             if (m_SelectedProfile == null && m_ProfileCache.Count > 0)
-            {
-                m_SelectedProfile = m_ProfileCache[0];
-                LoadFromProfile(m_SelectedProfile);
-            }
-
-            if (string.IsNullOrEmpty(m_Version))
-                m_Version = Application.version;
-
-            // 버전 코드는 자동으로 채우지 않는다 (모바일 빌드는 비어 있으면 실패 — 정하지 않은 값으로 빌드되는 것 방지)
-
-            // m_OutputPath는 비워 두면 기본 경로(BuildOutput/<Target>)를 사용한다.
-            // 로컬 절대 경로가 프로필에 저장되어 CI에서 쓰이지 않도록 자동으로 채우지 않는다.
-
-            if (m_ScenePath.Count == 0)
-                LoadScenesFromBuildSettings();
-
-            if (m_SceneDefine == null)
-                m_SceneDefine = SceneDefine.LoadIfExists();
-
-            if (m_ProjectDefine == null)
-                m_ProjectDefine = ProjectDefine.LoadIfExists();
-
-            if (m_XcodeSettings == null)
-                m_XcodeSettings = HBXcodeSettings.LoadIfExists();
+                SelectProfile(m_ProfileCache[0]);
 
             BuildStepRegistry.ReloadSteps();
+            Undo.undoRedoPerformed += Repaint;
+        }
+
+        private void OnDisable()
+        {
+            Undo.undoRedoPerformed -= Repaint;
         }
 
         private void OnProjectChange()
@@ -169,6 +125,26 @@ namespace HB.CustomBuild.Editor
             RefreshProfileCache();
             Repaint();
         }
+
+        private void SelectProfile(HBBuildProfile profile)
+        {
+            m_SelectedProfile = profile;
+            m_ProfileSO = null;
+            Repaint();
+        }
+
+        /// <summary> 선택한 프로필의 SerializedObject (프로필이 바뀌거나 정리 · 다시 임포트로 객체가 바뀌면 새로 만든다) </summary>
+        private SerializedObject ProfileSO
+        {
+            get
+            {
+                if (m_ProfileSO == null || m_ProfileSO.targetObject != m_SelectedProfile)
+                    m_ProfileSO = new SerializedObject(m_SelectedProfile);
+                return m_ProfileSO;
+            }
+        }
+
+        private SerializedProperty Prop(string name) => ProfileSO.FindProperty(name);
 
         private void RefreshProfileCache()
         {
@@ -186,6 +162,16 @@ namespace HB.CustomBuild.Editor
             DrawProfileSection();
             EditorGUILayout.Space(8);
 
+            // 프로필 없이는 빌드 · 명령 생성을 하지 않는다 (모든 빌드는 프로필 에셋 하나로)
+            if (m_SelectedProfile == null)
+            {
+                EditorGUILayout.EndScrollView();
+                return;
+            }
+
+            // 다른 곳(Inspector · Undo · 정리 뒤 다시 임포트)에서 바뀐 값을 읽는다. 편집은 각 영역 끝에서 바로 반영한다
+            ProfileSO.Update();
+
             DrawPlatformSection();
             EditorGUILayout.Space(8);
 
@@ -201,7 +187,7 @@ namespace HB.CustomBuild.Editor
             DrawOptionsSection();
             EditorGUILayout.Space(8);
 
-            DrawPathSection();
+            DrawOutputSection();
             EditorGUILayout.Space(8);
 
             DrawSceneSection();
@@ -237,9 +223,10 @@ namespace HB.CustomBuild.Editor
 
             if (m_SelectedProfile != null)
             {
-                if (GUILayout.Button("프로필 저장", EditorStyles.miniButton, GUILayout.Width(75)))
+                using (new EditorGUI.DisabledScope(!EditorUtility.IsDirty(m_SelectedProfile)))
                 {
-                    SaveToCurrentProfile();
+                    if (GUILayout.Button(new GUIContent("프로필 저장", "창의 편집은 프로필 에셋에 바로 들어갑니다. 디스크에 쓰려면 저장하세요 (빌드할 때도 저장함)"), EditorStyles.miniButton, GUILayout.Width(75)))
+                        SaveProfile();
                 }
                 if (GUILayout.Button("복제", EditorStyles.miniButton, GUILayout.Width(45)))
                 {
@@ -254,13 +241,7 @@ namespace HB.CustomBuild.Editor
             EditorGUI.BeginChangeCheck();
             var newProfile = (HBBuildProfile)EditorGUILayout.ObjectField("선택된 프로필", m_SelectedProfile, typeof(HBBuildProfile), false);
             if (EditorGUI.EndChangeCheck())
-            {
-                m_SelectedProfile = newProfile;
-                if (m_SelectedProfile != null)
-                {
-                    LoadFromProfile(m_SelectedProfile);
-                }
-            }
+                SelectProfile(newProfile);
 
             // 전체 프로필 팝업 메뉴
             if (m_ProfileCache.Count > 0)
@@ -269,21 +250,19 @@ namespace HB.CustomBuild.Editor
 
                 int selectedIndex = EditorGUILayout.Popup(currentIndex, m_ProfileNames, GUILayout.Width(130));
                 if (selectedIndex >= 0 && selectedIndex < m_ProfileCache.Count && selectedIndex != currentIndex)
-                {
-                    m_SelectedProfile = m_ProfileCache[selectedIndex];
-                    LoadFromProfile(m_SelectedProfile);
-                }
+                    SelectProfile(m_ProfileCache[selectedIndex]);
             }
             EditorGUILayout.EndHorizontal();
 
             if (m_SelectedProfile != null)
             {
                 string profilePath = AssetDatabase.GetAssetPath(m_SelectedProfile);
-                EditorGUILayout.LabelField($"  ↳ 에셋 경로: {profilePath}", EditorStyles.miniLabel);
+                string dirty = EditorUtility.IsDirty(m_SelectedProfile) ? " (저장 안 됨)" : string.Empty;
+                EditorGUILayout.LabelField($"  ↳ 에셋 경로: {profilePath}{dirty}", EditorStyles.miniLabel);
             }
             else
             {
-                EditorGUILayout.HelpBox("선택된 프로필이 없습니다. [+ 새 프로필] 버튼을 눌러 프로젝트별 빌드 프로필(.asset)을 생성하거나 할당하세요.", MessageType.Info);
+                EditorGUILayout.HelpBox("모든 빌드는 빌드 프로필(.asset) 하나로 합니다. [+ 새 프로필]로 만들거나 기존 프로필을 고르세요.", MessageType.Info);
             }
 
             EditorGUILayout.EndVertical();
@@ -291,154 +270,76 @@ namespace HB.CustomBuild.Editor
 
         private void CreateNewProfileDialog()
         {
-            string defaultName = $"BuildProfile_{m_Platform}_{m_BuildType}";
-            var newProfile = HBBuildProfile.CreateNewProfileAsset(defaultName);
-            if (newProfile != null)
+            // 지금 활성 플랫폼 · DEV로 만든다 (나머지는 만든 뒤 창에서 고친다)
+            var platform = EditorUserBuildSettings.activeBuildTarget switch
             {
-                SaveToProfileInstance(newProfile);
-                m_SelectedProfile = newProfile;
-                EditorUtility.SetDirty(m_SelectedProfile);
-                AssetDatabase.SaveAssets();
-                RefreshProfileCache();
-                EditorGUIUtility.PingObject(m_SelectedProfile);
-                ShowNotification(new GUIContent($"새 프로필 생성됨: {newProfile.name}"));
-            }
+                BuildTarget.Android => ESelfBuildPlatform.Android,
+                BuildTarget.iOS => ESelfBuildPlatform.iOS,
+                _ => ESelfBuildPlatform.PC
+            };
+            var newProfile = HBBuildProfile.CreateNewProfileAsset(platform, EBuildType.DEV);
+            RefreshProfileCache();
+            SelectProfile(newProfile);
+            EditorGUIUtility.PingObject(newProfile);
+            ShowNotification(new GUIContent($"새 프로필 생성됨: {newProfile.name}"));
         }
 
         private void DuplicateCurrentProfile()
         {
             if (m_SelectedProfile == null) return;
 
-            // 창에 저장 안 한 변경이 있으면 버리지 않고 어디에 둘지 묻는다 (원본은 바꾸지 않음)
-            bool applyWindowChanges = false;
-            if (HasUnsavedProfileChanges())
-            {
-                int choice = EditorUtility.DisplayDialogComplex(
-                    "저장되지 않은 변경",
-                    $"'{m_SelectedProfile.name}' 프로필에 저장되지 않은 창의 변경이 있습니다.\n\n" +
-                    "복사본에 적용하면 원본은 그대로 두고 복사본에 창의 값을 저장합니다.",
-                    "복사본에 적용", "취소", "변경 버리고 복제");
-                if (choice == 1) return;
-                applyWindowChanges = choice == 0;
-            }
-
-            // CopyAsset은 디스크 파일을 복사하므로 Inspector에서 고치고 저장 안 한 값이 빠진다 → 메모리의 프로필을 복제해 만든다
+            // CopyAsset은 디스크 파일을 복사하므로 창에서 고치고 저장 안 한 값이 빠진다 → 메모리의 프로필(창에 보이는 값)을 복제해 만든다
             string newPath = AssetDatabase.GenerateUniqueAssetPath(AssetDatabase.GetAssetPath(m_SelectedProfile));
             var duplicated = Instantiate(m_SelectedProfile);
             duplicated.name = Path.GetFileNameWithoutExtension(newPath);
             AssetDatabase.CreateAsset(duplicated, newPath);
-            AssetDatabase.SaveAssets();
+            // 복사본만 저장한다 (SaveAssets는 원본 프로필의 저장 안 한 창 편집까지 디스크에 쓴다)
+            AssetDatabase.SaveAssetIfDirty(duplicated);
             RefreshProfileCache();
 
-            m_SelectedProfile = duplicated;
-            if (applyWindowChanges)
-                SaveToCurrentProfile();
-            else
-                LoadFromProfile(duplicated);
-
-            EditorGUIUtility.PingObject(m_SelectedProfile);
+            SelectProfile(duplicated);
+            EditorGUIUtility.PingObject(duplicated);
             ShowNotification(new GUIContent($"프로필 복제 완료: {duplicated.name}"));
         }
 
-        private void LoadFromProfile(HBBuildProfile profile)
+        private void SaveProfile()
         {
-            if (profile == null) return;
-
-            m_Platform = profile.TargetPlatform;
-            m_BuildType = profile.BuildType;
-            m_Version = profile.Version;
-            m_VersionCode = profile.VersionCode;
-            m_DevBuild = profile.DevBuild;
-            m_DeepProfile = profile.DeepProfile;
-            m_CleanBuild = profile.CleanBuild;
-            m_IsAab = profile.IsAab;
-            m_ZipPackage = profile.ZipPackage;
-            m_ProvisionUUID = profile.ProvisionUUID;
-            m_OutputPath = profile.OutputPath;
-
-            if (profile.Scenes != null && profile.Scenes.Count > 0)
-            {
-                m_ScenePath = profile.Scenes.ToList();
-            }
-            else
-            {
-                LoadScenesFromBuildSettings();
-            }
-
-            m_SceneDefine = profile.SceneDefineAsset;
-            m_ProjectDefine = profile.ProjectDefineAsset;
-            m_XcodeSettings = profile.XcodeSettingsAsset;
-            m_DisabledStepIds = profile.DisabledStepIds != null ? profile.DisabledStepIds.ToList() : new List<string>();
-
-            Repaint();
-        }
-
-        private void SaveToCurrentProfile()
-        {
-            if (m_SelectedProfile == null)
-            {
-                CreateNewProfileDialog();
-                return;
-            }
-
-            Undo.RecordObject(m_SelectedProfile, "Save Build Profile Settings");
-            SaveToProfileInstance(m_SelectedProfile);
-            EditorUtility.SetDirty(m_SelectedProfile);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(m_SelectedProfile);
             ShowNotification(new GUIContent($"프로필 저장 완료: '{m_SelectedProfile.name}'"));
         }
 
-        /// <summary>
-        /// 창의 현재 값이 선택된 프로필 에셋과 다른지 확인합니다. (임시 복사본에 창 값을 써서 직렬화 결과를 비교)
-        /// </summary>
-        private bool HasUnsavedProfileChanges()
+        /// <summary> 영역에서 고친 값을 프로필에 반영한다 (Undo · dirty는 SerializedObject가 처리) </summary>
+        private void ApplyProfileEdits()
         {
-            if (m_SelectedProfile == null) return false;
-
-            var temp = Instantiate(m_SelectedProfile);
-            try
-            {
-                temp.name = m_SelectedProfile.name;
-                SaveToProfileInstance(temp);
-                return EditorJsonUtility.ToJson(temp) != EditorJsonUtility.ToJson(m_SelectedProfile);
-            }
-            finally
-            {
-                DestroyImmediate(temp);
-            }
+            ProfileSO.ApplyModifiedProperties();
         }
 
-        private void SaveToProfileInstance(HBBuildProfile profile)
+        private static List<string> ReadStrings(SerializedProperty array)
         {
-            profile.TargetPlatform = m_Platform;
-            profile.BuildType = m_BuildType;
-            profile.Version = m_Version;
-            profile.VersionCode = m_VersionCode;
-            profile.DevBuild = m_DevBuild;
-            profile.DeepProfile = m_DeepProfile;
-            profile.CleanBuild = m_CleanBuild;
-            profile.IsAab = m_IsAab;
-            profile.ZipPackage = m_ZipPackage;
-            profile.ProvisionUUID = m_ProvisionUUID;
-            // 프로젝트 내부 절대 경로는 상대 경로로 바꿔 저장 (다른 PC/CI에서도 같은 위치를 가리키도록)
-            profile.OutputPath = !string.IsNullOrWhiteSpace(m_OutputPath) && Path.IsPathRooted(m_OutputPath)
-                ? ToProjectRelativeIfInside(m_OutputPath)
-                : m_OutputPath;
-            profile.Scenes = m_ScenePath.ToList();
-            profile.SceneDefineAsset = m_SceneDefine;
-            profile.ProjectDefineAsset = m_ProjectDefine;
-            profile.XcodeSettingsAsset = m_XcodeSettings;
-            profile.DisabledStepIds = m_DisabledStepIds.ToList();
+            var list = new List<string>(array.arraySize);
+            for (int i = 0; i < array.arraySize; i++)
+                list.Add(array.GetArrayElementAtIndex(i).stringValue);
+            return list;
         }
+
+        private static void WriteStrings(SerializedProperty array, IList<string> values)
+        {
+            array.arraySize = values.Count;
+            for (int i = 0; i < values.Count; i++)
+                array.GetArrayElementAtIndex(i).stringValue = values[i];
+        }
+
+        private ESelfBuildPlatform Platform => m_SelectedProfile.TargetPlatform;
 
         private void DrawPlatformSection()
         {
             EditorGUILayout.BeginVertical("box");
             GUILayout.Label("타겟 플랫폼 & 환경", EditorStyles.boldLabel);
 
-            m_Platform = (ESelfBuildPlatform)EditorGUILayout.EnumPopup("Target Platform", m_Platform);
-            m_BuildType = (EBuildType)EditorGUILayout.EnumPopup("Build Type", m_BuildType);
+            EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.TargetPlatform)), new GUIContent("Target Platform"));
+            EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.BuildType)), new GUIContent("Build Type"));
             EditorGUILayout.EndVertical();
+            ApplyProfileEdits();
         }
 
         private void DrawOptionalAssetsSection()
@@ -446,50 +347,49 @@ namespace HB.CustomBuild.Editor
             EditorGUILayout.BeginVertical("box");
             GUILayout.Label("선택적 프로젝트 설정 에셋 (Optional Build Configs)", EditorStyles.boldLabel);
 
-            // 1. SceneDefine 에셋 슬롯
-            EditorGUILayout.BeginHorizontal();
-            m_SceneDefine = (SceneDefine)EditorGUILayout.ObjectField("Scene Define", m_SceneDefine, typeof(SceneDefine), false);
-            if (m_SceneDefine == null)
-            {
-                if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
-                {
-                    m_SceneDefine = CreateOptionalAsset(SceneDefine.CreateAssetInUserFolder);
-                }
-            }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.LabelField(m_SceneDefine == null ? "  ↳ 미생성/미할당 시: 등록된 모든 씬 빌드 (건너뛰기)" : "  ↳ 할당됨: 빌드 환경(DEV/QA/LIVE)별 IgnoreScene 자동 제외", EditorStyles.miniLabel);
+            // 빌드는 이 슬롯만 본다 (비어 있으면 기본 경로 · 프로젝트에서 찾지 않고 건너뜀)
+            DrawOptionalAssetSlot<SceneDefine>(nameof(HBBuildProfile.SceneDefineAsset), "Scene Define", SceneDefine.CreateAssetInUserFolder,
+                "  ↳ 비어 있음: 씬 목록 그대로 빌드 (건너뛰기)", "  ↳ 할당됨: 빌드 환경(DEV/QA/LIVE)별 IgnoreScene 자동 제외");
 
             EditorGUILayout.Space(4);
 
-            // 2. ProjectDefine 에셋 슬롯
-            EditorGUILayout.BeginHorizontal();
-            m_ProjectDefine = (ProjectDefine)EditorGUILayout.ObjectField("Define Container", m_ProjectDefine, typeof(ProjectDefine), false);
-            if (m_ProjectDefine == null)
-            {
-                if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
-                {
-                    m_ProjectDefine = CreateOptionalAsset(ProjectDefine.CreateAssetInUserFolder);
-                }
-            }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.LabelField(m_ProjectDefine == null ? "  ↳ 미생성/미할당 시: 기존 PlayerSettings 심볼 유지 (건너뛰기)" : "  ↳ 할당됨: 플랫폼/모드별 전처리기 심볼 자동 주입", EditorStyles.miniLabel);
+            DrawOptionalAssetSlot<ProjectDefine>(nameof(HBBuildProfile.ProjectDefineAsset), "Define Container", ProjectDefine.CreateAssetInUserFolder,
+                "  ↳ 비어 있음: 기존 PlayerSettings 심볼 유지 (LIVE는 빌드 실패)", "  ↳ 할당됨: 플랫폼/모드별 전처리기 심볼 자동 주입");
 
             EditorGUILayout.Space(4);
 
-            // 3. Xcode 설정 에셋 슬롯 (iOS 전용)
-            EditorGUILayout.BeginHorizontal();
-            m_XcodeSettings = (HBXcodeSettings)EditorGUILayout.ObjectField("Xcode Settings (iOS)", m_XcodeSettings, typeof(HBXcodeSettings), false);
-            if (m_XcodeSettings == null)
-            {
-                if (GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
-                {
-                    m_XcodeSettings = CreateOptionalAsset(HBXcodeSettings.CreateAssetInUserFolder);
-                }
-            }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.LabelField(m_XcodeSettings == null ? "  ↳ 미할당 시: 기본 위치 → 프로젝트에서 찾아 적용, 없으면 건너뜀 (끄려면 스텝 체크 해제)" : "  ↳ 할당됨: iOS 빌드 뒤 Info.plist · Capabilities · Build Settings 등 적용", EditorStyles.miniLabel);
+            DrawOptionalAssetSlot<HBXcodeSettings>(nameof(HBBuildProfile.XcodeSettingsAsset), "Xcode Settings (iOS)", HBXcodeSettings.CreateAssetInUserFolder,
+                "  ↳ 비어 있음: Xcode 설정 적용 건너뜀", "  ↳ 할당됨: iOS 빌드 뒤 Info.plist · Capabilities · Build Settings 등 적용");
 
             EditorGUILayout.EndVertical();
+            ApplyProfileEdits();
+        }
+
+        /// <summary> 값은 비었는데 ID가 남아 있으면 삭제된 에셋을 가리키는 참조(Missing)다. 빈 칸은 0(None)이다 </summary>
+        private static bool IsMissingReference(SerializedProperty prop)
+        {
+            // 6000.3에는 objectReferenceEntityIdValue가 없고, Unity 7에서는 instanceID 쪽이 컴파일 에러(CS0619)다
+#if UNITY_7000_0_OR_NEWER
+            return prop.objectReferenceValue == null && prop.objectReferenceEntityIdValue != EntityId.None;
+#else
+            return prop.objectReferenceValue == null && prop.objectReferenceInstanceIDValue != 0;
+#endif
+        }
+
+        private void DrawOptionalAssetSlot<T>(string propertyName, string label, Func<T> create, string emptyNote, string assignedNote) where T : ScriptableObject
+        {
+            var prop = Prop(propertyName);
+            // 깨진 참조(Missing)도 objectReferenceValue는 null이다. 빌드는 Missing이면 실패하므로 "비어 있음"과 따로 보인다
+            bool missing = IsMissingReference(prop);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PropertyField(prop, new GUIContent(label));
+            if (prop.objectReferenceValue == null && !missing && GUILayout.Button("+ 에셋 생성", GUILayout.Width(80)))
+                prop.objectReferenceValue = CreateOptionalAsset(create);
+            EditorGUILayout.EndHorizontal();
+            if (missing)
+                EditorGUILayout.HelpBox("깨진 참조(Missing)입니다. 이대로 빌드하면 실패합니다. 에셋을 다시 넣거나 슬롯을 비우세요.", MessageType.Error);
+            else
+                EditorGUILayout.LabelField(prop.objectReferenceValue == null ? emptyNote : assignedNote, EditorStyles.miniLabel);
         }
 
         /// <summary>
@@ -512,58 +412,38 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
-        /// 창에서 현재 편집 중인 값(저장 전 포함)으로 BuildContext를 만듭니다.
-        /// 파이프라인 미리보기와 프로필 없는 로컬 빌드가 같은 값을 쓰도록 공용으로 사용합니다.
+        /// 파이프라인 미리보기용 컨텍스트 (프로필 값 그대로). 프로필이 빌드할 수 없는 상태(예약 키 등)면 이유를 돌려주고 플랫폼 · 옵션만 채운다.
         /// </summary>
-        private BuildContext CreateContextFromWindow()
+        private BuildContext CreatePreviewContext(out string error)
         {
-            var target = GetBuildTarget(m_Platform);
-            var ctx = new BuildContext
+            error = null;
+            try
             {
-                Target = target,
-                TargetGroup = BuildHelper.GetTargetGroup(target),
-                BuildType = m_BuildType,
-                Version = m_Version,
-                VersionCode = m_VersionCode,
-                IsDevBuild = m_DevBuild,
-                // 개발 빌드가 아니면 AbsBuild.Execute가 끈다 (모든 경로 공통)
-                IsDeepProfile = m_DeepProfile,
-                IsCleanBuild = m_CleanBuild,
-                IsAab = m_IsAab,
-                ZipPackage = m_ZipPackage,
-                OutputPath = GetEffectiveOutputPath(),
-                Scenes = m_ScenePath.Count > 0 ? m_ScenePath.ToList() : BuildHelper.GetDefaultBuildScenes().ToList()
-            };
-
-            ctx.DisabledStepIds.UnionWith(m_DisabledStepIds);
-
-            if (m_SceneDefine != null) ctx.SetCustomData("SceneDefine", m_SceneDefine);
-            if (m_ProjectDefine != null) ctx.SetCustomData("ProjectDefine", m_ProjectDefine);
-            // 깨진 참조(Missing)도 넘겨서 스텝이 실패시키게 한다
-            if (!ReferenceEquals(m_XcodeSettings, null)) ctx.SetCustomData(BuildStep_XcodeSettings.CUSTOM_DATA_KEY, m_XcodeSettings);
-            if (m_Platform == ESelfBuildPlatform.iOS && !string.IsNullOrWhiteSpace(m_ProvisionUUID))
-                ctx.SetCustomData("ProvisionUUID", m_ProvisionUUID.Trim());
-
-            ctx.RebuildPlayerOptions();
-            return ctx;
-        }
-
-        private string GetEffectiveOutputPath()
-        {
-            return string.IsNullOrWhiteSpace(m_OutputPath)
-                ? BuildHelper.GetDefaultOutputPath(GetBuildTarget(m_Platform))
-                : m_OutputPath.Trim();
+                return m_SelectedProfile.ToBuildContext();
+            }
+            catch (JenkinsBuildException ex)
+            {
+                error = ex.Message;
+                var p = m_SelectedProfile;
+                var target = p.GetResolvedBuildTarget();
+                return new BuildContext
+                {
+                    Target = target, TargetGroup = BuildHelper.GetTargetGroup(target), BuildType = p.BuildType,
+                    IsDevBuild = p.DevBuild, IsDeepProfile = p.DeepProfile, IsCleanBuild = p.CleanBuild, IsAab = p.IsAab, ZipPackage = p.ZipPackage,
+                };
+            }
         }
 
         private void DrawPipelineStepsSequence()
         {
             EditorGUILayout.BeginVertical("box");
 
-            // 저장 여부와 관계없이 창에서 선택한 플랫폼/옵션 기준으로 스텝 활성 여부를 표시
-            var previewContext = CreateContextFromWindow();
+            var previewContext = CreatePreviewContext(out string previewError);
+            if (previewError != null)
+                EditorGUILayout.HelpBox(previewError, MessageType.Error);
 
             EditorGUILayout.BeginHorizontal();
-            m_ShowPipelineSteps = EditorGUILayout.Foldout(m_ShowPipelineSteps, $"빌드 파이프라인 실행 순서 ({m_Platform} 타겟 조건부 적용)", true, EditorStyles.foldoutHeader);
+            m_ShowPipelineSteps = EditorGUILayout.Foldout(m_ShowPipelineSteps, $"빌드 파이프라인 실행 순서 ({Platform} 타겟 조건부 적용)", true, EditorStyles.foldoutHeader);
 
             if (GUILayout.Button(m_ShowOnlyActiveSteps ? "필터: 조건 만족만" : "필터: 전체 보기", EditorStyles.miniButton, GUILayout.Width(110)))
             {
@@ -612,7 +492,7 @@ namespace HB.CustomBuild.Editor
                 Color prevCoreColor = GUI.color;
                 GUI.color = new Color(0.4f, 0.9f, 0.5f);
                 GUILayout.Label("[Core]", EditorStyles.boldLabel, GUILayout.Width(65));
-                GUILayout.Label($"Unity BuildPipeline.BuildPlayer ({m_Platform} 플레이어 빌드 수행)", EditorStyles.boldLabel);
+                GUILayout.Label($"Unity BuildPipeline.BuildPlayer ({Platform} 플레이어 빌드 수행)", EditorStyles.boldLabel);
                 GUI.color = prevCoreColor;
                 EditorGUILayout.EndHorizontal();
 
@@ -646,7 +526,10 @@ namespace HB.CustomBuild.Editor
             }
 
             EditorGUILayout.EndVertical();
+            ApplyProfileEdits();
         }
+
+        private SerializedProperty DisabledStepsProp => Prop(nameof(HBBuildProfile.DisabledStepIds));
 
         /// <summary>
         /// 비활성 목록에 있지만 등록된 스텝이 없는 ID(스텝 이름 변경 · 삭제)를 보여주고 제거할 수 있게 합니다.
@@ -654,7 +537,8 @@ namespace HB.CustomBuild.Editor
         /// </summary>
         private void DrawUnknownDisabledSteps()
         {
-            var unknown = BuildStepRegistry.GetUnknownStepIds(m_DisabledStepIds);
+            var disabled = ReadStrings(DisabledStepsProp);
+            var unknown = BuildStepRegistry.GetUnknownStepIds(disabled);
             if (unknown.Count == 0) return;
 
             EditorGUILayout.Space(4);
@@ -671,24 +555,28 @@ namespace HB.CustomBuild.Editor
             }
 
             if (removeId != null)
-                m_DisabledStepIds.RemoveAll(x => x == removeId);
+            {
+                disabled.RemoveAll(x => x == removeId);
+                WriteStrings(DisabledStepsProp, disabled);
+            }
         }
 
         private void DrawStepRow(string stepId, string stepName, int executionOrder, bool conditionActive, Type stepType)
         {
-            bool isEnabled = !m_DisabledStepIds.Contains(stepId);
+            var disabled = ReadStrings(DisabledStepsProp);
+            bool isEnabled = !disabled.Contains(stepId);
             bool isSelected = m_PreviewStepId == stepId;
 
             var rowStyle = isSelected ? EditorStyles.selectionRect : EditorStyles.helpBox;
             EditorGUILayout.BeginHorizontal(rowStyle);
 
-            // 1. 활성화/비활성화 체크박스
-            // 체크 상태는 창 값으로 편집되고 [프로필 저장] 시 프로필 에셋에 기록된다
+            // 1. 활성화/비활성화 체크박스 (프로필의 DisabledStepIds에 바로 들어간다)
             bool newEnabled = EditorGUILayout.Toggle(isEnabled, GUILayout.Width(20));
             if (newEnabled != isEnabled)
             {
-                if (newEnabled) m_DisabledStepIds.Remove(stepId);
-                else m_DisabledStepIds.Add(stepId);
+                if (newEnabled) disabled.Remove(stepId);
+                else disabled.Add(stepId);
+                WriteStrings(DisabledStepsProp, disabled);
             }
 
             // 2. 스텝 정보 클릭 버튼
@@ -915,15 +803,17 @@ namespace HB.CustomBuild.Editor
             EditorGUILayout.BeginVertical("box");
             GUILayout.Label("버전 정보", EditorStyles.boldLabel);
 
-            m_Version = EditorGUILayout.TextField("App Version (BundleVersion)", m_Version);
-            m_VersionCode = EditorGUILayout.TextField("Version Code (BuildNumber)", m_VersionCode);
+            EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.Version)), new GUIContent("App Version (BundleVersion)"));
+            EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.VersionCode)), new GUIContent("Version Code (BuildNumber)"));
 
-            if (m_Platform == ESelfBuildPlatform.iOS)
+            if (Platform == ESelfBuildPlatform.iOS)
             {
-                m_ProvisionUUID = EditorGUILayout.TextField("iOS Provision UUID", m_ProvisionUUID);
+                EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.ProvisionUUID)), new GUIContent("iOS Provision UUID"));
+                EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.ProvisionType)), new GUIContent("iOS Provision Type", "UUID가 있을 때 수동 서명 종류. AutoSign은 UUID 없이 자동 서명"));
             }
 
             EditorGUILayout.EndVertical();
+            ApplyProfileEdits();
         }
 
         private void DrawOptionsSection()
@@ -931,103 +821,89 @@ namespace HB.CustomBuild.Editor
             EditorGUILayout.BeginVertical("box");
             GUILayout.Label("빌드 세부 옵션", EditorStyles.boldLabel);
 
-            m_DevBuild = EditorGUILayout.Toggle("Development Build", m_DevBuild);
-            if (m_DevBuild)
+            var devBuild = Prop(nameof(HBBuildProfile.DevBuild));
+            EditorGUILayout.PropertyField(devBuild, new GUIContent("Development Build"));
+            // Deep Profiling · Profiler 자동 연결은 Development Build일 때만 적용된다 (값은 프로필에 남김)
+            if (devBuild.boolValue)
             {
                 EditorGUI.indentLevel++;
-                m_DeepProfile = EditorGUILayout.Toggle("Deep Profiling Support", m_DeepProfile);
+                EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.DeepProfile)), new GUIContent("Deep Profiling Support"));
+                EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.AutoConnectProfiler)), new GUIContent("Autoconnect Profiler"));
                 EditorGUI.indentLevel--;
             }
-            else
-            {
-                m_DeepProfile = false;
-            }
 
-            m_CleanBuild = EditorGUILayout.Toggle("Clean Build Cache", m_CleanBuild);
+            EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.CleanBuild)), new GUIContent("Clean Build Cache"));
 
-            if (m_Platform == ESelfBuildPlatform.Android)
-            {
-                m_IsAab = EditorGUILayout.Toggle("Build Android App Bundle (.aab)", m_IsAab);
-            }
-            else if (m_Platform == ESelfBuildPlatform.PC)
-            {
-                m_ZipPackage = EditorGUILayout.Toggle("Zip Package Output (.zip)", m_ZipPackage);
-            }
+            if (Platform == ESelfBuildPlatform.Android)
+                EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.IsAab)), new GUIContent("Build Android App Bundle (.aab)"));
+            else if (Platform == ESelfBuildPlatform.PC)
+                EditorGUILayout.PropertyField(Prop(nameof(HBBuildProfile.ZipPackage)), new GUIContent("Zip Package Output (.zip)"));
 
             EditorGUILayout.EndVertical();
+            ApplyProfileEdits();
         }
 
-        private void DrawPathSection()
+        private void DrawOutputSection()
         {
             EditorGUILayout.BeginVertical("box");
             GUILayout.Label("빌드 출력 경로 (Output Path)", EditorStyles.boldLabel);
 
-            string resolvedOutput = BuildHelper.ResolveProjectRelativePath(GetEffectiveOutputPath());
-
+            string outputPath = BuildHelper.GetOutputPath(m_SelectedProfile.GetResolvedBuildTarget());
             EditorGUILayout.BeginHorizontal();
-            m_OutputPath = EditorGUILayout.TextField(m_OutputPath);
-            if (GUILayout.Button("폴더 선택", GUILayout.Width(75)))
-            {
-                string selected = EditorUtility.OpenFolderPanel("빌드 출력 폴더 선택", resolvedOutput, "");
-                if (!string.IsNullOrEmpty(selected))
-                    m_OutputPath = ToProjectRelativeIfInside(selected);
-            }
+            EditorGUILayout.LabelField(outputPath + "/", EditorStyles.textField);
             if (GUILayout.Button("열기", GUILayout.Width(50)))
             {
-                Directory.CreateDirectory(resolvedOutput);
-                EditorUtility.RevealInFinder(resolvedOutput);
+                string resolved = BuildHelper.ResolveProjectRelativePath(outputPath);
+                Directory.CreateDirectory(resolved);
+                EditorUtility.RevealInFinder(resolved);
             }
             EditorGUILayout.EndHorizontal();
-
-            if (string.IsNullOrWhiteSpace(m_OutputPath))
-                EditorGUILayout.LabelField($"  ↳ 비어 있음: 기본 경로 사용 ({GetEffectiveOutputPath()})", EditorStyles.miniLabel);
-            else if (Path.IsPathRooted(m_OutputPath))
-                EditorGUILayout.HelpBox("절대 경로는 다른 PC나 Jenkins에서 그대로 쓰입니다. 공유할 프로필에는 프로젝트 기준 상대 경로를 권장합니다.", MessageType.Warning);
+            EditorGUILayout.LabelField("  ↳ 로컬 · Jenkins 모두 이 경로에 만듭니다 (바꿀 수 없음)", EditorStyles.miniLabel);
 
             EditorGUILayout.EndVertical();
         }
 
-        private static string ToProjectRelativeIfInside(string absolutePath)
-        {
-            string root = Path.GetFullPath(Path.Combine(Application.dataPath, "..")).Replace('\\', '/').TrimEnd('/');
-            string full = Path.GetFullPath(absolutePath).Replace('\\', '/').TrimEnd('/');
-
-            if (full.Equals(root, StringComparison.OrdinalIgnoreCase))
-                return ".";
-            if (full.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase))
-                return full.Substring(root.Length + 1);
-            return full;
-        }
-
         private void DrawSceneSection()
         {
+            var scenesProp = Prop(nameof(HBBuildProfile.Scenes));
+            var scenes = ReadStrings(scenesProp);
+            bool changed = false;
+
             EditorGUILayout.BeginVertical("box");
-            GUILayout.Label($"빌드 씬 목록 ({m_ScenePath.Count}개)", EditorStyles.boldLabel);
+            GUILayout.Label($"빌드 씬 목록 ({scenes.Count}개)", EditorStyles.boldLabel);
 
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Build Settings에서 불러오기", GUILayout.Height(24)))
             {
-                LoadScenesFromBuildSettings();
+                scenes = BuildHelper.GetDefaultBuildScenes().ToList();
+                changed = true;
             }
             if (GUILayout.Button("현재 씬 추가", GUILayout.Height(24)))
             {
                 string currentScene = SceneManager.GetActiveScene().path;
-                if (!string.IsNullOrEmpty(currentScene) && !m_ScenePath.Contains(currentScene))
-                    m_ScenePath.Add(currentScene);
+                if (!string.IsNullOrEmpty(currentScene) && !scenes.Contains(currentScene))
+                {
+                    scenes.Add(currentScene);
+                    changed = true;
+                }
             }
             if (GUILayout.Button("전체 비우기", GUILayout.Height(24)))
             {
-                m_ScenePath.Clear();
+                scenes.Clear();
+                changed = true;
             }
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.Space(4);
 
+            if (scenes.All(string.IsNullOrWhiteSpace))
+                EditorGUILayout.LabelField("  ↳ 비어 있음: 빌드할 때 Build Settings의 활성 씬을 씁니다", EditorStyles.miniLabel);
+
             int removeIdx = -1;
-            for (int i = 0; i < m_ScenePath.Count; i++ )
+            for (int i = 0; i < scenes.Count; i++ )
             {
                 EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField($"{i + 1}. {m_ScenePath[i]}", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField($"{i + 1}. {scenes[i]}", EditorStyles.miniLabel);
                 if (GUILayout.Button("✕", GUILayout.Width(24)))
                 {
                     removeIdx = i;
@@ -1037,10 +913,15 @@ namespace HB.CustomBuild.Editor
 
             if (removeIdx >= 0)
             {
-                m_ScenePath.RemoveAt(removeIdx);
+                scenes.RemoveAt(removeIdx);
+                changed = true;
             }
 
             EditorGUILayout.EndVertical();
+
+            if (changed)
+                WriteStrings(scenesProp, scenes);
+            ApplyProfileEdits();
         }
 
         #region CLI & Jenkins Command Generator Section
@@ -1054,23 +935,7 @@ namespace HB.CustomBuild.Editor
             {
                 EditorGUILayout.Space(4);
 
-                // 명령어 모드 (Command Mode)
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField("파라미터 모드 (Mode)", GUILayout.Width(130));
-                m_CliMode = (ECliCommandMode)EditorGUILayout.EnumPopup(m_CliMode);
-                EditorGUILayout.EndHorizontal();
-
-                EditorGUILayout.Space(4);
-
-                // 가이드 설명 레이블
-                string modeDesc = m_CliMode switch
-                {
-                    ECliCommandMode.ProfileOnly => "▶ 1) 순수 프로필: '-buildProfile <경로>' 단일 인자로 가장 깔끔하게 프로필 전체 설정을 적용합니다.",
-                    ECliCommandMode.FullUnpack => "▶ 2) 전체 풀기: 프로필 없이 '-buildTarget', '-buildType', '-buildVersion' 등 모든 개별 CLI 인자를 명시합니다.",
-                    ECliCommandMode.ProfileOverride => "▶ 3) 프로필+오버라이드: 프로필 값이 기본이고, 넘긴 인자만 덮어씁니다. (Jenkinsfile은 값을 넣은 Jenkins 파라미터만 넘김)",
-                    _ => ""
-                };
-                EditorGUILayout.LabelField(modeDesc, EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("▶ 프로필 빌드: '-buildProfile <경로>'. Jenkins는 버전 · 버전 코드 · Development만 파라미터로 덮어쓸 수 있습니다 (비우면 프로필 값).", EditorStyles.wordWrappedMiniLabel);
 
                 EditorGUILayout.LabelField("▶ 실행: 'Unity.exe' 직접 호출 (Jenkins는 에이전트의 UNITY_PATH 또는 ProjectVersion.txt 버전, 로컬은 현재 에디터)", EditorStyles.miniLabel);
 
@@ -1097,7 +962,7 @@ namespace HB.CustomBuild.Editor
                 EditorGUILayout.Space(4);
 
                 // 실시간 미리보기
-                string previewCmd = BuildCommandLine(m_CliMode, false);
+                string previewCmd = BuildCommandLine(false);
                 EditorGUILayout.TextArea(previewCmd, GUILayout.Height(64));
 
                 EditorGUILayout.Space(4);
@@ -1107,12 +972,12 @@ namespace HB.CustomBuild.Editor
 
                 Color prevBackground = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0.4f, 0.85f, 1f);
-                bool copy = GUILayout.Button("선택한 CLI 명령어 복사", GUILayout.Height(28));
+                bool copy = GUILayout.Button("CLI 명령어 복사", GUILayout.Height(28));
                 GUI.backgroundColor = prevBackground;
                 if (copy)
                 {
                     GUIUtility.systemCopyBuffer = previewCmd;
-                    EditorUtility.DisplayDialog("복사 완료", $"선택된 CLI 명령어가 클립보드에 복사되었습니다!\n\n{previewCmd}", "확인");
+                    EditorUtility.DisplayDialog("복사 완료", $"CLI 명령어가 클립보드에 복사되었습니다!\n\n{previewCmd}", "확인");
                 }
 
                 if (GUILayout.Button("배치 파일(.bat) 저장", GUILayout.Height(28), GUILayout.Width(130)))
@@ -1134,29 +999,27 @@ namespace HB.CustomBuild.Editor
         // Jenkins choice 파라미터에서 "프로필 값 사용"을 뜻하는 값
         private const string PROFILE_VALUE = "(profile)";
 
-        private static string BoolArg(bool value) => value ? "true" : "false";
-
         /// <summary> Groovy 작은따옴표 문자열 리터럴 (경로에 ' 나 \ 가 있어도 Jenkinsfile 문법이 깨지지 않게) </summary>
         private static string GroovyQuote(string value) => "'" + value.Replace("\\", "\\\\").Replace("'", "\\'") + "'";
 
-        private string BuildCommandLine(ECliCommandMode mode, bool isJenkinsVar)
+        private string BuildCommandLine(bool isJenkinsVar)
         {
-            BuildCommandParts(mode, isJenkinsVar, out string exe, out string args);
+            BuildCommandParts(isJenkinsVar, out string exe, out string args);
             return $"\"{exe}\" {args}";
         }
 
-        private void BuildCommandParts(ECliCommandMode mode, bool isJenkinsVar, out string exe, out string args)
+        private void BuildCommandParts(bool isJenkinsVar, out string exe, out string args)
         {
-            BuildCommandParts(mode, isJenkinsVar, out exe, out List<string> argList);
+            BuildCommandParts(isJenkinsVar, out exe, out List<string> argList);
             args = string.Join(" ", argList);
         }
 
         /// <summary>
         /// 실행 파일과 인자를 분리해 생성합니다. (.ps1은 Start-Process에 둘을 따로 넘겨야 한다)
-        /// Jenkins용(isJenkinsVar)은 Jenkinsfile의 parameters/environment 값을 참조합니다.
+        /// Jenkins용(isJenkinsVar)은 Jenkinsfile의 parameters/environment 값을 참조하고, 덮어쓰기 인자는 BuildJenkinsfileText가 값을 넣은 파라미터만 덧붙인다.
         /// (Unity Hub 헤드리스 CLI에는 프로젝트를 실행하는 명령이 없어 Unity.exe를 직접 호출한다)
         /// </summary>
-        private void BuildCommandParts(ECliCommandMode mode, bool isJenkinsVar, out string exe, out List<string> argList)
+        private void BuildCommandParts(bool isJenkinsVar, out string exe, out List<string> argList)
         {
             string projectPath = isJenkinsVar ? "${PROJECT_PATH}" : BuildHelper.ProjectPath;
             if (string.IsNullOrEmpty(projectPath))
@@ -1165,13 +1028,13 @@ namespace HB.CustomBuild.Editor
             string logPath = isJenkinsVar ? "${LOG_FILE}" : "build.log";
             string profilePath = isJenkinsVar
                 ? "${profilePath}"   // Jenkinsfile 스크립트가 BUILD_PROFILE_PATH(직접 입력) 또는 BUILD_PROFILE로 정함
-                : (m_SelectedProfile != null ? AssetDatabase.GetAssetPath(m_SelectedProfile) : "Assets/Editor/HBBuild/Profiles/BuildProfile_PC_DEV.asset");
+                : AssetDatabase.GetAssetPath(m_SelectedProfile);
 
             // 프로필 빌드도 -buildTarget을 넘겨야 Unity가 처음부터 그 플랫폼으로 열린다 (배치 모드는 도중 전환하면 실패)
             // Jenkins는 BuildJenkinsfileText가 만든 profileTarget(프로필 경로 → 플랫폼 표에서 고른 값)을 쓴다
             string profileTarget = isJenkinsVar
                 ? "${profileTarget}"
-                : (m_SelectedProfile != null ? m_SelectedProfile.GetResolvedBuildTarget() : GetBuildTarget(m_Platform)).ToString();
+                : m_SelectedProfile.GetResolvedBuildTarget().ToString();
 
             // 인자 하나(이름 + 값)가 한 항목이다. Jenkinsfile은 항목 사이에서만 줄을 바꾼다 (값 안의 " -"는 건드리지 않음)
             var list = new List<string>();
@@ -1183,57 +1046,8 @@ namespace HB.CustomBuild.Editor
             list.Add($"-projectPath \"{projectPath}\"");
             list.Add("-executeMethod HB.CustomBuild.Editor.ProjectBuild.JenkinsBuild");
             list.Add($"-logFile \"{logPath}\"");
-
-            // Mode arguments
-            switch (mode)
-            {
-                case ECliCommandMode.ProfileOnly:
-                    list.Add($"-buildTarget {profileTarget}");
-                    list.Add($"-buildProfile \"{profilePath}\"");
-                    // Jenkins는 프로필의 출력 경로 대신 BuildOutput/<플랫폼>에 만든다 (Clean · archiveArtifacts 대상과 일치)
-                    if (isJenkinsVar)
-                        list.Add("-outputPath \"BuildOutput/${profileTarget}\"");
-                    break;
-
-                case ECliCommandMode.FullUnpack:
-                    string sceneArg = m_ScenePath.Count > 0 ? string.Join(";", m_ScenePath) : BuildHelper.NONE_SCENE_LIST;
-
-                    list.Add($"-buildTarget {(isJenkinsVar ? "${params.BUILD_TARGET}" : GetBuildTarget(m_Platform).ToString())}");
-                    list.Add($"-buildType {(isJenkinsVar ? "${params.BUILD_TYPE}" : m_BuildType.ToString())}");
-                    list.Add($"-buildVersion \"{(isJenkinsVar ? "${params.BUILD_VERSION}" : m_Version)}\"");
-                    list.Add($"-versionCode \"{(isJenkinsVar ? "${params.VERSION_CODE}" : m_VersionCode)}\"");
-                    // Jenkins는 booleanParam(기본값 = 생성 시 창 값)을 참조해 빌드 실행 시 바꿀 수 있게 한다
-                    list.Add($"-devBuild {(isJenkinsVar ? "${params.DEV_BUILD}" : BoolArg(m_DevBuild))}");
-                    list.Add($"-deepProfile {(isJenkinsVar ? "${params.DEEP_PROFILE}" : BoolArg(m_DeepProfile))}");
-                    list.Add($"-cleanBuild {(isJenkinsVar ? "${params.CLEAN_BUILD}" : BoolArg(m_CleanBuild))}");
-                    list.Add($"-isAab {(isJenkinsVar ? "${params.IS_AAB}" : BoolArg(m_IsAab))}");
-                    list.Add($"-zipPackage {(isJenkinsVar ? "${params.ZIP_PACKAGE}" : BoolArg(m_ZipPackage))}");
-                    list.Add($"-sceneList \"{sceneArg}\"");
-
-                    // Jenkins는 기본 경로(workspace/BuildOutput/<Target>)를 써야 archiveArtifacts와 일치한다
-                    if (!isJenkinsVar)
-                        list.Add($"-outputPath \"{GetEffectiveOutputPath()}\"");
-
-                    if (m_DisabledStepIds.Count > 0)
-                        list.Add($"-{BuildHelper.DISABLED_STEPS} \"{string.Join(";", m_DisabledStepIds)}\"");
-                    break;
-
-                case ECliCommandMode.ProfileOverride:
-                    list.Add($"-buildTarget {profileTarget}");
-                    list.Add($"-buildProfile \"{profilePath}\"");
-                    // Jenkins는 프로필의 출력 경로 대신 BuildOutput/<플랫폼>에 만든다 (Clean · archiveArtifacts 대상과 일치)
-                    if (isJenkinsVar)
-                        list.Add("-outputPath \"BuildOutput/${profileTarget}\"");
-                    // Jenkins는 값을 넣은 파라미터만 Jenkinsfile 스크립트가 덧붙인다 (비우면 프로필 값 사용, BuildJenkinsfileText 참고)
-                    if (!isJenkinsVar)
-                    {
-                        list.Add($"-buildVersion \"{m_Version}\"");
-                        list.Add($"-versionCode \"{m_VersionCode}\"");
-                        list.Add($"-buildType {m_BuildType}");
-                        list.Add($"-devBuild {m_DevBuild.ToString().ToLower()}");
-                    }
-                    break;
-            }
+            list.Add($"-buildTarget {profileTarget}");
+            list.Add($"-{BuildHelper.BUILD_PROFILE} \"{profilePath}\"");
 
             argList = list;
         }
@@ -1277,7 +1091,7 @@ namespace HB.CustomBuild.Editor
             string selected = EditorUtility.SaveFilePanel("파워셸 스크립트(.ps1) 저장", projectRoot, "RunBuild", "ps1");
             if (!string.IsNullOrEmpty(selected))
             {
-                BuildCommandParts(m_CliMode, false, out string exe, out string args);
+                BuildCommandParts(false, out string exe, out string args);
 
                 var sb = new StringBuilder();
                 sb.AppendLine("Write-Host '===================================================' -ForegroundColor Cyan");
@@ -1319,6 +1133,7 @@ namespace HB.CustomBuild.Editor
                 "빌드 전에 Unity 프로젝트 폴더의 커밋하지 않은 수정 · 스테이징과 추적하지 않는 파일을 지웁니다. 되돌릴 수 없습니다.\n" +
                 "남는 것: Library 등 .gitignore 대상, 빌드 산출물 폴더, 프로젝트 밖 파일.\n" +
                 "Play 모드이거나 저장하지 않은 씬 · 에셋이 있으면 정리하지 않습니다 (먼저 저장하거나 되돌리세요).\n" +
+                "빌드 프로필은 빌드할 때 저장되지만, 커밋하지 않은 프로필 변경은 정리로 되돌아갑니다 (커밋 전 새 프로필은 삭제).\n" +
                 "정리 직전에 지울 목록을 한 번 더 보여 줍니다. 스크립트가 바뀌면 정리만 하고, 컴파일이 끝난 뒤 빌드를 다시 눌러야 합니다.",
                 MessageType.Error);
             m_LocalGitCleanConfirmed = EditorGUILayout.ToggleLeft("위 파일들이 지워지는 것을 확인했습니다", m_LocalGitCleanConfirmed);
@@ -1353,42 +1168,13 @@ namespace HB.CustomBuild.Editor
             }
         }
 
-        private void LoadScenesFromBuildSettings()
-        {
-            m_ScenePath.Clear();
-            var scenes = BuildHelper.GetDefaultBuildScenes();
-            m_ScenePath.AddRange(scenes);
-        }
-
-        private BuildTarget GetBuildTarget(ESelfBuildPlatform platform)
-        {
-            return platform switch
-            {
-                ESelfBuildPlatform.PC => BuildTarget.StandaloneWindows64,
-                ESelfBuildPlatform.Android => BuildTarget.Android,
-                ESelfBuildPlatform.iOS => BuildTarget.iOS,
-                _ => BuildTarget.StandaloneWindows64
-            };
-        }
-
-        /// <summary> 프로필 에셋 경로의 빌드 대상 (에셋이 없으면 창에서 고른 플랫폼) </summary>
-        private BuildTarget GetProfileTarget(string profilePath)
-        {
-            var profile = AssetDatabase.LoadAssetAtPath<HBBuildProfile>(profilePath);
-            return profile != null ? profile.GetResolvedBuildTarget() : GetBuildTarget(m_Platform);
-        }
-
         /// <summary>
         /// 로컬 빌드 전 git 작업 폴더 정리. 지울 목록을 Console과 대화상자로 보이고 확인을 받은 뒤 정리한다.
         /// 스크립트 · 패키지 · 프로젝트 설정이 바뀌면 컴파일(도메인 리로드)이 빌드 호출을 끊으므로 빌드하지 않고 false.
         /// </summary>
-        private bool CleanWorkingFolderBeforeBuild(BuildContext context)
+        private bool CleanWorkingFolderBeforeBuild()
         {
-            var keepDirs = new List<string> { BuildHelper.ResolveProjectRelativePath("BuildOutput") };
-            if (!string.IsNullOrWhiteSpace(context.OutputPath))
-                keepDirs.Add(BuildHelper.ResolveProjectRelativePath(context.OutputPath));
-
-            var clean = LocalGitClean.Prepare(keepDirs, out string error);
+            var clean = LocalGitClean.Prepare(out string error);
             if (clean == null)
             {
                 EditorUtility.DisplayDialog("git 작업 폴더 정리 불가", error + "\n\n빌드하지 않았습니다.", "확인");
@@ -1411,7 +1197,7 @@ namespace HB.CustomBuild.Editor
             }
 
             // 대화상자가 떠 있는 동안 파일이 바뀌었으면 확인한 목록과 다르므로 실행하지 않는다
-            var recheck = LocalGitClean.Prepare(keepDirs, out error);
+            var recheck = LocalGitClean.Prepare(out error);
             if (!clean.SameAs(recheck))
             {
                 EditorUtility.DisplayDialog("git 작업 폴더 정리 중단",
@@ -1440,16 +1226,13 @@ namespace HB.CustomBuild.Editor
             return true;
         }
 
-        /// <summary> 이번 빌드가 쓰는 설정 에셋 (프로필이면 프로필의 참조, 아니면 창의 참조). 정리로 지워졌는지 보려고 정리 전에 기록한다 </summary>
+        /// <summary> 이번 빌드가 쓰는 설정 에셋 (프로필의 참조). 정리로 지워졌는지 보려고 정리 전에 기록한다 </summary>
         private List<(string Label, UnityEngine.Object Asset)> GetReferencedSettingAssets()
         {
             var list = new List<(string Label, UnityEngine.Object Asset)>();
-            UnityEngine.Object scene = m_SelectedProfile != null ? m_SelectedProfile.SceneDefineAsset : m_SceneDefine;
-            UnityEngine.Object define = m_SelectedProfile != null ? m_SelectedProfile.ProjectDefineAsset : m_ProjectDefine;
-            UnityEngine.Object xcode = m_SelectedProfile != null ? m_SelectedProfile.XcodeSettingsAsset : m_XcodeSettings;
-            if (scene != null) list.Add(("SceneDefine", scene));
-            if (define != null) list.Add(("ProjectDefine", define));
-            if (xcode != null) list.Add(("XcodeSettings", xcode));
+            if (m_SelectedProfile.SceneDefineAsset != null) list.Add(("SceneDefine", m_SelectedProfile.SceneDefineAsset));
+            if (m_SelectedProfile.ProjectDefineAsset != null) list.Add(("ProjectDefine", m_SelectedProfile.ProjectDefineAsset));
+            if (m_SelectedProfile.XcodeSettingsAsset != null) list.Add(("XcodeSettings", m_SelectedProfile.XcodeSettingsAsset));
             return list;
         }
 
@@ -1468,29 +1251,20 @@ namespace HB.CustomBuild.Editor
             // delayCall 시점에 창이 닫혔을 수 있다
             if (this == null) return;
 
-            string buildName = m_SelectedProfile != null ? $"'{m_SelectedProfile.name}' 프로필 기반 " : string.Empty;
+            if (m_SelectedProfile == null) return;
 
-            // 프로필 빌드는 저장된 에셋 값으로만 한다. 창에 미저장 변경이 있으면 자동 저장하지 않고 사용자에게 묻는다
-            if (m_SelectedProfile != null && HasUnsavedProfileChanges())
-            {
-                int choice = EditorUtility.DisplayDialogComplex(
-                    "저장되지 않은 변경",
-                    $"'{m_SelectedProfile.name}' 프로필에 저장되지 않은 변경이 있습니다.\n\n" +
-                    "프로필 빌드는 저장된 프로필 값으로 실행됩니다. 창의 변경을 반영하려면 먼저 저장하세요." +
-                    // 정리는 커밋 상태로 되돌리므로, 커밋하지 않은 저장은 정리 목록에 나와 되돌아간다
-                    (m_LocalGitClean ? "\n\n'빌드 전 git 작업 폴더 정리'가 켜져 있어, 저장해도 커밋하지 않았다면 정리로 되돌아갑니다 (커밋 전 새 프로필은 삭제됨)." : string.Empty),
-                    "저장 후 빌드", "취소", "저장된 값으로 빌드");
-
-                if (choice == 1) return;
-                if (choice == 0) SaveToCurrentProfile();
-            }
+            string buildName = $"'{m_SelectedProfile.name}' 프로필 기반 ";
 
             try
             {
-                var context = m_SelectedProfile != null ? m_SelectedProfile.ToBuildContext() : CreateContextFromWindow();
+                var context = m_SelectedProfile.ToBuildContext();
 
                 if (!ConfirmLiveDevBuild(context))
                     return;
+
+                // 창의 편집은 프로필에 바로 들어가 있다. 빌드한 값과 디스크의 프로필(Jenkins가 읽는 값)이 같도록 빌드 전에 저장한다
+                // (git 정리는 저장 안 한 에셋이 있으면 거부하므로 정리 전에. 커밋하지 않은 저장은 정리로 되돌아간다 — 정리 목록 · 경고에 나옴)
+                AssetDatabase.SaveAssetIfDirty(m_SelectedProfile);
 
                 // 되돌릴 수 없는 정리는 다른 확인을 모두 지난 뒤에 한다
                 if (m_LocalGitClean)
@@ -1502,14 +1276,13 @@ namespace HB.CustomBuild.Editor
                             "정리하려면 경고 아래의 확인 체크박스를 켜고, 정리하지 않으려면 정리 옵션을 끄세요.", "확인");
                         return;
                     }
-                    bool usedProfile = m_SelectedProfile != null;
                     bool wasLiveDev = context.IsLiveDevBuild;
                     var referenced = GetReferencedSettingAssets();
-                    if (!CleanWorkingFolderBeforeBuild(context))
+                    if (!CleanWorkingFolderBeforeBuild())
                         return;
 
-                    // 커밋 전 프로필이었으면 정리로 지워진다. 창 값으로 조용히 빌드하지 않는다
-                    if (usedProfile && m_SelectedProfile == null)
+                    // 커밋 전 프로필이었으면 정리로 지워진다
+                    if (m_SelectedProfile == null)
                     {
                         EditorUtility.DisplayDialog("빌드하지 않음",
                             "선택한 프로필이 커밋되지 않은 파일이라 정리로 지워졌습니다.\n프로필을 다시 고른 뒤 빌드하세요.", "확인");
@@ -1523,17 +1296,14 @@ namespace HB.CustomBuild.Editor
                             $"참조하던 설정 에셋이 커밋되지 않은 파일이라 정리로 지워졌습니다: {string.Join(", ", removed)}\n에셋을 커밋하거나 다시 지정한 뒤 빌드하세요.", "확인");
                         return;
                     }
-                    // 창에 남은 값을 정리된 프로필 값으로 맞춘다 (정리로 되돌아간 저장이 다음 빌드에서 되살아나지 않게)
-                    if (m_SelectedProfile != null)
-                        LoadFromProfile(m_SelectedProfile);
                     // 정리로 프로필 · 설정 에셋이 디스크에서 바뀌었을 수 있으므로 다시 만들고, 새로 LIVE + Development가 됐으면 다시 묻는다
-                    context = m_SelectedProfile != null ? m_SelectedProfile.ToBuildContext() : CreateContextFromWindow();
+                    m_ProfileSO = null;
+                    context = m_SelectedProfile.ToBuildContext();
                     if (!wasLiveDev && !ConfirmLiveDevBuild(context))
                         return;
                 }
 
-                if (m_SelectedProfile != null)
-                    BuildHelper.Log($"[Pipeline] Executing build from Profile: {m_SelectedProfile.name} (Platform: {m_SelectedProfile.TargetPlatform}, Mode: {m_SelectedProfile.BuildType})");
+                BuildHelper.Log($"[Pipeline] Executing build from Profile: {m_SelectedProfile.name} (Platform: {m_SelectedProfile.TargetPlatform}, Mode: {m_SelectedProfile.BuildType})");
                 AbsBuild.Execute(context);
 
                 EditorUtility.DisplayDialog("빌드 완료", $"{buildName}플레이어 빌드가 성공적으로 완료되었습니다!" +
@@ -1562,7 +1332,7 @@ namespace HB.CustomBuild.Editor
 
             bool saveFile = EditorUtility.DisplayDialog(
                 "Jenkinsfile (Groovy) 생성 완료",
-                $"현재 선택된 옵션(Mode: {m_CliMode}) 기반의 Jenkinsfile Groovy 코드가 클립보드에 복사되었습니다!\n\n프로젝트 루트에 'Jenkinsfile' 파일로 저장하시겠습니까?",
+                "Jenkinsfile Groovy 코드가 클립보드에 복사되었습니다!\n\n프로젝트 루트에 'Jenkinsfile' 파일로 저장하시겠습니까?",
                 "Jenkinsfile 파일로 저장",
                 "클립보드 복사만 유지"
             );
@@ -1576,29 +1346,22 @@ namespace HB.CustomBuild.Editor
         }
 
         /// <summary>
-        /// 창의 현재 옵션(모드, 선택 프로필, 버전 등)으로 Jenkinsfile(Groovy) 내용을 만듭니다.
+        /// 프로젝트의 프로필 목록(선택한 프로필이 첫 항목)과 창의 Jenkins 옵션으로 Jenkinsfile(Groovy) 내용을 만듭니다.
         /// </summary>
         private string BuildJenkinsfileText()
         {
-            var allProfiles = HBBuildProfile.FindAllProfiles();
-            var profileChoices = new List<string>();
-
-            if (m_SelectedProfile != null)
+            // 프로필 경로 → 플랫폼 (생성 시점 값. 프로필 플랫폼을 바꾸면 다시 생성해야 한다)
+            var profileTargets = new Dictionary<string, BuildTarget>
             {
-                profileChoices.Add(AssetDatabase.GetAssetPath(m_SelectedProfile));
-            }
-
-            foreach (var p in allProfiles)
+                [AssetDatabase.GetAssetPath(m_SelectedProfile)] = m_SelectedProfile.GetResolvedBuildTarget()
+            };
+            foreach (var p in HBBuildProfile.FindAllProfiles())
             {
                 string pPath = AssetDatabase.GetAssetPath(p);
-                if (!profileChoices.Contains(pPath))
-                    profileChoices.Add(pPath);
+                if (!profileTargets.ContainsKey(pPath))
+                    profileTargets[pPath] = p.GetResolvedBuildTarget();
             }
-
-            if (profileChoices.Count == 0)
-            {
-                profileChoices.Add("Assets/Editor/HBBuild/Profiles/BuildProfile_PC_DEV.asset");
-            }
+            var profileChoices = profileTargets.Keys.ToList();
 
             string choicesArrayStr = string.Join(", ", profileChoices.Select(GroovyQuote));
             string defaultProfile = profileChoices[0];
@@ -1609,7 +1372,6 @@ namespace HB.CustomBuild.Editor
             var sb = new StringBuilder();
             sb.AppendLine("// ==========================================================================");
             sb.AppendLine($"// Jenkins Declarative Pipeline - Generated by HB Custom Build Manager");
-            sb.AppendLine($"// Mode: {m_CliMode}");
             if (localFolder)
                 sb.AppendLine("// Checkout: LocalFolder (fixed build PC folder, git fetch + checkout -f). Paste into a 'Pipeline script' job, one folder per job. To change the folder, regenerate.");
             sb.AppendLine($"// Generated Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
@@ -1632,38 +1394,14 @@ namespace HB.CustomBuild.Editor
             sb.AppendLine();
             sb.AppendLine("    parameters {");
 
-            if (m_CliMode == ECliCommandMode.ProfileOnly || m_CliMode == ECliCommandMode.ProfileOverride)
-            {
-                sb.AppendLine($"        choice(name: 'BUILD_PROFILE', choices: [{choicesArrayStr}], description: '실행할 HBBuildProfile(.asset) 경로 (생성한 PC에 있던 프로필)')");
-                // 목록에 없는 프로필(빌드 PC 전용 .gitignore 폴더 등)은 경로와 플랫폼을 직접 넣는다. 플랫폼이 틀리면 배치 빌드가 불일치로 실패한다
-                sb.AppendLine("        string(name: 'BUILD_PROFILE_PATH', defaultValue: '', description: '목록에 없는 프로필 경로 직접 입력 (예: Assets/Editor/HBBuild/Profiles/BuildMachine/Live_AOS.asset). 비우면 BUILD_PROFILE 사용')");
-                sb.AppendLine($"        choice(name: 'BUILD_TARGET', choices: ['{PROFILE_VALUE}', 'StandaloneWindows64', 'Android', 'iOS'], description: '프로필 플랫폼 ({PROFILE_VALUE} = 생성 시 기록된 플랫폼, 직접 입력한 프로필은 필수)')");
-            }
-
-            if (m_CliMode == ECliCommandMode.FullUnpack)
-            {
-                // 기본값은 생성한 사람의 창 상태와 무관한 안전값으로 고정한다 (DEV 설정으로 생성해 커밋해도 라이브 기본값이 바뀌지 않게)
-                // 선택지 순서도 고정: 첫 항목이 기본값
-                sb.AppendLine("        choice(name: 'BUILD_TARGET', choices: ['StandaloneWindows64', 'Android', 'iOS'], description: '빌드 타겟 플랫폼')");
-                sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: [{string.Join(", ", Enum.GetNames(typeof(EBuildType)).Select(c => $"'{c}'"))}], description: '빌드 환경 모드')");
-                sb.AppendLine("        string(name: 'BUILD_VERSION', defaultValue: '', description: '앱 버전 (Bundle Version, 비우면 PlayerSettings 값)')");
-                sb.AppendLine("        string(name: 'VERSION_CODE', defaultValue: '', description: '버전 코드 (Android versionCode / iOS buildNumber, 모바일은 필수)')");
-                sb.AppendLine("        booleanParam(name: 'DEV_BUILD', defaultValue: false, description: 'Development Build (LIVE에서 켜면 산출물에 _DEVBUILD, 결과 UNSTABLE)')");
-                sb.AppendLine("        booleanParam(name: 'DEEP_PROFILE', defaultValue: false, description: 'Deep Profiling Support (DEV_BUILD일 때만 적용)')");
-                sb.AppendLine("        booleanParam(name: 'CLEAN_BUILD', defaultValue: false, description: 'Clean Build Cache')");
-                sb.AppendLine("        booleanParam(name: 'IS_AAB', defaultValue: false, description: 'Android App Bundle(.aab) 빌드 (Android 전용)')");
-                sb.AppendLine("        booleanParam(name: 'ZIP_PACKAGE', defaultValue: false, description: '빌드 결과 ZIP 압축 (PC 전용)')");
-            }
-
-            if (m_CliMode == ECliCommandMode.ProfileOverride)
-            {
-                // 기본은 프로필 값, 값을 넣은 파라미터만 프로필을 덮어쓴다 (Jenkins 우선)
-                string typeChoices = string.Join(", ", new[] { PROFILE_VALUE }.Concat(Enum.GetNames(typeof(EBuildType))).Select(c => $"'{c}'"));
-                sb.AppendLine($"        choice(name: 'BUILD_TYPE', choices: [{typeChoices}], description: '빌드 환경 모드 ({PROFILE_VALUE} = 프로필 값)')");
-                sb.AppendLine($"        choice(name: 'DEV_BUILD', choices: ['{PROFILE_VALUE}', 'true', 'false'], description: 'Development Build ({PROFILE_VALUE} = 프로필 값)')");
-                sb.AppendLine("        string(name: 'BUILD_VERSION', defaultValue: '', description: '앱 버전 (Bundle Version, 비우면 프로필 값)')");
-                sb.AppendLine("        string(name: 'VERSION_CODE', defaultValue: '', description: '버전 코드 (Android/iOS, 비우면 프로필 값)')");
-            }
+            sb.AppendLine($"        choice(name: 'BUILD_PROFILE', choices: [{choicesArrayStr}], description: '실행할 HBBuildProfile(.asset) 경로 (생성한 PC에 있던 프로필)')");
+            // 목록에 없는 프로필(빌드 PC 전용 .gitignore 폴더 등)은 경로와 플랫폼을 직접 넣는다. 플랫폼이 틀리면 배치 빌드가 불일치로 실패한다
+            sb.AppendLine("        string(name: 'BUILD_PROFILE_PATH', defaultValue: '', description: '목록에 없는 프로필 경로 직접 입력 (예: Assets/Editor/HBBuild/Profiles/BuildMachine/Live_AOS.asset). 비우면 BUILD_PROFILE 사용')");
+            sb.AppendLine($"        choice(name: 'BUILD_TARGET', choices: ['{PROFILE_VALUE}', 'StandaloneWindows64', 'Android', 'iOS'], description: '프로필 플랫폼 ({PROFILE_VALUE} = 생성 시 기록된 플랫폼, 직접 입력한 프로필은 필수)')");
+            // 기본은 프로필 값, 값을 넣은 파라미터만 프로필을 덮어쓴다 (덮어쓸 수 있는 것은 버전 · 버전 코드 · Development뿐)
+            sb.AppendLine($"        choice(name: 'DEV_BUILD', choices: ['{PROFILE_VALUE}', 'true', 'false'], description: 'Development Build ({PROFILE_VALUE} = 프로필 값)')");
+            sb.AppendLine("        string(name: 'BUILD_VERSION', defaultValue: '', description: '앱 버전 (Bundle Version, 비우면 프로필 값)')");
+            sb.AppendLine("        string(name: 'VERSION_CODE', defaultValue: '', description: '버전 코드 (Android/iOS, 비우면 프로필 값)')");
 
             // 작업 폴더는 파라미터로 열지 않는다 (빌드 권한만으로 다른 git 폴더를 지정해 checkout -f · clean -fd 하지 못하게)
             if (localFolder)
@@ -1713,8 +1451,6 @@ namespace HB.CustomBuild.Editor
             // 단계 본문은 따로 모은다 (로컬 폴더 모드는 dir(PROJECT_PATH) 안에서 실행 — readFile 상대 경로 기준)
             var body = new StringBuilder();
             body.AppendLine("                script {");
-            body.AppendLine($"                    echo \"Executing Unity Build: Mode={m_CliMode}\"");
-            body.AppendLine();
 
             // Unity 경로: 에이전트 환경변수 UNITY_PATH, 없으면 ProjectVersion.txt의 버전으로 Hub 설치 경로(UNITY_EDITORS_ROOT로 바꿀 수 있음)
             body.AppendLine("                    def unityPath = env.UNITY_PATH");
@@ -1732,33 +1468,27 @@ namespace HB.CustomBuild.Editor
             body.AppendLine("                    echo \"Unity: ${unityPath}\"");
             body.AppendLine();
 
-            if (m_CliMode == ECliCommandMode.ProfileOnly || m_CliMode == ECliCommandMode.ProfileOverride)
-            {
-                // 고른 프로필의 플랫폼을 -buildTarget으로 넘긴다 (생성 시점의 프로필 플랫폼. 바꿨으면 다시 생성 — 배치 빌드가 불일치로 실패함)
-                string targetMap = string.Join(", ", profileChoices.Select(path => $"{GroovyQuote(path)}: {GroovyQuote(GetProfileTarget(path).ToString())}"));
-                body.AppendLine($"                    def profileTargets = [{targetMap}]");
-                body.AppendLine("                    def profilePath = params.BUILD_PROFILE_PATH?.trim() ?: params.BUILD_PROFILE");
-                // 명령줄에 들어가므로 에셋 경로에 쓰는 문자만 허용한다
-                body.AppendLine(@"                    if (!(profilePath ==~ /[\p{L}\p{N} ._\/-]+\.asset/)) error(""Profile path must be an .asset path (letters, digits, space, . _ / -): ${profilePath}"")");
-                body.AppendLine($"                    def profileTarget = params.BUILD_TARGET && params.BUILD_TARGET != '{PROFILE_VALUE}' ? params.BUILD_TARGET : profileTargets[profilePath]");
-                body.AppendLine("                    if (!profileTarget) error(\"No build target recorded for profile ${profilePath}. Choose BUILD_TARGET or regenerate the Jenkinsfile.\")");
-                body.AppendLine();
-            }
+            // 고른 프로필의 플랫폼을 -buildTarget으로 넘긴다 (생성 시점의 프로필 플랫폼. 바꿨으면 다시 생성 — 배치 빌드가 불일치로 실패함)
+            string targetMap = string.Join(", ", profileTargets.Select(kv => $"{GroovyQuote(kv.Key)}: {GroovyQuote(kv.Value.ToString())}"));
+            body.AppendLine($"                    def profileTargets = [{targetMap}]");
+            body.AppendLine("                    def profilePath = params.BUILD_PROFILE_PATH?.trim() ?: params.BUILD_PROFILE");
+            // 명령줄에 들어가므로 에셋 경로에 쓰는 문자만 허용한다
+            body.AppendLine(@"                    if (!(profilePath ==~ /[\p{L}\p{N} ._\/-]+\.asset/)) error(""Profile path must be an .asset path (letters, digits, space, . _ / -): ${profilePath}"")");
+            body.AppendLine($"                    def profileTarget = params.BUILD_TARGET && params.BUILD_TARGET != '{PROFILE_VALUE}' ? params.BUILD_TARGET : profileTargets[profilePath]");
+            body.AppendLine("                    if (!profileTarget) error(\"No build target recorded for profile ${profilePath}. Choose BUILD_TARGET or regenerate the Jenkinsfile.\")");
+            body.AppendLine();
 
-            if (m_CliMode == ECliCommandMode.FullUnpack || m_CliMode == ECliCommandMode.ProfileOverride)
-            {
-                // 자유 입력 파라미터는 sh/bat 명령줄에 들어가므로 허용 문자만 통과시킨다 ($(...), ", & 등으로 명령이 깨지거나 끼어드는 것 방지)
-                // 첫 글자 '-'도 막는다 (GetArg가 '-'로 시작하는 값을 다음 인자 이름으로 보고 버림)
-                body.AppendLine("                    ['BUILD_VERSION', 'VERSION_CODE'].each { name ->");
-                body.AppendLine("                        def value = params[name]?.trim()");
-                body.AppendLine("                        if (value && !(value ==~ /[0-9A-Za-z._][0-9A-Za-z._-]*/)) {");
-                body.AppendLine("                            error(\"${name} contains characters not allowed (allowed: 0-9 A-Z a-z . _ -, not starting with -)\")");
-                body.AppendLine("                        }");
-                body.AppendLine("                    }");
-                body.AppendLine();
-            }
+            // 자유 입력 파라미터는 sh/bat 명령줄에 들어가므로 허용 문자만 통과시킨다 ($(...), ", & 등으로 명령이 깨지거나 끼어드는 것 방지)
+            // 첫 글자 '-'도 막는다 (GetArg가 '-'로 시작하는 값을 다음 인자 이름으로 보고 버림)
+            body.AppendLine("                    ['BUILD_VERSION', 'VERSION_CODE'].each { name ->");
+            body.AppendLine("                        def value = params[name]?.trim()");
+            body.AppendLine("                        if (value && !(value ==~ /[0-9A-Za-z._][0-9A-Za-z._-]*/)) {");
+            body.AppendLine("                            error(\"${name} contains characters not allowed (allowed: 0-9 A-Z a-z . _ -, not starting with -)\")");
+            body.AppendLine("                        }");
+            body.AppendLine("                    }");
+            body.AppendLine();
 
-            BuildCommandParts(m_CliMode, true, out string jenkinsExe, out List<string> jenkinsArgs);
+            BuildCommandParts(true, out string jenkinsExe, out List<string> jenkinsArgs);
             string formattedCmd = string.Join(" \\\n                        ", new[] { $"\"{jenkinsExe}\"" }.Concat(jenkinsArgs));
 
             body.AppendLine("                    def unityArgs = \"\"\"");
@@ -1766,20 +1496,16 @@ namespace HB.CustomBuild.Editor
             body.AppendLine("                    \"\"\".stripIndent().trim()");
             body.AppendLine();
 
-            if (m_CliMode == ECliCommandMode.ProfileOverride)
-            {
-                // 빈 값을 인자로 넘기면 빌드가 실패하므로(-buildType "" 등) 값을 넣은 파라미터만 인자로 붙인다
-                body.AppendLine("                    def overrides = []");
-                body.AppendLine($"                    if (params.BUILD_TYPE && params.BUILD_TYPE != '{PROFILE_VALUE}') overrides << \"-buildType ${{params.BUILD_TYPE}}\"");
-                body.AppendLine($"                    if (params.DEV_BUILD && params.DEV_BUILD != '{PROFILE_VALUE}') overrides << \"-devBuild ${{params.DEV_BUILD}}\"");
-                body.AppendLine("                    if (params.BUILD_VERSION?.trim()) overrides << \"-buildVersion \\\"${params.BUILD_VERSION.trim()}\\\"\"");
-                body.AppendLine("                    if (params.VERSION_CODE?.trim()) overrides << \"-versionCode \\\"${params.VERSION_CODE.trim()}\\\"\"");
-                body.AppendLine("                    if (overrides) {");
-                body.AppendLine("                        unityArgs += ' ' + overrides.join(' ')");
-                body.AppendLine("                    }");
-                body.AppendLine("                    echo \"Profile overrides: ${overrides ? overrides.join(' ') : '(none)'}\"");
-                body.AppendLine();
-            }
+            // 빈 값을 인자로 넘기면 빌드가 실패하므로(-buildVersion "" 등) 값을 넣은 파라미터만 인자로 붙인다
+            body.AppendLine("                    def overrides = []");
+            body.AppendLine($"                    if (params.DEV_BUILD && params.DEV_BUILD != '{PROFILE_VALUE}') overrides << \"-{BuildHelper.DEV_BUILD} ${{params.DEV_BUILD}}\"");
+            body.AppendLine($"                    if (params.BUILD_VERSION?.trim()) overrides << \"-{BuildHelper.BUILD_VERSION} \\\"${{params.BUILD_VERSION.trim()}}\\\"\"");
+            body.AppendLine($"                    if (params.VERSION_CODE?.trim()) overrides << \"-{BuildHelper.VERSION_CODE} \\\"${{params.VERSION_CODE.trim()}}\\\"\"");
+            body.AppendLine("                    if (overrides) {");
+            body.AppendLine("                        unityArgs += ' ' + overrides.join(' ')");
+            body.AppendLine("                    }");
+            body.AppendLine("                    echo \"Profile overrides: ${overrides ? overrides.join(' ') : '(none)'}\"");
+            body.AppendLine();
             body.AppendLine("                    if (isUnix()) {");
             body.AppendLine("                        sh unityArgs");
             body.AppendLine("                    } else {");
@@ -2018,26 +1744,13 @@ namespace HB.CustomBuild.Editor
             BuildHelper.Log("=== Starting Jenkins CI/CD Automated Build ===");
 
             BuildHelper.SetUpAllArgs();
-            BuildHelper.ReadDevBuildState();
+            // 인자 검사를 빌드 준비 전에 한다 (없앤 인자 · -devBuild 값 · 프로필 없음은 바로 실패)
+            BuildHelper.ValidateArgs();
+            string profileArg = BuildHelper.GetRequiredProfileArg();
             BuildHelper.ReadEnvironment();
 
-            var profileArg = BuildHelper.GetArg(BuildHelper.BUILD_PROFILE);
-            if (!string.IsNullOrEmpty(profileArg))
-            {
-                BuildHelper.Log($"Detected -buildProfile argument: {profileArg}");
-                AbsBuild.ExecuteFromProfilePath(profileArg);
-                return;
-            }
-
-            var platformTargetStr = BuildHelper.GetArg(BuildHelper.BUILD_TARGET);
-            if (string.IsNullOrEmpty(platformTargetStr) ||
-                !Enum.TryParse<BuildTarget>(platformTargetStr, true, out var platformTarget))
-            {
-                throw BuildHelper.ThrowError($"Missing or invalid -buildTarget argument :: '{platformTargetStr}'");
-            }
-
-            BuildHelper.Log($"Resolved Build Platform: {platformTarget}");
-            BuildProcess.Build(platformTarget);
+            BuildHelper.Log($"Detected -buildProfile argument: {profileArg}");
+            AbsBuild.ExecuteFromProfilePath(profileArg);
         }
 
         #endregion

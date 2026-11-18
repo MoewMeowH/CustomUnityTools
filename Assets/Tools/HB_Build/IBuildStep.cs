@@ -23,7 +23,10 @@ namespace HB.CustomBuild.Editor
         public bool IsCleanBuild { get; set; }
         public bool IsAab { get; set; }
         public bool ZipPackage { get; set; }
-        public string OutputPath { get; set; }
+        /// <summary> Development Build면 플레이어가 에디터 Profiler에 자동 연결 </summary>
+        public bool AutoConnectProfiler { get; set; }
+        /// <summary> 출력 폴더 BuildOutput/&lt;Target&gt; (프로젝트 루트 기준). 로컬 · Jenkins 모두 같고 바꿀 수 없다 </summary>
+        public string OutputPath => BuildHelper.GetOutputPath(Target);
         /// <summary> 산출물 이름의 소스 칸: 커밋 짧은 해시(커밋 안 한 변경이 있으면 -dirty, git이 없으면 nogit). 빌드 시작 때 채운다 </summary>
         public string SourceRevision { get; set; }
         /// <summary> Jenkins 빌드면 BUILD_NUMBER(없으면 빈 문자열), 아니면 null. 빌드 시작 때 채운다 </summary>
@@ -33,7 +36,7 @@ namespace HB.CustomBuild.Editor
         public BuildReport Report { get; set; }
 
         /// <summary>
-        /// 이번 빌드에서 제외할 스텝 ID 목록 (프로필 에셋 또는 -disabledSteps CLI 인자로 지정)
+        /// 이번 빌드에서 제외할 스텝 ID 목록 (프로필 에셋의 DisabledStepIds)
         /// </summary>
         public HashSet<string> DisabledStepIds { get; } = new HashSet<string>();
 
@@ -91,8 +94,8 @@ namespace HB.CustomBuild.Editor
                 PlayerOptions.options |= BuildOptions.Development;
                 if (IsDeepProfile)
                     PlayerOptions.options |= BuildOptions.EnableDeepProfilingSupport;
-                // -autoProfile: BuildPipeline.BuildPlayer는 EditorUserBuildSettings.connectProfiler가 아니라 이 옵션을 따른다
-                if (BuildHelper.IsAutoProfile)
+                // BuildPipeline.BuildPlayer는 EditorUserBuildSettings.connectProfiler가 아니라 이 옵션을 따른다
+                if (AutoConnectProfiler)
                     PlayerOptions.options |= BuildOptions.ConnectWithProfiler;
             }
 

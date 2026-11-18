@@ -11,18 +11,6 @@ using static HB.CustomBuild.Editor.BuildHelper;
 namespace HB.CustomBuild.Editor
 {
     /// <summary>
-    /// Jenkins 및 로컬 빌드 진입을 중계하는 프로세스 클래스입니다.
-    /// </summary>
-    public sealed class BuildProcess
-    {
-        public static void Build(BuildTarget target)
-        {
-            Log($"[BuildProcess] Starting automated build pipeline for {target}");
-            AbsBuild.ExecuteFromCommandLine(target);
-        }
-    }
-
-    /// <summary>
     /// 빌드 파이프라인 오케스트레이터입니다.
     /// IPreBuildStep 설정 실행 -> Unity BuildPipeline.BuildPlayer -> IPostBuildStep 사후 처리만 순수하게 수행합니다.
     /// 스텝이 변경한 PlayerSettings 등은 빌드 성공/실패와 관계없이 빌드 전 상태로 복원합니다.
@@ -38,7 +26,7 @@ namespace HB.CustomBuild.Editor
                 throw ThrowError($"Unsupported build target: {context.Target} (supported: StandaloneWindows, StandaloneWindows64, Android, iOS)");
             EnsureActiveBuildTarget(context.TargetGroup, context.Target);
 
-            // 딥 프로파일은 개발 빌드에서만 유효하다. 프로필 · 창 · CLI 모든 경로를 여기서 한 번에 맞춘다
+            // 딥 프로파일은 개발 빌드에서만 유효하다. 로컬 · CLI 모든 경로를 여기서 한 번에 맞춘다
             // (프로필 값은 그대로 두어야 CLI가 -devBuild만 덮어써도 딥 프로파일 설정이 살아 있다)
             if (!context.IsDevBuild && context.IsDeepProfile)
             {
@@ -46,9 +34,8 @@ namespace HB.CustomBuild.Editor
                 context.IsDeepProfile = false;
             }
 
-            // 빌드 산출물(기본 BuildOutput/ 과 이번 출력 경로)과 빌드 로그 파일은 소스 변경으로 보지 않는다
-            var outputDirs = GetOutputDirsToExclude(context);
-            string outputPathAtStart = context.OutputPath;
+            // 빌드 산출물(BuildOutput/)과 빌드 로그 파일은 소스 변경으로 보지 않는다
+            var outputDirs = new List<string> { ResolveProjectRelativePath(BUILD_OUTPUT_DIR) };
             var logFiles = GetLogFilePaths().ToList();
 
             // 산출물 이름의 소스 칸 (빌드가 파일을 바꾸기 전에 본다). 이름만 다시 계산한다 (호출부가 넣은 다른 옵션은 그대로)
@@ -147,9 +134,8 @@ namespace HB.CustomBuild.Editor
                 }
                 finally
                 {
-                    // 빌드 산출물 · 빌드 로그 파일은 목록에서 뺀다 (사전 스텝이 출력 경로를 바꿨으면 그 경로도)
-                    var endOutputDirs = context.OutputPath == outputPathAtStart ? outputDirs : outputDirs.Union(GetOutputDirsToExclude(context)).ToList();
-                    changeReport?.LogChangesDuringBuild(endOutputDirs, logFiles);
+                    // 빌드 산출물 · 빌드 로그 파일은 목록에서 뺀다
+                    changeReport?.LogChangesDuringBuild(outputDirs, logFiles);
                     WriteWarningsFile(context);
                 }
             }
@@ -240,13 +226,12 @@ namespace HB.CustomBuild.Editor
             return Execute(context);
         }
 
-        private static void ApplyCommandLineOverrides(BuildContext context)
+        /// <summary>
+        /// 프로필 값을 덮어쓰는 인자는 -buildVersion · -versionCode · -devBuild 셋뿐이다 (없앤 인자는 BuildHelper.ValidateArgs가 실패시킴).
+        /// </summary>
+        internal static void ApplyCommandLineOverrides(BuildContext context)
         {
-            if (TryGetBuildTypeArg(out var bType))
-            {
-                Log($"[CLI Override] BuildType: {context.BuildType} -> {bType}");
-                context.BuildType = bType;
-            }
+            ValidateArgs();
 
             var ver = GetArg(BUILD_VERSION);
             if (!string.IsNullOrEmpty(ver))
@@ -268,44 +253,6 @@ namespace HB.CustomBuild.Editor
                 context.IsDevBuild = dev;
             }
 
-            if (TryGetBoolArg(DEEP_PROF, out bool deep))
-            {
-                Log($"[CLI Override] DeepProfile: {context.IsDeepProfile} -> {deep}");
-                context.IsDeepProfile = deep;
-            }
-
-            if (TryGetBoolArg(CLEAN_BUILD, out bool clean))
-            {
-                Log($"[CLI Override] CleanBuild: {context.IsCleanBuild} -> {clean}");
-                context.IsCleanBuild = clean;
-            }
-
-            if (TryGetBoolArg(IS_AAB, out bool aab))
-            {
-                Log($"[CLI Override] IsAab: {context.IsAab} -> {aab}");
-                context.IsAab = aab;
-            }
-
-            if (TryGetBoolArg(ZIP_PACKAGE, out bool zip))
-            {
-                Log($"[CLI Override] ZipPackage: {context.ZipPackage} -> {zip}");
-                context.ZipPackage = zip;
-            }
-
-            var customOut = GetArg(OUTPUT_PATH);
-            if (!string.IsNullOrEmpty(customOut))
-            {
-                Log($"[CLI Override] OutputPath: {context.OutputPath} -> {customOut}");
-                context.OutputPath = customOut;
-            }
-
-            if (TryGetDisabledStepsArg(out var disabledSteps))
-            {
-                Log($"[CLI Override] DisabledSteps: {string.Join(";", disabledSteps)}");
-                context.DisabledStepIds.Clear();
-                context.DisabledStepIds.UnionWith(disabledSteps);
-            }
-
             // 딥 프로파일은 개발 빌드에서만 유효하다 (-devBuild false만 넘겨도 스텝이 딥 프로파일을 켜지 않도록)
             if (!context.IsDevBuild && context.IsDeepProfile)
             {
@@ -313,54 +260,8 @@ namespace HB.CustomBuild.Editor
                 context.IsDeepProfile = false;
             }
 
-            // 덮어쓴 값(개발 빌드, 경로 등)을 실제 빌드 옵션에 반영
+            // 덮어쓴 값(개발 빌드, 버전 등)을 실제 빌드 옵션에 반영
             context.RebuildPlayerOptions();
-        }
-
-        /// <summary>
-        /// Jenkins 등 CLI 환경에서 커맨드라인 인자들을 읽어 BuildContext를 구성하고 파이프라인을 실행합니다.
-        /// </summary>
-        public static BuildReport ExecuteFromCommandLine(BuildTarget target)
-        {
-            var context = new BuildContext();
-            context.Target = target;
-            context.TargetGroup = GetTargetGroup(target);
-
-            // 인자 파싱 (값이 있는데 잘못된 경우 기본값으로 대체하지 않고 실패)
-            context.BuildType = TryGetBuildTypeArg(out var bType) ? bType : EBuildType.DEV;
-
-            var ver = GetArg(BUILD_VERSION);
-            context.Version = !string.IsNullOrEmpty(ver) ? ver : Application.version;
-
-            var vCode = GetArg(VERSION_CODE);
-            // 버전 코드는 기본값으로 채우지 않는다 (모바일 빌드는 비어 있으면 ValidateVersionCode에서 실패)
-            context.VersionCode = vCode ?? string.Empty;
-
-            context.IsDevBuild = TryGetBoolArg(DEV_BUILD, out bool dev) && dev;
-            context.IsDeepProfile = context.IsDevBuild && TryGetBoolArg(DEEP_PROF, out bool deep) && deep;
-            context.IsCleanBuild = TryGetBoolArg(CLEAN_BUILD, out bool clean) && clean;
-            context.IsAab = TryGetBoolArg(IS_AAB, out bool isAab) && isAab;
-            context.ZipPackage = TryGetBoolArg(ZIP_PACKAGE, out bool zip) && zip;
-
-            if (TryGetDisabledStepsArg(out var disabledSteps))
-                context.DisabledStepIds.UnionWith(disabledSteps);
-
-            var customOut = GetArg(OUTPUT_PATH);
-            context.OutputPath = !string.IsNullOrEmpty(customOut) ? customOut : GetDefaultOutputPath(target);
-
-            // 씬 목록
-            var sceneList = GetArg(SCENE_LIST);
-            if (!string.IsNullOrEmpty(sceneList) && !sceneList.Equals(NONE_SCENE_LIST, StringComparison.OrdinalIgnoreCase))
-            {
-                context.Scenes = sceneList.Split(';', '$', ',').Where(x => !string.IsNullOrEmpty(x)).ToList();
-            }
-            else
-            {
-                context.Scenes = GetDefaultBuildScenes().ToList();
-            }
-
-            context.RebuildPlayerOptions();
-            return Execute(context);
         }
 
         /// <summary>
@@ -412,22 +313,6 @@ namespace HB.CustomBuild.Editor
             }
         }
 
-        /// <summary>
-        /// 소스 변경으로 보지 않을 빌드 산출물 폴더 (BuildOutput/ · 출력 경로).
-        /// 출력 경로가 프로젝트 루트 · Assets 등 소스를 덮으면 빼고 경고한다 (그대로 두면 -dirty · 바뀐 파일 보고가 꺼짐).
-        /// </summary>
-        private static List<string> GetOutputDirsToExclude(BuildContext context)
-        {
-            var dirs = new List<string> { ResolveProjectRelativePath("BuildOutput") };
-            if (!string.IsNullOrWhiteSpace(context.OutputPath))
-                dirs.Add(ResolveProjectRelativePath(context.OutputPath));
-
-            var safe = BuildRevision.FilterOutputDirs(dirs, out var covering);
-            foreach (string dir in covering)
-                LogWarning($"[Revision] Output path '{dir}' covers project source. It is not excluded from change checks.");
-            return safe;
-        }
-
         /// <summary> 이번 Unity 실행이 쓰는 로그 파일 (-logFile 인자, Application.consoleLogPath) </summary>
         private static IEnumerable<string> GetLogFilePaths()
         {
@@ -469,11 +354,9 @@ namespace HB.CustomBuild.Editor
             if (context.DisabledStepIds.Contains(PreBuildStep_ConfigDefines.FIXED_STEP_ID))
                 throw ThrowError($"LIVE build cannot disable the define step '{PreBuildStep_ConfigDefines.FIXED_STEP_ID}'. Re-enable it in the profile.");
 
-            var container = context.GetCustomData<ProjectDefine>("ProjectDefine", null);
+            var container = ProjectDefine.FromContext(context);
             if (container == null)
-                container = ProjectDefine.LoadIfExists(context);
-            if (container == null)
-                throw ThrowError("LIVE build requires a DefineContainer (ProjectDefine) asset. Without it, the scripting define symbols committed in ProjectSettings are used as-is.");
+                throw ThrowError("LIVE build requires a DefineContainer (ProjectDefine) asset in the build profile. Without it, the scripting define symbols committed in ProjectSettings are used as-is.");
 
             if (container.GetDefineArray(context.BuildType, context.Target) == null)
                 throw ThrowError($"LIVE build requires a define entry for {context.BuildType}/{context.Target} in DefineContainer '{container.name}'. Add the entry (an empty list clears all symbols).");
@@ -490,7 +373,7 @@ namespace HB.CustomBuild.Editor
 
             string list = string.Join(", ", unknown.Select(id => $"'{id}'"));
             if (context.BuildType == EBuildType.LIVE || Application.isBatchMode)
-                throw ThrowError($"Disabled step id(s) not registered: {list}. Remove them from the profile (Build Manager window) or -disabledSteps.");
+                throw ThrowError($"Disabled step id(s) not registered: {list}. Remove them from the profile (Build Manager window).");
 
             context.AddWarning($"[Pipeline] Disabled step id(s) not registered: {list} (the step may have been renamed or removed). LIVE / batch builds fail on this.");
         }
@@ -521,38 +404,6 @@ namespace HB.CustomBuild.Editor
             context.VersionCode = code;
         }
 
-        private static bool TryGetBuildTypeArg(out EBuildType buildType)
-        {
-            buildType = default;
-            string value = GetArg(BUILD_TYPE);
-            if (string.IsNullOrEmpty(value))
-            {
-                if (HasArg(BUILD_TYPE))
-                    throw ThrowError($"-{BUILD_TYPE} requires a value (allowed: {string.Join(", ", Enum.GetNames(typeof(EBuildType)))})");
-                return false;
-            }
-
-            if (!Enum.TryParse(value, true, out buildType) || !Enum.IsDefined(typeof(EBuildType), buildType))
-            {
-                throw ThrowError($"Invalid -{BUILD_TYPE} argument: '{value}' (allowed: {string.Join(", ", Enum.GetNames(typeof(EBuildType)))})");
-            }
-            return true;
-        }
-
-        private static bool TryGetDisabledStepsArg(out string[] stepIds)
-        {
-            string value = GetArg(DISABLED_STEPS);
-            if (string.IsNullOrEmpty(value))
-            {
-                // -disabledSteps "" 는 "NONE"과 같이 비활성 목록을 비우는 것으로 처리
-                stepIds = Array.Empty<string>();
-                return HasArg(DISABLED_STEPS);
-            }
-
-            stepIds = value.Split(';').Select(x => x.Trim()).Where(x => x.Length > 0 && x != NONE_SCENE_LIST).ToArray();
-            return true;
-        }
-
         private static void EnsureActiveBuildTarget(BuildTargetGroup group, BuildTarget target)
         {
             // 배치 모드(-executeMethod)에서 플랫폼을 전환하면 스크립트가 재컴파일되지 않아 #if UNITY_ANDROID 등이 이전 플랫폼 기준으로 남는다.
@@ -560,7 +411,7 @@ namespace HB.CustomBuild.Editor
             if (Application.isBatchMode && EditorUserBuildSettings.activeBuildTarget != target)
             {
                 throw ThrowError($"Active build target is {EditorUserBuildSettings.activeBuildTarget}, but this build targets {target}. " +
-                                 $"Launch Unity with -buildTarget {target} (regenerate the Jenkinsfile if it was created before HB_Build added -buildTarget to profile builds).");
+                                 $"Launch Unity with -buildTarget {target} (the profile's platform; regenerate the Jenkinsfile if the profile's platform changed).");
             }
 
             if (EditorUserBuildSettings.selectedBuildTargetGroup != group ||

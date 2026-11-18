@@ -2,17 +2,15 @@
 
 ## iOS 서명
 
-프로필 `CustomEntries`의 `ProvisionType`과 `ProvisionUUID`로 정합니다.
-
-- `ProvisionType`은 대소문자를 무시하고, 없으면 `Distribution`입니다. 아래 값 밖이면 빌드가 실패합니다.
+프로필의 `ProvisionType` · `ProvisionUUID` 필드로 정합니다 (Build Manager 창의 버전 정보 영역, iOS일 때).
 
 | `ProvisionType` | 동작 |
 |---|---|
-| `Development` · `Distribution` · `Automatic` | Unity `ProvisioningProfileType`과 같은 뜻입니다 (`Automatic` = 프로필 종류를 Xcode 빌드 때 자동 판정). UUID가 있으면 자동 서명을 끄고 그 종류 · UUID로 수동 서명합니다 |
+| `Distribution`(기본) · `Development` · `Automatic` | Unity `ProvisioningProfileType`과 같은 뜻입니다 (`Automatic` = 프로필 종류를 Xcode 빌드 때 자동 판정). UUID가 있으면 자동 서명을 끄고 그 종류 · UUID로 수동 서명합니다 |
 | `AutoSign` (HB_Build 전용) | 자동 서명을 켜고 UUID는 넣지 않습니다 (UUID가 있으면 경고). Team ID는 프로젝트 설정 값을 씁니다 |
 
 - 수동 서명 설정은 빌드 뒤 원래 값으로 복원합니다.
-- UUID가 없으면 프로젝트의 서명 설정을 그대로 씁니다 (`ProvisionType`만 넣었으면 경고).
+- UUID가 없고 `AutoSign`도 아니면 프로젝트의 서명 설정을 그대로 씁니다.
 
 ## iOS Xcode 설정
 
@@ -106,8 +104,8 @@ UIRequiresPersistentWiFi · UIApplicationExitsOnSuspend · CADisableMinimumFrame
 
 ### 에셋 참조 검사
 
-- 프로필 · 창의 슬롯이 깨진 참조(Missing)이면 실패합니다.
-- `CustomEntries`가 `XcodeSettings` 키를 다른 값으로 쓰면 실패합니다.
+- 프로필의 슬롯이 깨진 참조(Missing)이면 실패합니다. 슬롯이 비면 Xcode 설정 적용을 건너뜁니다 (기본 위치에서 찾지 않음).
+- `CustomEntries`가 `XcodeSettings` 키를 쓰면 실패합니다.
 - 켜진 `Fragments` 칸이 비었거나 Missing이면 **LIVE는 실패**, DEV · QA는 경고합니다 (그 SDK 설정이 통째로 빠지므로).
 
 ### LIVE 경고

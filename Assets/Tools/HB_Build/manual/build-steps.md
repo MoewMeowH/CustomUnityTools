@@ -58,7 +58,8 @@ HB_TestFrameworkHelper를 함께 설치하면 `HB.TestFrameworkHelper.Editor.Pre
 
 ### BuildContext
 
-- 빌드 값(`Target` · `BuildType` · `Version` · `VersionCode` · `Scenes` · `OutputPath` 등), `PlayerOptions`, 빌드 뒤 `Report`, `Warnings`를 읽고 씁니다.
+- 빌드 값(`Target` · `BuildType` · `Version` · `VersionCode` · `Scenes` 등), `PlayerOptions`, 빌드 뒤 `Report`, `Warnings`를 읽고 씁니다.
+  - `OutputPath`는 읽기 전용입니다 (항상 `BuildOutput/<Target>`).
 - 컨텍스트 값을 바꾼 뒤에는 `RebuildPlayerOptions()`를 불러야 실제 빌드 옵션에 반영됩니다.
 - `AddWarning(message)`: 빌드를 막지 않는 경고를 로그와 경고 파일에 남깁니다.
 - 빌드를 멈추려면 예외를 던지세요. `BuildHelper.ThrowError(msg)`가 예외 객체를 돌려주므로 `throw`합니다.
@@ -66,9 +67,9 @@ HB_TestFrameworkHelper를 함께 설치하면 `HB.TestFrameworkHelper.Editor.Pre
 ### 스텝 사이 데이터
 
 - `SetCustomData` · `GetCustomData<T>`로 주고받습니다.
+- 프로필의 `CustomEntries`가 여기에 들어갑니다 (모든 빌드가 프로필 빌드라 항상 들어감).
 - HB_Build가 쓰는 키: `SceneDefine` · `ProjectDefine` · `ProvisionUUID` · `ProvisionType` · `XcodeSettings` · `XcodeSettings.Snapshot`
-  - 프로필의 `CustomEntries`가 같은 키면 덮어쓰므로 피하세요.
-- `CustomEntries`는 프로필 빌드(창 · `-buildProfile`)에만 들어갑니다. 프로필 없는 창 빌드와 전체 풀기 CLI 빌드에는 없습니다.
+  - 프로필의 `CustomEntries`가 이 키를 쓰면 빌드가 실패합니다.
 
 ### 스텝 ID
 
@@ -76,7 +77,7 @@ HB_TestFrameworkHelper를 함께 설치하면 `HB.TestFrameworkHelper.Editor.Pre
 - 기본 스텝은 ID가 고정되어 있어 클래스 이름이 바뀌어도 그대로입니다 (예: `HB.CustomBuild.Editor.PreBuildStep_PlayerSettings`).
 - 커스텀 스텝은 `StepId`를 직접 정의하면 이름을 바꿔도 프로필이 깨지지 않습니다.
 - 기본 스텝을 상속해 오버라이드한 스텝은 부모의 고정 ID를 그대로 이어받습니다. 부모 대신 등록되므로 같은 ID로 끄고 켭니다.
-- 프로필의 비활성 목록(또는 `-disabledSteps`)에 등록되지 않은 ID가 있으면 LIVE · 배치 빌드는 실패하고, 로컬 DEV · QA는 경고합니다.
+- 프로필의 비활성 목록에 등록되지 않은 ID가 있으면 LIVE · 배치 빌드는 실패하고, 로컬 DEV · QA는 경고합니다.
   Build Manager 창에서 제거할 수 있습니다.
 
 ## 빌드 전 검증
@@ -86,13 +87,15 @@ HB_TestFrameworkHelper를 함께 설치하면 `HB.TestFrameworkHelper.Editor.Pre
 - Product Name · 버전에 파일 이름에 못 쓰는 문자, `/` · `\`, `..`가 있음
   - 출력 경로 밖으로 벗어나는 것을 막습니다. 사전 스텝이 바꾼 값까지 보도록 스텝 뒤에 확인합니다.
 - 지원하지 않는 빌드 대상 (Windows · Android · iOS 밖, 예: `StandaloneOSX`)
-  - 창 · 프로필 · CLI 모두, 플랫폼 전환 전에 확인합니다.
+  - 로컬 · CLI 모두, 플랫폼 전환 전에 확인합니다.
 - 인스턴스를 만들지 못한 스텝이 있음
 - 같은 `StepId`로 둘 이상 등록된 스텝이 있음
   - 예: 같은 기본 스텝을 덮어쓴 형제 클래스 둘 (한쪽이 다른 쪽을 상속하거나 각자 `StepId`를 정의)
 - 비활성 목록에 등록되지 않은 스텝 ID가 있음 (LIVE · 배치 모드만, 로컬 DEV · QA는 경고)
 - LIVE인데 심볼 설정 스텝을 껐거나 DefineContainer · 해당 항목이 없음 ([전처리기 심볼](build-behavior.md#전처리기-심볼))
-- 기본 경로에 없는 DefineContainer · SceneDefine이 여러 개
+- 프로필의 선택 설정 에셋 슬롯이 깨진 참조(Missing)
+- 프로필 `CustomEntries`가 HB_Build 키를 씀
+- 배치 빌드에 `-buildProfile`이 없거나 없앤 인자(`-buildType` 등)를 넘김 ([CLI 빌드](cli.md#인자))
 - 모바일 버전 코드가 비었거나 형식이 틀림
 - 빌드할 씬이 없음
 - 배치 모드의 활성 플랫폼이 빌드 대상과 다름
