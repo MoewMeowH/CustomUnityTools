@@ -380,6 +380,7 @@ public static class HLogCore
         PollWatchGetters,
         FlushPendingLogs,
         ConsoleUI,
+        AddExternalEntry,
         Count
     }
 
@@ -1155,6 +1156,18 @@ public static class HLogCore
             }
             s_PendingLogs.Enqueue(new PendingLog(condition, stackTrace, type, receivedAt, channelTag, s_LogGeneration));
         }
+    }
+
+    /// <summary>
+    /// Unity 로그 콜백을 거치지 않은 기록을 넣는다 (도메인 리로드로 지워진 컴파일 메시지를 다시 넣을 때). 메인 스레드 전용.
+    /// Unity 콘솔에는 다시 찍지 않는다.
+    /// </summary>
+    internal static void AddExternalEntry(string message, LogType type)
+    {
+        if (!RequireMainThread(MainThreadApi.AddExternalEntry)) return;
+        if (!Volatile.Read(ref s_IsLogEnabled)) return;
+
+        AddEntry(new LogEntry(message, string.Empty, type), Volatile.Read(ref s_LogGeneration));
     }
 
     private static void AddEntry(LogEntry entry, long generation)
