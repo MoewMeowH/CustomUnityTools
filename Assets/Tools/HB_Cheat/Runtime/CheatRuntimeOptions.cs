@@ -30,7 +30,7 @@ namespace HB.Cheat
         public int HistoryCapacity = 50;
 
         /// <summary>
-        /// 자동화 경로(Unity CLI cheat_raw, 브리지 raw)에서 raw 명령을 서버로 보낼지.
+        /// 자동화 경로(Unity CLI cheat raw, 브리지 raw)에서 raw 명령을 서버로 보낼지.
         /// 기본 false: 서버로 임의 문자열이 가는 통로는 켜야만 열린다 ("비워 두면 기존 동작" 원칙의 의도적 예외).
         /// 패널 Raw 탭과 코드의 CheatSystem.ExecuteRaw는 영향을 받지 않는다.
         /// </summary>

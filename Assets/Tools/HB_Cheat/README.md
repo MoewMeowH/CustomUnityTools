@@ -119,7 +119,7 @@ public sealed class EnchantLevelProvider : ICheatOptionProvider
 | [치트 정의 규칙](manual/defining-cheats.md) | `[Cheat]` · 인자 어트리뷰트 · Provider · 반환형 규칙 |
 | [패널 · 서버 전송 · 코드 API](manual/runtime.md) | 패널 탭, 서버 전송 연결과 큐, `CheatSystem` API, InGameConsole 연동 |
 | [릴리즈 빌드 제외](manual/release-build.md) | asmdef 제약, 빌드 가드, 릴리즈 판정, IDE 표시 |
-| [자동화 (Unity CLI)](manual/automation.md) | `cheat_*` 명령, 응답 JSON · 오류 코드, 폴링, Play 시작 · 종료, raw |
+| [자동화 (Unity CLI)](manual/automation.md) | `cheat` 그룹 명령, 응답 · 종료 코드 · 오류 코드, 폴링, Play 시작 · 종료, raw |
 
 ---
 

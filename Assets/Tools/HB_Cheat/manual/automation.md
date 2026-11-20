@@ -1,14 +1,15 @@
 # 자동화 (Unity CLI)
 
-`com.unity.pipeline` 1.0.0-pre.1 이상이 있으면 에디터 Play Mode용 명령이 등록됩니다. 결과는 JSON입니다.
+`com.unity.pipeline` 1.0.0-pre.1 이상이 있으면 에디터 Play Mode용 `cheat` 그룹 명령이 등록됩니다 (2.0.0부터. 1.x의 `cheat_list` 등은 `cheat list`로 바뀜).
+명령 모양은 [CLI 명령 규칙](https://github.com/MoewMeowH/CustomUnityTools/blob/main/CLI_COMMANDS.md)을 따릅니다.
 
 ```bash
-unity command cheat_list
-unity command cheat_options --id item.enchant --arg level --args "itemId=1001"
-unity command cheat_run --id item.enchant --args "itemId=1001 level=15"
-unity command cheat_status --execution 3 --session 1a2b3c4d   # 서버 치트는 Pending → Succeeded / Failed / TimedOut
-unity command cheat_history --limit 10
-unity command cheat_raw --command "item_add 1001 10"  # 기본 꺼짐 (raw 전송 참고)
+unity command cheat list
+unity command cheat options --id item.enchant --arg level --args "itemId=1001"
+unity command cheat run --id item.enchant --args "itemId=1001 level=15"
+unity command cheat status --execution 3 --session 1a2b3c4d   # 서버 치트는 Pending → Succeeded / Failed / TimedOut
+unity command cheat history --limit 10
+unity command cheat raw --command "item_add 1001 10"  # 기본 꺼짐 (raw 전송 참고)
 unity command editor.playmode start   # Play 시작 (Pipeline 기본 명령, Play 시작 · 종료 참고)
 unity command editor.playmode stop    # Play 종료
 ```
@@ -17,12 +18,12 @@ unity command editor.playmode stop    # Play 종료
 
 | 명령 | 인자 | 내용 |
 |---|---|---|
-| `cheat_list` | 없음 | 등록된 치트와 인자 목록 (Play Mode에서만 — 치트는 Play 진입 때 등록됩니다). |
-| `cheat_options` | `--id` · `--arg`(필수), `--args`(앞 인자 값), `--query`(라벨 · 값 검색), `--limit`(기본 200) | 인자의 선택 목록. |
-| `cheat_run` | `--id`(필수), `--args` | 실행. 빠진 인자는 기본값을 씁니다. 서버 치트는 `Pending`으로 시작합니다. |
-| `cheat_status` | `--execution`(필수), `--session` | 실행 상태 조회. |
-| `cheat_history` | `--limit`(기본 20) | 최근 실행. |
-| `cheat_raw` | `--command`(필수) | raw 전송 (기본 꺼짐, [raw 전송](#raw-전송)). |
+| `cheat list` | 없음 | 등록된 치트와 인자 목록 (Play Mode에서만 — 치트는 Play 진입 때 등록됩니다). |
+| `cheat options` | `--id` · `--arg`(필수), `--args`(앞 인자 값), `--query`(라벨 · 값 검색), `--limit`(기본 200) | 인자의 선택 목록. |
+| `cheat run` | `--id`(필수), `--args` | 실행. 빠진 인자는 기본값을 씁니다. 서버 치트는 `Pending`으로 시작합니다. |
+| `cheat status` | `--execution`(필수), `--session` | 실행 상태 조회. |
+| `cheat history` | `--limit`(기본 20) | 최근 실행. |
+| `cheat raw` | `--command`(필수) | raw 전송 (기본 꺼짐, [raw 전송](#raw-전송)). |
 
 - 모든 명령은 Play Mode가 아니거나 초기화되지 않았으면 `not_initialized`입니다.
 - 코드에서 직접 부르는 `CheatProtocol.Status` · `History`는 초기화 전에도 남은 기록을 읽습니다 (CLI는 위 규칙으로 막음).
@@ -47,14 +48,24 @@ history [limit=N]
 - `Handle`은 **메인 스레드에서** 부릅니다. 소켓 스레드에서 받았다면 메인 스레드로 넘긴 뒤 호출합니다.
 - 브리지 경로의 실행 주체는 `Bridge`로 남습니다. `CheatProtocol.Handle(line, source)`로 주체를 지정할 수도 있습니다.
 
-## 응답 JSON
+## 응답
 
-- 성공은 `{"ok":true,...}`, 실패는 예외가 아니라 항상 `{"ok":false,"error":"...","code":"..."}`입니다.
-- **인자 · 요청 문제는 `ok:false` + `code`** 입니다.
+CLI와 브리지는 같은 판정을 쓰고, 전달 모양만 다릅니다.
+
+| | 성공 | 인자 · 요청 문제 |
+|---|---|---|
+| CLI (`unity command cheat …`) | 결과 객체 (`--format json`이면 `{"ok":true,...}`) · 종료 코드 0 | 종료 코드(아래 표) + 오류 한 줄 `[code] 문구` |
+| CLI를 MCP 도구로 부를 때 | 결과 객체 | 도구 오류 문구 `… [code] 문구` (본문 없음) |
+| 브리지 (`CheatProtocol.Handle`) | `{"ok":true,...}` | `{"ok":false,"error":"...","code":"..."}` |
+
+- 종료 코드: 대상(치트 · 실행 id)이 없음(`unknown_cheat` · `unknown_execution` · `evicted_execution`) → 13 NotFound, 인자 · 요청 형식(`unknown_argument` · `malformed_argument` · `unparsable_value` · `missing_argument` · `out_of_range_value` · `unlisted_value` · `argument_without_options` · `empty_raw_command`) → 2 InvalidUsage, 그 밖(`not_initialized` · `session_changed` · `raw_disabled` · `option_provider_failed`) → 6 Failed.
+- 분기는 종료 코드 또는 오류 문구 맨 앞 `[code]`로 합니다.
+- `[code]`가 없는 실패는 예상하지 못한 예외입니다. Pipeline이 예외 문구와 6 Failed(`ArgumentException`이면 2 InvalidUsage)로 보고합니다. `internal_error` · `empty_command` · `unknown_command`는 브리지에서만 나옵니다.
+- **인자 · 요청 문제는 `code`로 실패** 합니다.
 - **실행 결과 문제**는 `ok:true` + `execution.status`(`Failed` / `TimedOut`)입니다.
   로컬 치트의 실패 · 예외, 서버 응답 실패, 전송 실패, 시간 초과가 여기에 들어갑니다.
 - 범위 밖 · 목록에 없는 값 같은 인자 문제는 자동화 경로에서 실행을 만들지 않습니다. 패널은 기존대로 실행한 뒤 `Failed`로 남깁니다.
-- 숫자가 NaN · 무한대면 `null`로 씁니다 (예: `cheat_list`에서 `[CheatRange]`의 `min`/`max`를 무한대로 둔 경우).
+- 숫자가 NaN · 무한대면 `null`로 씁니다 (예: `cheat list`에서 `[CheatRange]`의 `min`/`max`를 무한대로 둔 경우).
 
 ### 오류 코드
 
@@ -83,17 +94,11 @@ history [limit=N]
 | `empty_raw_command` | raw 명령이 비어 있음 |
 | `internal_error` | 예상하지 못한 예외 |
 
-처리는 쓰는 쪽이 정합니다. 예를 들어 자동화는 `ok:false`면 `code`를 기록하고 멈춘 뒤 사람에게 넘깁니다.
+처리는 쓰는 쪽이 정합니다. 예를 들어 자동화는 실패면 `code`를 기록하고 멈춘 뒤 사람에게 넘깁니다.
 
-Unity CLI 프레임워크가 명령을 부르기 전에 거절하는 오류는 이 JSON이 아니라 CLI 봉투로 옵니다. `code`가 없습니다.
-필수 인자 누락, `--execution abc` 같은 타입 오류가 여기에 들어갑니다.
+Unity CLI 프레임워크가 명령을 부르기 전에 거절하는 오류(필수 인자 누락, `--execution abc` 같은 타입 오류)에는 `[code]`가 없습니다. Pipeline이 정한 오류 · 종료 코드로 옵니다.
 
-```json
-{"success":false,"command":"unity command cheat_status","data":null,
- "errors":[{"code":"INVALID_COMMAND_ARGS","message":"... --execution에는 Int32이(가) 필요하지만 abc이(가) 지정되었습니다."}]}
-```
-
-### cheat_list 응답
+### cheat list 응답
 
 - 치트마다 `id` · `path` · `target` · `description` · `favorite` · `args`가 있습니다.
 - 인자마다 다음 값이 있습니다.
@@ -107,7 +112,7 @@ Unity CLI 프레임워크가 명령을 부르기 전에 거절하는 오류는 �
           {"name":"level","label":"강화","type":"Int","editor":"Options","default":"","hasOptions":true,"dependsOn":["itemId"]}]}]}
 ```
 
-### cheat_options 응답
+### cheat options 응답
 
 ```json
 {"ok":true,"total":N,"options":[{"value":"1001","label":"..."}]}
@@ -145,12 +150,12 @@ Unity CLI 프레임워크가 명령을 부르기 전에 거절하는 오류는 �
 
 ## 폴링
 
-- `cheat_run` 응답의 `execution.id`와 `session`을 저장하고 `cheat_status --execution <id> --session <session>`으로 조회합니다.
+- `cheat run` 응답의 `execution.id`와 `session`을 저장하고 `cheat status --execution <id> --session <session>`으로 조회합니다.
 - **`--session`을 빼면** run과 status 사이에 초기화가 끼었을 때 다른 실행의 결과를 받을 수 있습니다.
 - 끝나지 않은 실행은 히스토리에서 지워지지 않습니다.
   최근 `HistoryCapacity`건 + 끝나지 않은 실행을 남기므로 그만큼 용량을 넘을 수 있습니다.
 - 정리는 새 실행이 들어올 때만 하므로 끝난 직후에는 조회할 수 있습니다. 끝난 실행은 새 실행이 용량 이상 쌓이기 전에 조회합니다.
-- 예: 자동화는 `done`이면 결과를 읽고, `blocked`이거나 `ok:false`면 멈추고 사람에게 넘깁니다.
+- 예: 자동화는 `done`이면 결과를 읽고, `blocked`이거나 실패(0이 아닌 종료 코드)면 멈추고 사람에게 넘깁니다.
 
 ## Play 시작 · 종료
 
@@ -163,7 +168,7 @@ Pipeline 기본 명령 `editor.playmode start` / `stop`을 씁니다 (예전의 
 
 자동화 경로의 raw는 기본으로 꺼져 있습니다.
 
-`cheat_raw`와 브리지 `raw`는 서버로 임의 문자열을 보내므로 **기본으로 거절**합니다 (`code: "raw_disabled"`). 여는 방법은 둘입니다.
+`cheat raw`와 브리지 `raw`는 서버로 임의 문자열을 보내므로 **기본으로 거절**합니다 (`code: "raw_disabled"`). 여는 방법은 둘입니다.
 
 - `Tools > HB > Cheat` 설정의 **Allow Raw From Automation**을 켭니다.
 - `CheatSystem.Options.AllowRawFromAutomation = true`를 넣습니다.

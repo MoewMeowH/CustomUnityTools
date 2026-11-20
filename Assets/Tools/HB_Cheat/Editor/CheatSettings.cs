@@ -54,7 +54,7 @@ namespace HB.Cheat.Editor
         [SerializeField] private bool dontDestroyOnLoad = true;
 
         [Header("Automation")]
-        [Tooltip("Unity CLI cheat_raw / 브리지 raw로 서버에 임의 문자열을 보내도록 허용 (기본 꺼짐). 패널 Raw 탭은 항상 허용.")]
+        [Tooltip("Unity CLI cheat raw / 브리지 raw로 서버에 임의 문자열을 보내도록 허용 (기본 꺼짐). 패널 Raw 탭은 항상 허용.")]
         [SerializeField] private bool allowRawFromAutomation;
 
         [Header("Release Guard")]

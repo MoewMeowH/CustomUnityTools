@@ -48,7 +48,7 @@ namespace HB.Cheat
         Code,
         /// <summary>치트 패널 (사람)</summary>
         Panel,
-        /// <summary>Unity CLI (unity command cheat_*)</summary>
+        /// <summary>Unity CLI (unity command cheat …)</summary>
         Cli,
         /// <summary>ICheatBridge (CheatProtocol.Handle)</summary>
         Bridge

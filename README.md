@@ -15,7 +15,7 @@ AI 에 익숙해지고 익숙해지는 김에 평소 필요하다 느꼈던 툴�
 | 도구 | 패키지 | 버전 | 한 줄 설명 |
 | :--- | :--- | :---: | :--- |
 | [HB_InGameConsole](Assets/Tools/HB_InGameConsole/README.md) | `com.hb.ingameconsole` | 1.0.0 | 런타임 인게임 콘솔과 `HLog` 로깅 · Watch · Report |
-| [HB_Cheat](Assets/Tools/HB_Cheat/README.md) | `com.hb.cheat` | 1.0.0 | 개발 · QA용 치트 패널과 Unity CLI 자동화 |
+| [HB_Cheat](Assets/Tools/HB_Cheat/README.md) | `com.hb.cheat` | 2.0.0 | 개발 · QA용 치트 패널과 Unity CLI 자동화 |
 | [HB_E2String](Assets/Tools/HB_E2String/README.md) | `com.hb.e2string` | 1.0.0 | 할당 없는 Enum ↔ 문자열 변환 Source Generator |
 | [HB_Build](Assets/Tools/HB_Build/README.md) | `com.hb.custombuild` | 1.0.0 | 멀티 플랫폼 빌드 매니저와 Jenkinsfile 생성기 |
 | [HB_TestFrameworkHelper](Assets/Tools/HB_TestFrameworkHelper/README.md) | `com.hb.testframeworkhelper` | 1.0.0 | 인스펙터 슬롯 · 에셋 건강 검사 QA 헬퍼와 테스트 작성 도우미 |
@@ -69,7 +69,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_FrameInsp
 - UI Toolkit 기반 개발 · QA용 치트 패널입니다 (모바일 우선).
 - 치트는 어트리뷰트로 정의하고, 서버 치트 문자열을 조합해 전송합니다.
 - 릴리즈 빌드에서는 엄격하게 제외됩니다.
-- Unity CLI 자동화(`cheat_*` 명령, JSON 응답)를 지원합니다.
+- Unity CLI 자동화(`cheat` 그룹 명령, JSON 결과)를 지원합니다.
 - InGameConsole이 있으면 콘솔 탭으로 들어갑니다.
 
 ### HB_E2String
@@ -116,13 +116,15 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_FrameInsp
 | 도구 | 함께 쓰는 패키지 | 연동 내용 |
 | :--- | :--- | :--- |
 | HB_Cheat | `com.hb.ingameconsole` | 치트 패널이 인게임 콘솔의 `Cheat` 탭으로 들어감 |
-| HB_Cheat | `com.unity.pipeline` | Unity CLI 명령(`cheat_list` · `cheat_run` 등, JSON 응답). 1.0.0-pre.1 이상 |
+| HB_Cheat | `com.unity.pipeline` | Unity CLI 명령(`cheat list` · `cheat run` 등). 1.0.0-pre.1 이상 |
 | HB_ScreenRecorder | `com.hb.ingameconsole` | 녹화 · 스크린샷 진단 파일에 HLog 기록을 함께 덤프 (리플렉션, 컴파일 참조 없음) |
 | HB_TestFrameworkHelper | `com.hb.custombuild`(HB_Build) | 빌드 시작 전에 켜진 검사(프리팹 슬롯 · 에셋 건강 검사)를 실제 빌드 씬으로 도는 스텝이 더해짐 |
 | HB_TestFrameworkHelper | `com.unity.test-framework` | 프리팹 · 에셋 건강 검사 테스트가 Test Runner에 보이고, 테스트 작성 도우미를 쓸 수 있음 (설치한 프로젝트는 `testables` 등록 필요) |
 | HB_InGameConsole | HB_Build | DefineContainer의 LIVE 항목에서 `USE_HLOG`를 빼면 출시 빌드에서 HLog가 꺼짐 (켜진 채 릴리즈 빌드하면 InGameConsole이 경고) |
 | HB_FrameInspector | `com.unity.render-pipelines.universal` | URP가 활성 파이프라인이면 오버드로우를 잼 (없으면 오버드로우 절만 빠짐) |
 | HB_FrameInspector | `com.unity.pipeline` | 함께 저장한 `profiler.data`를 Unity CLI `diagnostics profiler_session`(1.0.0 이상)으로 열어 함수 단위 CPU 원인 분석 (컴파일 참조 없음) |
+
+Unity CLI 명령을 새로 만들 때는 [CLI 명령 규칙](CLI_COMMANDS.md)을 따릅니다.
 
 ---
 

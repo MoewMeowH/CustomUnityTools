@@ -63,7 +63,7 @@ HB_Build는 빌드 때 DefineContainer 항목이 있으면 그 목록으로 심�
 | Runtime | `Server Timeout Seconds` | `10` | 서버 응답 대기 시간(초). 최소 0.5, NaN · 무한대면 10입니다. |
 | Runtime | `History Capacity` | `50` | 히스토리 보존 건수. 최소 1입니다. |
 | Runtime | `Dont Destroy On Load` | 켬 | 씬 전환 때 치트 시스템을 유지합니다 (아래 설명) |
-| Automation | `Allow Raw From Automation` | 끔 | CLI `cheat_raw` · 브리지 `raw` 허용 ([raw 전송](automation.md#raw-전송)) |
+| Automation | `Allow Raw From Automation` | 끔 | CLI `cheat raw` · 브리지 `raw` 허용 ([raw 전송](automation.md#raw-전송)) |
 | Release Guard | `Treat Non Development As Release` | 켬 | Development Build가 아니면 릴리즈로 봅니다. |
 | Release Guard | `Release Defines` | `LIVE` | 이 심볼 중 하나라도 켜져 있으면 릴리즈로 봅니다. |
 | Release Guard | `Fail When Unverifiable` | 켬 | 릴리즈 빌드에서 검사할 스크립트 DLL이 하나도 없으면 빌드를 실패시킵니다. |

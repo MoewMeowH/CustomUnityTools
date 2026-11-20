@@ -16,9 +16,9 @@ HB_Cheat 치트를 종류별로 모은 예제입니다.
 자동화로도 확인할 수 있습니다 (`com.unity.pipeline` 필요, Play 중).
 
 ```bash
-unity command cheat_run --id actor.level --args "level=30"
-unity command cheat_run --id item.enchant --args "itemId=1001 level=3"   # 서버 치트: Pending → 0.3초 뒤 Succeeded
-unity command cheat_status --execution <id> --session <session>
+unity command cheat run --id actor.level --args "level=30"
+unity command cheat run --id item.enchant --args "itemId=1001 level=3"   # 서버 치트: Pending → 0.3초 뒤 Succeeded
+unity command cheat status --execution <id> --session <session>
 ```
 
 ## 파일

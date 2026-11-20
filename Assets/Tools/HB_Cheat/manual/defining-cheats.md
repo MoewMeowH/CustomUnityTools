@@ -45,7 +45,7 @@
 - `DependsOn`에는 **앞쪽** 매개변수 이름만 쓸 수 있습니다. 앞 인자가 바뀌면 이 인자는 초기화됩니다.
 - 앞 인자 값은 `context.Get<T>(이름)` / `TryGet`으로 읽습니다.
 - 메인 스레드에서 불립니다.
-- 다시 수집하는 때: 치트를 고를 때(패널), 실행할 때(CLI `cheat_run` 포함), CLI로 후보를 조회할 때(`cheat_options`)
+- 다시 수집하는 때: 치트를 고를 때(패널), 실행할 때(CLI `cheat run` 포함), CLI로 후보를 조회할 때(`cheat options`)
 - 같은 치트를 편집하는 동안은 (치트, 인자)마다 캐시합니다. `DependsOn` 값이 바뀌면 다시 수집합니다.
 - 열려 있는 목록을 바로 바꾸려면 `CheatSystem.InvalidateOptions()`를 부르세요.
 - Provider 인스턴스는 레지스트리마다 타입당 하나입니다.
