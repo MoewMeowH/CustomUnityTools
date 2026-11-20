@@ -34,7 +34,7 @@ UPM 패키지는 읽기 전용입니다. 그래서 **치트 정의, 설정, 생�
 | 패키지 | 켜지는 심볼 | 켜지는 기능 |
 |---|---|---|
 | `com.unity.inputsystem` | `HB_CHEAT_INPUT_SYSTEM` | 열기 키를 Input System `Key`로 읽습니다 |
-| `com.unity.pipeline` | `HB_CHEAT_PIPELINE` | Unity CLI 명령 어셈블리(`HB.Cheat.Editor.Cli`)가 컴파일됩니다 |
+| `com.unity.pipeline` 1.0.0-pre.1 이상 | `HB_CHEAT_PIPELINE` | Unity CLI 명령 어셈블리(`HB.Cheat.Editor.Cli`)가 컴파일됩니다 |
 | `com.hb.ingameconsole` | `HB_CHEAT_HAS_CONSOLE` | InGameConsole 연동 어셈블리(`HB.Cheat.InGameConsole`)가 컴파일됩니다 |
 
 - Input System이 없으면 열기 키를 구 Input Manager `KeyCode`로 읽습니다.
@@ -119,7 +119,7 @@ public sealed class EnchantLevelProvider : ICheatOptionProvider
 | [치트 정의 규칙](manual/defining-cheats.md) | `[Cheat]` · 인자 어트리뷰트 · Provider · 반환형 규칙 |
 | [패널 · 서버 전송 · 코드 API](manual/runtime.md) | 패널 탭, 서버 전송 연결과 큐, `CheatSystem` API, InGameConsole 연동 |
 | [릴리즈 빌드 제외](manual/release-build.md) | asmdef 제약, 빌드 가드, 릴리즈 판정, IDE 표시 |
-| [자동화 (Unity CLI)](manual/automation.md) | `cheat_*` 명령, 응답 JSON · 오류 코드, 폴링, `cheat_play`, raw |
+| [자동화 (Unity CLI)](manual/automation.md) | `cheat_*` 명령, 응답 JSON · 오류 코드, 폴링, Play 시작 · 종료, raw |
 
 ---
 

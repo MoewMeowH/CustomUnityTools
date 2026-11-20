@@ -6,7 +6,7 @@
 |---|---|
 | 패키지 런타임 (`HB.Cheat`) | asmdef `defineConstraints: HB_CHEAT` |
 | 패키지 에디터 생성기 · CLI · 콘솔 연동 · 테스트 | 각 asmdef `defineConstraints`에 `HB_CHEAT` (아래 설명) |
-| 패키지 에디터 기본 (`HB.Cheat.Editor`) | 심볼과 무관하게 컴파일되는 Editor 전용 어셈블리입니다 (설정 창, 심볼 관리, 빌드 가드, runInBackground 복원). |
+| 패키지 에디터 기본 (`HB.Cheat.Editor`) | 심볼과 무관하게 컴파일되는 Editor 전용 어셈블리입니다 (설정 창, 심볼 관리, 빌드 가드). |
 | 치트 코드 (Assembly-CSharp) | 파일 전체를 `#if HB_CHEAT`로 감쌉니다 (템플릿이 자동으로 넣음). 가드를 빠뜨리면 `HB.Cheat` 타입이 없어 컴파일 에러가 납니다. |
 | 치트 코드 (asmdef) | `Create Cheat asmdef`로 만든 asmdef는 `defineConstraints`로 `HB_CHEAT`를 요구합니다. |
 | 생성 레지스트리 | `#if HB_CHEAT` |

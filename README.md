@@ -116,7 +116,7 @@ https://github.com/MoewMeowH/CustomUnityTools.git?path=Assets/Tools/HB_FrameInsp
 | 도구 | 함께 쓰는 패키지 | 연동 내용 |
 | :--- | :--- | :--- |
 | HB_Cheat | `com.hb.ingameconsole` | 치트 패널이 인게임 콘솔의 `Cheat` 탭으로 들어감 |
-| HB_Cheat | `com.unity.pipeline` | Unity CLI 명령(`cheat_list` · `cheat_run` · `cheat_play` 등, JSON 응답) |
+| HB_Cheat | `com.unity.pipeline` | Unity CLI 명령(`cheat_list` · `cheat_run` 등, JSON 응답). 1.0.0-pre.1 이상 |
 | HB_ScreenRecorder | `com.hb.ingameconsole` | 녹화 · 스크린샷 진단 파일에 HLog 기록을 함께 덤프 (리플렉션, 컴파일 참조 없음) |
 | HB_TestFrameworkHelper | `com.hb.custombuild`(HB_Build) | 빌드 시작 전에 켜진 검사(프리팹 슬롯 · 에셋 건강 검사)를 실제 빌드 씬으로 도는 스텝이 더해짐 |
 | HB_TestFrameworkHelper | `com.unity.test-framework` | 프리팹 · 에셋 건강 검사 테스트가 Test Runner에 보이고, 테스트 작성 도우미를 쓸 수 있음 (설치한 프로젝트는 `testables` 등록 필요) |
